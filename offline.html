@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="KES-SMART - Currently Offline">
+    <meta name="theme-color" content="#007bff">
+    
+    <title>KES-SMART - You're Offline</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            padding-bottom: 80px;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1rem;
+        }
+        
+        .btn {
+            border-radius: 25px;
+            padding: 0.6rem 1.5rem;
+            font-weight: 500;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            border: none;
+        }
+        
+        .offline-icon {
+            font-size: 5rem;
+            color: #6c757d;
+            margin-bottom: 1rem;
+        }
+        
+        .hero-section {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            border-radius: 0 0 20px 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin: -1rem -15px 1.5rem -15px;
+            padding: 2rem 0;
+        }
+    </style>
+</head>
+<body>
+    <!-- Hero Section -->
+    <div class="hero-section text-center">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-8 mx-auto">
+                    <i class="fas fa-graduation-cap fa-4x mb-3"></i>
+                    <h1 class="display-5 fw-bold mb-2">KES-SMART</h1>
+                    <p class="lead mb-3">Student Monitoring Application</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container px-3">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card text-center p-4 shadow-sm">
+                    <div class="card-body">
+                        <i class="fas fa-wifi-slash offline-icon"></i>
+                        <h2 class="h3 mb-3">You're Offline</h2>
+                        <p class="mb-4">It seems you're not connected to the internet. Some features may not be available while offline.</p>
+                        
+                        <div class="d-grid gap-2">
+                            <button id="retry-btn" class="btn btn-primary">
+                                <i class="fas fa-sync-alt me-2"></i>Retry Connection
+                            </button>
+                            <a href="index.php" class="btn btn-outline-secondary">
+                                <i class="fas fa-home me-2"></i>Go to Homepage
+                            </a>
+                        </div>
+                        
+                        <div class="mt-4">
+                            <p class="text-muted small">You can still access cached content while offline.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <h5 class="card-title">Available Offline</h5>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span><i class="fas fa-home me-2"></i>Home</span>
+                                    <a href="index.php" class="btn btn-sm btn-outline-primary">View</a>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span><i class="fas fa-tachometer-alt me-2"></i>Dashboard</span>
+                                    <a href="dashboard.php" class="btn btn-sm btn-outline-primary">View</a>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span><i class="fas fa-qrcode me-2"></i>QR Scanner</span>
+                                    <a href="qr-scanner.php" class="btn btn-sm btn-outline-primary">View</a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check for online status
+        function updateOnlineStatus() {
+            if (navigator.onLine) {
+                document.querySelector('.offline-icon').className = 'fas fa-wifi offline-icon text-success';
+                document.querySelector('h2').textContent = 'You\'re back online!';
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            }
+        }
+
+        // Add event listeners for online/offline events
+        window.addEventListener('online', updateOnlineStatus);
+        
+        // Retry button functionality
+        document.getElementById('retry-btn').addEventListener('click', function() {
+            this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Checking...';
+            setTimeout(() => {
+                updateOnlineStatus();
+                if (!navigator.onLine) {
+                    this.innerHTML = '<i class="fas fa-sync-alt me-2"></i>Retry Connection';
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

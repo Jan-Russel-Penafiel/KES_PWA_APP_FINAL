@@ -1,0 +1,31 @@
+{
+  "offline": true,
+  "timestamp": "2023-01-01T00:00:00Z",
+  "message": "You are currently offline. This is cached data that may not be up to date.",
+  "data": {
+    "notifications": [
+      {
+        "id": 1,
+        "title": "Offline Mode",
+        "message": "You are viewing cached data while offline.",
+        "type": "info",
+        "date": "2023-01-01T00:00:00Z"
+      }
+    ],
+    "attendance": {
+      "summary": {
+        "present": 0,
+        "absent": 0,
+        "late": 0,
+        "total": 0
+      },
+      "message": "Attendance data is not available offline. Your recent actions will sync when you're back online."
+    },
+    "students": {
+      "message": "Student data is limited while offline. Full access will be restored when you reconnect."
+    },
+    "user": {
+      "message": "Your user profile is available in offline mode with limited functionality."
+    }
+  }
+} 
