@@ -137,6 +137,57 @@ foreach ($data['offlineData'] as $record) {
             $attendance_id = $pdo->lastInsertId();
         }
         
+        // Send SMS notification if needed
+        $current_date = date('F j, Y', strtotime($attendance_date));
+        $current_time_formatted = date('g:i A', strtotime($timestamp));
+        
+        // Get student's section name
+        $section_name = 'Unknown Section';
+        if ($student['section_id']) {
+            $section_stmt = $pdo->prepare("SELECT section_name FROM sections WHERE id = ?");
+            $section_stmt->execute([$student['section_id']]);
+            $section_result = $section_stmt->fetch(PDO::FETCH_ASSOC);
+            if ($section_result) {
+                $section_name = $section_result['section_name'];
+            }
+        }
+        
+        // Check if SMS notification already sent today for this student
+        $sms_check = $pdo->prepare("
+            SELECT COUNT(*) as sms_count 
+            FROM sms_logs 
+            WHERE phone_number IN (
+                SELECT u.phone 
+                FROM users u 
+                JOIN student_parents sp ON u.id = sp.parent_id 
+                WHERE sp.student_id = ? AND sp.is_primary = 1 AND u.phone IS NOT NULL
+            ) 
+            AND notification_type = 'attendance' 
+            AND status = 'sent' 
+            AND DATE(sent_at) = ?
+        ");
+        $sms_check->execute([$student['id'], $attendance_date]);
+        $sms_already_sent = $sms_check->fetchColumn() > 0;
+        
+        $sms_result = ['success' => true, 'message' => 'SMS already sent today'];
+        $is_checkout = isset($existing_attendance) && $existing_attendance['time_in'] && !$existing_attendance['time_out'];
+        
+        // Send SMS based on scan type
+        if ($is_checkout) {
+            // Checkout SMS - always send regardless of previous SMS
+            if ($attendance_status == 'out') {
+                $sms_message = "Hi! Your child {$student['full_name']} has left school early at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+            } else {
+                $sms_message = "Hi! Your child {$student['full_name']} has left school at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+            }
+            $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'checkout');
+        } elseif (!$sms_already_sent) {
+            // Check-in SMS - only if not already sent today
+            $status_text = ($attendance_status == 'late') ? 'arrived late at' : 'arrived at';
+            $sms_message = "Hi! Your child {$student['full_name']} has {$status_text} school at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+            $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'attendance');
+        }
+        
         // Add to results
         $results[] = [
             'success' => true,
@@ -145,7 +196,11 @@ foreach ($data['offlineData'] as $record) {
             'attendance_id' => $attendance_id,
             'attendance_date' => $attendance_date,
             'time' => date('g:i A', strtotime($timestamp)),
-            'status' => $attendance_status
+            'status' => $attendance_status,
+            'sms_sent' => $sms_result['success'],
+            'sms_message' => $is_checkout ? 
+                ($sms_result['success'] ? 'Checkout SMS sent successfully' : $sms_result['message']) :
+                ($sms_already_sent ? 'SMS notification already sent today' : $sms_result['message'])
         ];
         
         $success_count++;

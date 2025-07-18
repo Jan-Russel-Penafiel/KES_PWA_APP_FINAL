@@ -413,7 +413,7 @@ function generateQRCodeAlternative() {
             </div>
         `;
     };
-}</script>
+}
 
 // Download QR Code
 function downloadQR() {
@@ -615,7 +615,6 @@ setInterval(() => {
         location.reload();
     }
 }, 3600000); // 1 hour
-</script>
 </script>
 
 <!-- Print-specific styles -->

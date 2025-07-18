@@ -567,22 +567,48 @@ try {
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-light">
                 <h6 class="card-title mb-0">
-                    <i class="fas fa-keyboard me-2"></i>Manual LRN Entry
+                    <i class="fas fa-keyboard me-2"></i>Manual Student Selection
                 </h6>
             </div>
             <div class="card-body p-3">
                 <form id="lrn-form">
-                    <div class="input-group">
-                        <span class="input-group-text bg-white border-end-0"><i class="fas fa-id-card text-muted"></i></span>
-                        <input type="text" class="form-control border-start-0 ps-0" id="lrn-input" placeholder="Enter student LRN...">
+                    <div class="mb-3">
+                        <label for="student-select" class="form-label">Select Student</label>
+                        <select class="form-select select2" id="student-select" style="width: 100%;">
+                            <option value="">Search by name or LRN...</option>
+                            <?php
+                            // Fetch students from database when online
+                            if (!isset($students_data)) {
+                                $students_data = [];
+                                try {
+                                    $stmt = $pdo->prepare("SELECT id, username, full_name, lrn, section_id FROM users WHERE role = 'student' AND status = 'active' ORDER BY full_name");
+                                    $stmt->execute();
+                                    $students_data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                                } catch (PDOException $e) {
+                                    // Handle database error silently
+                                }
+                                
+                                // Convert to JSON for offline use
+                                echo "<script>const studentsData = " . json_encode($students_data) . ";</script>";
+                            }
+                            
+                            // Display students in dropdown
+                            foreach ($students_data as $student) {
+                                echo '<option value="' . htmlspecialchars($student['lrn']) . '" data-id="' . $student['id'] . '">' . 
+                                    htmlspecialchars($student['full_name']) . ' - LRN: ' . htmlspecialchars($student['lrn']) . '</option>';
+                            }
+                            ?>
+                        </select>
+                    </div>
+                    <div class="d-grid">
                         <button class="btn btn-primary" type="submit">
-                            <i class="fas fa-user-check me-1 d-none d-lg-inline"></i>
-                            <span class="d-none d-sm-inline">Check </span>In/Out
+                            <i class="fas fa-user-check me-1"></i>
+                            Record Attendance
                         </button>
                     </div>
                     <small class="text-muted d-block mt-2">
                         <i class="fas fa-info-circle me-1"></i>
-                        Enter the student's LRN to record attendance manually
+                        Search for a student by name or LRN to record attendance
                     </small>
                 </form>
             </div>
@@ -1827,40 +1853,90 @@ function startScanner() {
         // Load scan results from localStorage
         loadScanResultsFromStorage();
         
+        // Initialize Select2 for student dropdown
+        initStudentSelect();
+        
+        // Check online/offline status
+        updateOfflineStatus();
+        
+        // Listen for online/offline events
+        window.addEventListener('online', updateOfflineStatus);
+        window.addEventListener('offline', updateOfflineStatus);
+        
         // Handle manual LRN form submission
         document.getElementById('lrn-form').addEventListener('submit', function(event) {
             event.preventDefault();
             
-            const lrn = document.getElementById('lrn-input').value;
+            const studentSelect = $('#student-select');
+            const lrn = studentSelect.val();
             const scanLocation = document.getElementById('scan-location').value;
             const scanNotes = document.getElementById('scan-notes').value;
+            
+            if (!lrn) {
+                showToast('Please select a student', 'warning');
+                return;
+            }
             
             // Check if we're online or offline
             if (!navigator.onLine) {
                 // Handle offline LRN entry
                 try {
+                    // Get student data from the selected option
+                    const selectedOption = studentSelect.find('option:selected');
+                    const studentName = selectedOption.text().split(' - ')[0];
+                    const studentId = selectedOption.data('id');
+                    
                     if (typeof window.offlineUtils !== 'undefined') {
-                        const handled = window.offlineUtils.handleOfflineAttendance(lrn, 'manual', {
+                        const offlineData = {
+                            student_id: studentId || lrn,
+                            student_name: studentName || 'Unknown Student',
+                            lrn: lrn,
+                            action: 'manual',
+                            timestamp: new Date().toISOString(),
                             location: scanLocation,
-                            notes: scanNotes
-                        });
+                            notes: scanNotes,
+                            device_info: {
+                                userAgent: navigator.userAgent,
+                                platform: navigator.platform
+                            }
+                        };
                         
-                        if (handled) {
-                            // Show offline success notification
-                            const offlineData = {
-                                success: true,
-                                message: 'LRN recorded for offline processing',
-                                student_id: lrn,
-                                student_name: 'Student',
-                                attendance_date: new Date().toISOString().split('T')[0],
-                                time_in: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: true}),
-                                status: 'pending',
-                                offline: true
-                            };
-                            
-                            showScanResult(offlineData, 'warning');
-                            document.getElementById('lrn-input').value = '';
-                        }
+                        // Save to IndexedDB
+                        window.offlineUtils.saveAttendanceData(offlineData)
+                            .then(() => {
+                                // Register sync when back online
+                                if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                                    navigator.serviceWorker.ready
+                                        .then(registration => {
+                                            return registration.sync.register('sync-attendance');
+                                        })
+                                        .catch(err => {
+                                            console.error('Sync registration failed:', err);
+                                        });
+                                }
+                                
+                                // Show success notification
+                                const offlineResultData = {
+                                    success: true,
+                                    message: 'Attendance recorded for offline processing',
+                                    student_id: studentId || lrn,
+                                    student_name: studentName || 'Unknown Student',
+                                    student_lrn: lrn,
+                                    attendance_date: new Date().toISOString().split('T')[0],
+                                    time_in: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: true}),
+                                    status: 'pending',
+                                    offline: true
+                                };
+                                
+                                showScanResult(offlineResultData, 'warning');
+                                
+                                // Reset the select
+                                studentSelect.val('').trigger('change');
+                            })
+                            .catch(error => {
+                                console.error('Error saving offline attendance:', error);
+                                showToast('Error saving offline attendance: ' + error.message, 'danger');
+                            });
                     } else {
                         throw new Error('Offline utilities not available');
                     }
@@ -1882,23 +1958,134 @@ function startScanner() {
                 method: 'POST',
                 body: formData
             })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
                     // Show success notification
                     showScanResult(data, 'success');
-                    document.getElementById('lrn-input').value = '';
-            } else {
+                    // Reset the select
+                    studentSelect.val('').trigger('change');
+                } else {
                     // Show error notification
                     showScanResult(data, 'danger');
-            }
-        })
-        .catch(error => {
+                }
+            })
+            .catch(error => {
                 console.error('Error processing LRN:', error);
                 showToast('Error processing LRN. Please try again.', 'danger');
             });
         });
     });
+    
+    // Initialize Select2 dropdown with offline support
+    function initStudentSelect() {
+        // Initialize Select2
+        $('#student-select').select2({
+            theme: 'bootstrap-5',
+            width: '100%',
+            placeholder: 'Search by name or LRN...',
+            allowClear: true,
+            templateResult: formatStudentOption,
+            templateSelection: formatStudentSelection
+        });
+        
+        // Check if we're offline and need to load data from cache
+        if (!navigator.onLine && typeof studentsData !== 'undefined') {
+            // We already have the data from the initial page load
+            console.log('Using cached student data for offline mode');
+        } else if (!navigator.onLine && typeof studentsData === 'undefined') {
+            // Try to load from localStorage if we're offline and don't have data
+            try {
+                const cachedData = localStorage.getItem('studentsData');
+                if (cachedData) {
+                    window.studentsData = JSON.parse(cachedData);
+                    populateStudentSelectFromCache();
+                } else {
+                    showToast('No cached student data available for offline use', 'warning');
+                }
+            } catch (error) {
+                console.error('Error loading cached student data:', error);
+                showToast('Error loading cached student data', 'danger');
+            }
+        } else {
+            // We're online, cache the data for offline use
+            if (typeof studentsData !== 'undefined') {
+                try {
+                    localStorage.setItem('studentsData', JSON.stringify(studentsData));
+                } catch (error) {
+                    console.error('Error caching student data:', error);
+                }
+            }
+        }
+    }
+    
+    // Format student option for Select2
+    function formatStudentOption(student) {
+        if (!student.id) {
+            return student.text;
+        }
+        
+        // Extract name and LRN from the option text
+        const parts = student.text.split(' - LRN: ');
+        const name = parts[0];
+        const lrn = parts[1] || '';
+        
+        // Create a formatted option with name and LRN
+        const $option = $(
+            '<div class="d-flex justify-content-between align-items-center">' +
+                '<div>' +
+                    '<div class="fw-bold">' + name + '</div>' +
+                    '<div class="text-muted small">LRN: ' + lrn + '</div>' +
+                '</div>' +
+                '<div class="ms-3">' +
+                    '<span class="badge bg-primary">Student</span>' +
+                '</div>' +
+            '</div>'
+        );
+        
+        return $option;
+    }
+    
+    // Format student selection for Select2
+    function formatStudentSelection(student) {
+        if (!student.id) {
+            return student.text;
+        }
+        
+        // Extract name and LRN from the option text
+        const parts = student.text.split(' - LRN: ');
+        const name = parts[0];
+        const lrn = parts[1] || '';
+        
+        return name + ' (' + lrn + ')';
+    }
+    
+    // Populate student select from cached data
+    function populateStudentSelectFromCache() {
+        if (!window.studentsData || !Array.isArray(window.studentsData)) {
+            return;
+        }
+        
+        const select = document.getElementById('student-select');
+        if (!select) return;
+        
+        // Clear existing options except the placeholder
+        while (select.options.length > 1) {
+            select.remove(1);
+        }
+        
+        // Add options from cached data
+        window.studentsData.forEach(student => {
+            const option = document.createElement('option');
+            option.value = student.lrn;
+            option.dataset.id = student.id;
+            option.textContent = student.full_name + ' - LRN: ' + student.lrn;
+            select.appendChild(option);
+        });
+        
+        // Refresh Select2
+        $('#student-select').trigger('change');
+    }
     
     // Calendar functionality
     document.addEventListener('DOMContentLoaded', function() {
@@ -3012,6 +3199,147 @@ function startScanner() {
         padding: 0.75rem !important;
     }
 }
+
+/* Select2 Custom Styling */
+.select2-container--bootstrap-5 .select2-selection {
+    border-radius: 8px;
+    padding: 0.375rem 0.75rem;
+    height: auto;
+    min-height: 42px;
+    border: 1px solid #ced4da;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.select2-container--bootstrap-5 .select2-selection:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
+    padding: 0;
+    font-weight: 500;
+}
+
+.select2-container--bootstrap-5 .select2-dropdown {
+    border-radius: 8px;
+    border: 1px solid #ced4da;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.select2-container--bootstrap-5 .select2-results__option {
+    padding: 0.5rem 0.75rem;
+    transition: background-color 0.15s ease-in-out;
+}
+
+.select2-container--bootstrap-5 .select2-results__option--highlighted {
+    background-color: #f8f9fa;
+    color: #212529;
+}
+
+.select2-container--bootstrap-5 .select2-results__option--selected {
+    background-color: #e9ecef;
+    color: #212529;
+}
+
+.select2-container--bootstrap-5 .select2-search--dropdown .select2-search__field {
+    border-radius: 4px;
+    padding: 0.5rem;
+    border: 1px solid #ced4da;
+}
+
+.select2-container--bootstrap-5 .select2-search--dropdown .select2-search__field:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.1);
+    outline: none;
+}
+
+/* Mobile optimizations for Select2 */
+@media (max-width: 576px) {
+    .select2-container--bootstrap-5 .select2-selection {
+        font-size: 16px; /* Prevent zoom on iOS */
+        min-height: 44px; /* Better touch target */
+    }
+    
+    .select2-container--bootstrap-5 .select2-search--dropdown .select2-search__field {
+        font-size: 16px; /* Prevent zoom on iOS */
+        padding: 0.5rem;
+    }
+    
+    .select2-container--bootstrap-5 .select2-results__option {
+        padding: 0.75rem;
+    }
+}
+
+/* Offline mode styling for Select2 */
+body.offline-mode .select2-container--bootstrap-5 .select2-selection {
+    background-color: #f8f9fa;
+    border-color: #ffc107;
+}
+
+body.offline-mode .select2-container--bootstrap-5 .select2-selection__rendered::after {
+    content: " (Offline)";
+    color: #ffc107;
+    font-style: italic;
+    font-size: 0.875em;
+}
+
+@media (max-width: 576px) {
+    .calendar-container {
+        padding: 0.5rem;
+    }
+    
+    .calendar-day {
+        min-height: 40px;
+        padding: 2px;
+    }
+    
+    .day-number {
+        font-size: 0.75rem;
+        margin-bottom: 2px;
+    }
+    
+    .attendance-indicator {
+        width: 14px;
+        height: 14px;
+        font-size: 0.55rem;
+        bottom: 2px;
+        right: 2px;
+    }
+    
+    .calendar-days-header-mobile {
+        padding: 4px 0;
+    }
+    
+    .calendar-days {
+        gap: 0.5px;
+    }
+    
+    #currentMonthYear {
+        font-size: 1rem;
+    }
+    
+    .legend-item {
+        font-size: 0.7rem;
+    }
+    
+    .legend-color {
+        width: 8px;
+        height: 8px;
+    }
+    
+    .modal-header {
+        padding: 0.75rem 1rem;
+    }
+    
+    .modal-footer {
+        padding: 0.75rem 1rem;
+    }
+    
+    .selected-date-section .p-3 {
+        padding: 0.75rem !important;
+    }
+}
 </style>
 
 <?php include 'footer.php'; ?>
@@ -3221,8 +3549,10 @@ function updateOfflineStatus() {
     if (offlineIndicator) {
         if (!isOnline) {
             offlineIndicator.classList.remove('d-none');
+            document.body.classList.add('offline-mode');
         } else {
             offlineIndicator.classList.add('d-none');
+            document.body.classList.remove('offline-mode');
             
             // Try to sync data when back online
             if (typeof syncOfflineData === 'function') {
@@ -3239,7 +3569,9 @@ function updateOfflineStatus() {
     const submitButtons = document.querySelectorAll('button[type="submit"]');
     submitButtons.forEach(button => {
         if (!isOnline) {
-            button.innerHTML = '<i class="fas fa-wifi-slash me-2"></i>' + button.innerHTML;
+            if (!button.innerHTML.includes('fa-wifi-slash')) {
+                button.innerHTML = '<i class="fas fa-wifi-slash me-2"></i>' + button.innerHTML;
+            }
             button.classList.add('btn-warning');
             button.classList.remove('btn-primary');
         } else {
@@ -3248,6 +3580,31 @@ function updateOfflineStatus() {
             button.classList.remove('btn-warning');
         }
     });
+    
+    // Update Select2 dropdown
+    const studentSelect = $('#student-select');
+    if (studentSelect.length) {
+        if (!isOnline) {
+            // Add offline indicator to Select2
+            studentSelect.next('.select2-container').find('.select2-selection').addClass('offline-select');
+            
+            // Make sure we have offline data available
+            if (typeof studentsData === 'undefined') {
+                try {
+                    const cachedData = localStorage.getItem('studentsData');
+                    if (cachedData) {
+                        window.studentsData = JSON.parse(cachedData);
+                        populateStudentSelectFromCache();
+                    }
+                } catch (error) {
+                    console.error('Error loading cached student data:', error);
+                }
+            }
+        } else {
+            // Remove offline indicator from Select2
+            studentSelect.next('.select2-container').find('.select2-selection').removeClass('offline-select');
+        }
+    }
 }
 </script>
 
@@ -3259,3 +3616,214 @@ function updateOfflineStatus() {
 
 <!-- Add container for offline alerts -->
 <div id="offline-alert-container" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050;"></div>
+
+<!-- Offline utilities -->
+<script>
+// Initialize offline utilities
+window.offlineUtils = {
+    // Save attendance data for offline processing
+    saveAttendanceData: function(data) {
+        return new Promise((resolve, reject) => {
+            if (!window.indexedDB) {
+                reject(new Error('IndexedDB not supported in this browser'));
+                return;
+            }
+            
+            // Open IndexedDB
+            const request = indexedDB.open('kes-smart-offline', 1);
+            
+            request.onerror = function(event) {
+                reject(new Error('Failed to open database: ' + event.target.errorCode));
+            };
+            
+            request.onupgradeneeded = function(event) {
+                const db = event.target.result;
+                
+                // Create object store for attendance data if it doesn't exist
+                if (!db.objectStoreNames.contains('attendance')) {
+                    const store = db.createObjectStore('attendance', { keyPath: 'id', autoIncrement: true });
+                    store.createIndex('timestamp', 'timestamp', { unique: false });
+                    store.createIndex('synced', 'synced', { unique: false });
+                }
+            };
+            
+            request.onsuccess = function(event) {
+                const db = event.target.result;
+                
+                // Add data to attendance store
+                const transaction = db.transaction(['attendance'], 'readwrite');
+                const store = transaction.objectStore('attendance');
+                
+                // Add SMS notification flag to data
+                data.sms_pending = true;
+                data.synced = false;
+                
+                const addRequest = store.add(data);
+                
+                addRequest.onsuccess = function() {
+                    resolve({ success: true, id: addRequest.result });
+                };
+                
+                addRequest.onerror = function(event) {
+                    reject(new Error('Failed to store attendance data: ' + event.target.errorCode));
+                };
+                
+                transaction.oncomplete = function() {
+                    db.close();
+                };
+            };
+        });
+    },
+    
+    // Get all unsynced attendance data
+    getUnsyncedAttendance: function() {
+        return new Promise((resolve, reject) => {
+            if (!window.indexedDB) {
+                reject(new Error('IndexedDB not supported in this browser'));
+                return;
+            }
+            
+            const request = indexedDB.open('kes-smart-offline', 1);
+            
+            request.onerror = function(event) {
+                reject(new Error('Failed to open database: ' + event.target.errorCode));
+            };
+            
+            request.onsuccess = function(event) {
+                const db = event.target.result;
+                const transaction = db.transaction(['attendance'], 'readonly');
+                const store = transaction.objectStore('attendance');
+                const index = store.index('synced');
+                
+                const getRequest = index.getAll(IDBKeyRange.only(false));
+                
+                getRequest.onsuccess = function() {
+                    resolve(getRequest.result);
+                };
+                
+                getRequest.onerror = function(event) {
+                    reject(new Error('Failed to get unsynced attendance data: ' + event.target.errorCode));
+                };
+                
+                transaction.oncomplete = function() {
+                    db.close();
+                };
+            };
+        });
+    },
+    
+    // Mark attendance data as synced
+    markAttendanceSynced: function(id) {
+        return new Promise((resolve, reject) => {
+            if (!window.indexedDB) {
+                reject(new Error('IndexedDB not supported in this browser'));
+                return;
+            }
+            
+            const request = indexedDB.open('kes-smart-offline', 1);
+            
+            request.onerror = function(event) {
+                reject(new Error('Failed to open database: ' + event.target.errorCode));
+            };
+            
+            request.onsuccess = function(event) {
+                const db = event.target.result;
+                const transaction = db.transaction(['attendance'], 'readwrite');
+                const store = transaction.objectStore('attendance');
+                
+                const getRequest = store.get(id);
+                
+                getRequest.onsuccess = function() {
+                    const data = getRequest.result;
+                    if (data) {
+                        data.synced = true;
+                        store.put(data);
+                        resolve(true);
+                    } else {
+                        reject(new Error('Attendance record not found'));
+                    }
+                };
+                
+                getRequest.onerror = function(event) {
+                    reject(new Error('Failed to get attendance data: ' + event.target.errorCode));
+                };
+                
+                transaction.oncomplete = function() {
+                    db.close();
+                };
+            };
+        });
+    },
+    
+    // Sync all unsynced attendance data
+    syncAttendanceData: function() {
+        return new Promise((resolve, reject) => {
+            if (!navigator.onLine) {
+                reject(new Error('Cannot sync while offline'));
+                return;
+            }
+            
+            this.getUnsyncedAttendance()
+                .then(records => {
+                    if (records.length === 0) {
+                        resolve({ success: true, message: 'No records to sync', count: 0 });
+                        return;
+                    }
+                    
+                    // Send records to server
+                    return fetch('api/sync-attendance.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ offlineData: records })
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Server responded with status: ' + response.status);
+                        }
+                        return response.json();
+                    })
+                    .then(result => {
+                        if (result.success) {
+                            // Mark records as synced
+                            const markPromises = records.map(record => this.markAttendanceSynced(record.id));
+                            return Promise.all(markPromises)
+                                .then(() => {
+                                    resolve({
+                                        success: true,
+                                        message: `Synced ${result.success_count} records successfully`,
+                                        count: result.success_count,
+                                        results: result.results
+                                    });
+                                });
+                        } else {
+                            throw new Error(result.message || 'Sync failed');
+                        }
+                    });
+                })
+                .catch(error => {
+                    reject(error);
+                });
+        });
+    }
+};
+
+// Register sync event
+if ('serviceWorker' in navigator && 'SyncManager' in window) {
+    navigator.serviceWorker.ready.then(registration => {
+        // Register sync handler
+        navigator.serviceWorker.addEventListener('message', event => {
+            if (event.data && event.data.type === 'sync-attendance') {
+                window.offlineUtils.syncAttendanceData()
+                    .then(result => {
+                        console.log('Background sync completed:', result);
+                    })
+                    .catch(error => {
+                        console.error('Background sync failed:', error);
+                    });
+            }
+        });
+    });
+}
+</script>

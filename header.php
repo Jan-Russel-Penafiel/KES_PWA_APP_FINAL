@@ -482,9 +482,7 @@ if (!in_array($current_page, $public_pages)) {
 </nav>
 
 <!-- Offline Status Indicator -->
-<div id="offline-indicator" class="offline-indicator bg-warning text-dark py-1 px-3" style="display: none;">
-    <i class="fas fa-wifi-slash me-2"></i> You are offline. Some features may be limited.
-</div>
+<!-- Removed duplicate offline-indicator yellow banner from header -->
 
 <?php if (isset($_SESSION['offline_login']) && $_SESSION['offline_login']): ?>
 <!-- Offline Login Indicator -->
@@ -559,42 +557,8 @@ if (!in_array($current_page, $public_pages)) {
 
 <script>
     // Offline status detection and indicator
-    function updateOnlineStatus() {
-        const indicator = document.getElementById('offline-indicator');
-        const body = document.body;
-        const isOfflineLogin = <?php echo isset($_SESSION['offline_login']) && $_SESSION['offline_login'] ? 'true' : 'false'; ?>;
-        
-        if (!navigator.onLine) {
-            indicator.style.display = 'block';
-            body.classList.add('offline-mode');
-            
-            // Store offline state in local storage
-            localStorage.setItem('kes_smart_offline_mode', 'true');
-        } else {
-            // Only hide offline indicator if not in offline login mode
-            if (!isOfflineLogin) {
-                indicator.style.display = 'none';
-                body.classList.remove('offline-mode');
-            }
-            
-            // Check for stored data to sync
-            if (localStorage.getItem('kes_smart_offline_mode') === 'true') {
-                localStorage.removeItem('kes_smart_offline_mode');
-                
-                // Trigger sync if back online after being offline
-                if (typeof syncOfflineData === 'function') {
-                    syncOfflineData();
-                }
-            }
-        }
-    }
-
-    window.addEventListener('online', updateOnlineStatus);
-    window.addEventListener('offline', updateOnlineStatus);
-    
-    // Initial check
-    document.addEventListener('DOMContentLoaded', updateOnlineStatus);
-    
+    // Removed updateOnlineStatus function and related event listeners for offline-indicator
+    // Only the top offline-banner remains
     // Highlight active nav item in bottom navigation
     document.addEventListener('DOMContentLoaded', function() {
         const currentPage = '<?php echo $current_page; ?>';

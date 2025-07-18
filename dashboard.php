@@ -5,6 +5,10 @@ require_once 'config.php';
 if (!isLoggedIn()) {
     // If no PHP session, we'll check for client-side session in JavaScript
     // This allows for offline authentication
+    // The actual check happens in the JavaScript below
+    $check_offline_auth = true;
+} else {
+    $check_offline_auth = false;
 }
 
 // Initialize variables for both online and offline mode
@@ -85,16 +89,33 @@ try {
                 <h1 class="h4 fw-bold text-primary mb-0">
                     <i class="fas fa-tachometer-alt me-2"></i>Dashboard
                 </h1>
-                <p class="text-muted small mb-0">Welcome back, <?php echo $current_user['full_name']; ?>!</p>
+                <p class="text-muted small mb-0" id="welcome-message">Welcome back!</p>
             </div>
             <div class="text-start text-md-end">
-                <span class="badge bg-primary"><?php echo ucfirst($user_role); ?></span>
+                <span class="badge bg-primary" id="role-badge"><?php echo ucfirst($user_role); ?></span>
                 <div class="small text-muted mt-1" id="current-datetime"></div>
+                <div id="offline-indicator" class="d-none">
+                    <span class="badge bg-warning text-dark mt-1">
+                        <i class="fas fa-wifi-slash me-1"></i>Offline Mode
+                    </span>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
+<div id="offline-auth-required" class="d-none">
+    <div class="alert alert-warning" role="alert">
+        <h4 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Authentication Required</h4>
+        <p>You need to log in to access this page. It appears you're currently offline.</p>
+        <hr>
+        <p class="mb-0">
+            <a href="login.php" class="btn btn-primary btn-sm">Go to Login</a>
+        </p>
+    </div>
+</div>
+
+<div id="dashboard-content">
 <?php if ($user_role == 'admin'): ?>
     <!-- Admin Dashboard -->
     <div class="row g-3 mb-4">

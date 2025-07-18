@@ -292,7 +292,7 @@ try {
         </div>
     <?php else: ?>
         <?php foreach ($students as $student): ?>
-            <div class="col-12 col-md-6 col-lg-4 student-card" 
+            <div class="col-12 col-sm-6 col-lg-4 student-card" 
                  data-name="<?php echo strtolower($student['full_name']); ?>" 
                  data-username="<?php echo strtolower($student['username']); ?>"
                  data-section="<?php echo $student['section_id']; ?>">
@@ -300,30 +300,30 @@ try {
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between align-items-start mb-3">
                             <div class="d-flex align-items-center w-100">
-                                <div class="profile-avatar me-2" style="width: 45px; height: 45px; background: linear-gradient(45deg, #007bff, #0056b3); display: flex; align-items: center; justify-content: center; border-radius: 50%; color: white; font-weight: bold;">
+                                <div class="profile-avatar me-2 flex-shrink-0" style="width: 45px; height: 45px; background: linear-gradient(45deg, #007bff, #0056b3); display: flex; align-items: center; justify-content: center; border-radius: 50%; color: white; font-weight: bold;">
                                     <?php echo strtoupper(substr($student['full_name'], 0, 1)); ?>
                                 </div>
-                                <div class="flex-grow-1 min-w-0">
+                                <div class="flex-grow-1 min-w-0 me-2">
                                     <h6 class="fw-bold mb-1 text-truncate"><?php echo $student['full_name']; ?></h6>
                                     <p class="text-muted small mb-0 text-truncate"><?php echo $student['username']; ?></p>
                                 </div>
-                                <div class="dropdown ms-2">
-                                    <button class="btn btn-sm btn-link text-muted p-0" type="button" data-bs-toggle="dropdown">
+                                <div class="dropdown me-2">
+                                    <button class="btn btn-sm btn-link text-muted p-2 rounded-circle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                                         <i class="fas fa-ellipsis-v"></i>
                                     </button>
-                                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                                        <li><a class="dropdown-item d-flex align-items-center" href="qr-code.php?student_id=<?php echo $student['id']; ?>">
+                                    <ul class="dropdown-menu shadow-sm">
+                                        <li><a class="dropdown-item d-flex align-items-center py-2" href="qr-code.php?student_id=<?php echo $student['id']; ?>">
                                             <i class="fas fa-qrcode me-2 text-primary"></i>View QR Code
                                         </a></li>
-                                        <li><a class="dropdown-item d-flex align-items-center" href="attendance.php?student_id=<?php echo $student['id']; ?>">
+                                        <li><a class="dropdown-item d-flex align-items-center py-2" href="attendance.php?student_id=<?php echo $student['id']; ?>">
                                             <i class="fas fa-calendar-check me-2 text-success"></i>View Attendance
                                         </a></li>
                                         <?php if ($user_role == 'admin' || $user_role == 'teacher'): ?>
                                             <li><hr class="dropdown-divider"></li>
-                                            <li><a class="dropdown-item d-flex align-items-center" href="#" onclick="editStudent(<?php echo htmlspecialchars(json_encode($student)); ?>)">
+                                            <li><a class="dropdown-item d-flex align-items-center py-2" href="#" onclick="editStudent(<?php echo htmlspecialchars(json_encode($student)); ?>)">
                                                 <i class="fas fa-edit me-2 text-info"></i>Edit
                                             </a></li>
-                                            <li><a class="dropdown-item d-flex align-items-center" href="#" onclick="linkParent(<?php echo $student['id']; ?>, '<?php echo $student['full_name']; ?>')">
+                                            <li><a class="dropdown-item d-flex align-items-center py-2" href="#" onclick="linkParent(<?php echo $student['id']; ?>, '<?php echo addslashes($student['full_name']); ?>')">
                                                 <i class="fas fa-link me-2 text-warning"></i>Link Parent
                                             </a></li>
                                         <?php endif; ?>
@@ -335,7 +335,7 @@ try {
                         <div class="student-info small">
                             <?php if ($student['lrn']): ?>
                                 <div class="d-flex align-items-center mb-2">
-                                    <i class="fas fa-id-card me-2 text-warning"></i>
+                                    <i class="fas fa-id-card me-2 text-warning flex-shrink-0"></i>
                                     <span class="fw-semibold me-1">LRN:</span> 
                                     <span class="font-monospace text-truncate"><?php echo $student['lrn']; ?></span>
                                 </div>
@@ -343,32 +343,32 @@ try {
                             
                             <?php if ($student['section_name']): ?>
                                 <div class="d-flex align-items-center mb-2">
-                                    <i class="fas fa-school me-2 text-primary"></i>
-                                    <span class="fw-semibold"><?php echo $student['section_name']; ?></span>
+                                    <i class="fas fa-school me-2 text-primary flex-shrink-0"></i>
+                                    <span class="fw-semibold text-truncate"><?php echo $student['section_name']; ?></span>
                                     <?php if ($student['grade_level']): ?>
-                                        <span class="text-muted ms-1">- <?php echo $student['grade_level']; ?></span>
+                                        <span class="text-muted ms-1 text-truncate">- <?php echo $student['grade_level']; ?></span>
                                     <?php endif; ?>
                                 </div>
                             <?php endif; ?>
                             
                             <?php if ($student['email']): ?>
                                 <div class="d-flex align-items-center mb-2">
-                                    <i class="fas fa-envelope me-2 text-info"></i>
+                                    <i class="fas fa-envelope me-2 text-info flex-shrink-0"></i>
                                     <span class="text-truncate"><?php echo $student['email']; ?></span>
                                 </div>
                             <?php endif; ?>
                             
                             <?php if ($student['phone']): ?>
                                 <div class="d-flex align-items-center mb-2">
-                                    <i class="fas fa-phone me-2 text-success"></i>
-                                    <span><?php echo $student['phone']; ?></span>
+                                    <i class="fas fa-phone me-2 text-success flex-shrink-0"></i>
+                                    <span class="text-truncate"><?php echo $student['phone']; ?></span>
                                 </div>
                             <?php endif; ?>
                             
                             <?php if ($student['parents']): ?>
                                 <div class="d-flex align-items-start mb-2">
-                                    <i class="fas fa-heart me-2 text-danger mt-1"></i>
-                                    <span class="text-wrap"><?php echo $student['parents']; ?></span>
+                                    <i class="fas fa-heart me-2 text-danger mt-1 flex-shrink-0"></i>
+                                    <span class="text-wrap text-break small"><?php echo $student['parents']; ?></span>
                                 </div>
                             <?php endif; ?>
                         </div>
@@ -413,7 +413,7 @@ try {
 <?php if ($user_role == 'admin' || $user_role == 'teacher'): ?>
     <!-- Add Student Modal -->
     <div class="modal fade" id="addStudentModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title">
@@ -427,17 +427,17 @@ try {
                         
                         <div class="mb-3">
                             <label for="username" class="form-label">Username *</label>
-                            <input type="text" class="form-control" id="username" name="username" required>
+                            <input type="text" class="form-control form-control-lg" id="username" name="username" required>
                         </div>
                         
                         <div class="mb-3">
                             <label for="full_name" class="form-label">Full Name *</label>
-                            <input type="text" class="form-control" id="full_name" name="full_name" required>
+                            <input type="text" class="form-control form-control-lg" id="full_name" name="full_name" required>
                         </div>
                         
                         <div class="mb-3">
                             <label for="lrn" class="form-label">LRN (Learner Reference Number)</label>
-                            <div class="input-group">
+                            <div class="input-group input-group-lg">
                                 <input type="text" class="form-control" id="lrn" name="lrn" 
                                        pattern="[0-9]{12}" maxlength="12" placeholder="Auto-generate or enter manually"
                                        title="LRN must be exactly 12 digits">
@@ -460,17 +460,17 @@ try {
                         
                         <div class="mb-3">
                             <label for="email" class="form-label">Email</label>
-                            <input type="email" class="form-control" id="email" name="email">
+                            <input type="email" class="form-control form-control-lg" id="email" name="email">
                         </div>
                         
                         <div class="mb-3">
                             <label for="phone" class="form-label">Phone</label>
-                            <input type="text" class="form-control" id="phone" name="phone">
+                            <input type="text" class="form-control form-control-lg" id="phone" name="phone">
                         </div>
                         
                         <div class="mb-3">
                             <label for="section_id" class="form-label">Section</label>
-                            <select class="form-select select2" id="section_id" name="section_id">
+                            <select class="form-select form-select-lg select2" id="section_id" name="section_id">
                                 <option value="">Select Section</option>
                                 <?php foreach ($sections as $section): ?>
                                     <option value="<?php echo $section['id']; ?>">
@@ -480,9 +480,9 @@ try {
                             </select>
                         </div>
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary">
+                    <div class="modal-footer d-flex justify-content-between">
+                        <button type="button" class="btn btn-lg btn-secondary flex-fill me-2" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-lg btn-primary flex-fill">
                             <i class="fas fa-save me-2"></i>Add Student
                         </button>
                     </div>
@@ -493,7 +493,7 @@ try {
 
     <!-- Edit Student Modal -->
     <div class="modal fade" id="editStudentModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
             <div class="modal-content">
                 <div class="modal-header bg-info text-white">
                     <h5 class="modal-title">
@@ -508,12 +508,12 @@ try {
                         
                         <div class="mb-3">
                             <label for="edit_full_name" class="form-label">Full Name *</label>
-                            <input type="text" class="form-control" id="edit_full_name" name="full_name" required>
+                            <input type="text" class="form-control form-control-lg" id="edit_full_name" name="full_name" required>
                         </div>
                         
                         <div class="mb-3">
                             <label for="edit_lrn" class="form-label">LRN (Learner Reference Number)</label>
-                            <input type="text" class="form-control" id="edit_lrn" name="lrn" 
+                            <input type="text" class="form-control form-control-lg" id="edit_lrn" name="lrn" 
                                    pattern="[0-9]{12}" maxlength="12" placeholder="123456789012"
                                    title="LRN must be exactly 12 digits">
                             <div class="form-text">Optional. Must be exactly 12 digits if provided.</div>
@@ -521,17 +521,17 @@ try {
                         
                         <div class="mb-3">
                             <label for="edit_email" class="form-label">Email</label>
-                            <input type="email" class="form-control" id="edit_email" name="email">
+                            <input type="email" class="form-control form-control-lg" id="edit_email" name="email">
                         </div>
                         
                         <div class="mb-3">
                             <label for="edit_phone" class="form-label">Phone</label>
-                            <input type="text" class="form-control" id="edit_phone" name="phone">
+                            <input type="text" class="form-control form-control-lg" id="edit_phone" name="phone">
                         </div>
                         
                         <div class="mb-3">
                             <label for="edit_section_id" class="form-label">Section</label>
-                            <select class="form-select select2" id="edit_section_id" name="section_id">
+                            <select class="form-select form-select-lg select2" id="edit_section_id" name="section_id">
                                 <option value="">Select Section</option>
                                 <?php foreach ($sections as $section): ?>
                                     <option value="<?php echo $section['id']; ?>">
@@ -541,9 +541,9 @@ try {
                             </select>
                         </div>
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary">
+                    <div class="modal-footer d-flex justify-content-between">
+                        <button type="button" class="btn btn-lg btn-secondary flex-fill me-2" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-lg btn-primary flex-fill">
                             <i class="fas fa-save me-2"></i>Update Student
                         </button>
                     </div>
@@ -554,7 +554,7 @@ try {
 
     <!-- Link Parent Modal -->
     <div class="modal fade" id="linkParentModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
             <div class="modal-content">
                 <div class="modal-header bg-warning text-dark">
                     <h5 class="modal-title">
@@ -574,7 +574,7 @@ try {
                         
                         <div class="mb-3">
                             <label for="parent_id" class="form-label">Parent *</label>
-                            <select class="form-select select2" id="parent_id" name="parent_id" required>
+                            <select class="form-select form-select-lg select2" id="parent_id" name="parent_id" required>
                                 <option value="">Select Parent</option>
                                 <?php foreach ($parents as $parent): ?>
                                     <option value="<?php echo $parent['id']; ?>">
@@ -586,7 +586,7 @@ try {
                         
                         <div class="mb-3">
                             <label for="relationship" class="form-label">Relationship *</label>
-                            <select class="form-select" id="relationship" name="relationship" required>
+                            <select class="form-select form-select-lg" id="relationship" name="relationship" required>
                                 <option value="">Select Relationship</option>
                                 <option value="father">Father</option>
                                 <option value="mother">Mother</option>
@@ -594,16 +594,16 @@ try {
                             </select>
                         </div>
                         
-                        <div class="mb-3 form-check">
-                            <input type="checkbox" class="form-check-input" id="is_primary" name="is_primary">
-                            <label class="form-check-label" for="is_primary">
+                        <div class="mb-3 form-check form-switch">
+                            <input type="checkbox" class="form-check-input" id="is_primary" name="is_primary" style="height: 1.5rem; width: 3rem;">
+                            <label class="form-check-label ms-2 mt-1" for="is_primary">
                                 Primary contact (will receive SMS notifications)
                             </label>
                         </div>
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary">
+                    <div class="modal-footer d-flex justify-content-between">
+                        <button type="button" class="btn btn-lg btn-secondary flex-fill me-2" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-lg btn-primary flex-fill">
                             <i class="fas fa-link me-2"></i>Link Parent
                         </button>
                     </div>
@@ -744,6 +744,8 @@ document.addEventListener('shown.bs.modal', function(event) {
     
     .dropdown-menu {
         font-size: 0.875rem;
+        width: 200px;
+        max-width: 95vw;
     }
     
     .btn-sm {
@@ -769,20 +771,30 @@ document.addEventListener('shown.bs.modal', function(event) {
     
     /* Improve touch targets on mobile */
     .btn, .nav-link {
-        min-height: 44px;
+        min-height: 42px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
     }
     
     .dropdown-item {
-        padding-top: 0.5rem;
-        padding-bottom: 0.5rem;
+        padding-top: 0.65rem;
+        padding-bottom: 0.65rem;
+        white-space: normal;
     }
     
     /* Better search on mobile */
     .input-group {
         margin-bottom: 0.75rem;
+    }
+    
+    /* Improve ellipsis button for touch */
+    .btn-link.rounded-circle {
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 }
 
@@ -829,6 +841,14 @@ document.addEventListener('shown.bs.modal', function(event) {
     
     .modal-footer {
         padding: 0.75rem 1rem;
+        flex-wrap: nowrap;
+    }
+    
+    .modal-footer .btn {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     
     .form-text {

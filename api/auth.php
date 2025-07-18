@@ -52,6 +52,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             break;
             
+        case 'refresh_credentials':
+            // Get username and role from request
+            $username = isset($_POST['username']) ? sanitize_input($_POST['username']) : '';
+            $role = isset($_POST['role']) ? sanitize_input($_POST['role']) : '';
+            
+            if (empty($username) || empty($role)) {
+                $response['message'] = 'Username and role are required';
+            } else {
+                try {
+                    // Check user credentials with role
+                    $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ? AND role = ? AND status = 'active'");
+                    $stmt->execute([$username, $role]);
+                    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+                    
+                    if ($user) {
+                        // Remove sensitive data before sending to client
+                        unset($user['created_at']);
+                        unset($user['updated_at']);
+                        
+                        // Prepare response data
+                        $response = [
+                            'success' => true,
+                            'message' => 'Credentials refreshed',
+                            'user' => $user
+                        ];
+                    } else {
+                        $response['message'] = 'User not found or inactive';
+                    }
+                } catch(PDOException $e) {
+                    $response['message'] = 'Database error: ' . $e->getMessage();
+                }
+            }
+            break;
+            
         case 'verify':
             // Check if user is logged in
             if (isLoggedIn()) {

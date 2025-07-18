@@ -346,14 +346,13 @@ async function performOfflineLogin(username, role) {
         // Check if IndexedDB is initialized
         if (!db) {
             console.error('Database not initialized for offline login');
+            await initIndexedDB().catch(err => {
+                throw new Error('Failed to initialize database: ' + err.message);
+            });
             
-            // Show the database error notification if it exists
-            const dbErrorNotification = document.getElementById('db-error-notification');
-            if (dbErrorNotification) {
-                dbErrorNotification.classList.remove('d-none');
+            if (!db) {
+                throw new Error('Database initialization failed');
             }
-            
-            return false;
         }
         
         const credentials = await checkOfflineCredentials(username, role);
@@ -362,8 +361,12 @@ async function performOfflineLogin(username, role) {
             localStorage.setItem('offline_login_data', JSON.stringify({
                 username: username,
                 role: role,
-                userData: credentials.userData
+                userData: credentials.userData,
+                timestamp: new Date().getTime()
             }));
+            
+            // Set offline login cookie
+            document.cookie = "kes_smart_offline_logged_in=1; path=/; max-age=86400";
             
             // If we're online, use form POST submission
             if (navigator.onLine) {
@@ -403,14 +406,8 @@ async function performOfflineLogin(username, role) {
                 document.body.appendChild(form);
                 form.submit();
             } else {
-                // If offline, use URL parameters to navigate to offline auth page
-                const params = new URLSearchParams({
-                    username: username,
-                    role: role,
-                    user_data: JSON.stringify(credentials.userData)
-                });
-                
-                window.location.href = `offline-auth.php?${params.toString()}`;
+                // If offline, redirect to offline auth page with parameters
+                window.location.href = `offline-auth.php?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}&user_data=${encodeURIComponent(JSON.stringify(credentials.userData))}`;
             }
             
             return true;
@@ -477,6 +474,10 @@ document.addEventListener('DOMContentLoaded', function() {
     initIndexedDB()
         .then(() => {
             console.log('IndexedDB successfully initialized');
+            // Try to fetch credentials from server if online
+            if (navigator.onLine) {
+                fetchAndStoreCredentials();
+            }
         })
         .catch(error => {
             console.error('Failed to initialize IndexedDB:', error);
@@ -496,7 +497,13 @@ document.addEventListener('DOMContentLoaded', function() {
     checkOnlineStatus();
     
     // Update connection status when online/offline events are triggered
-    window.addEventListener('online', checkOnlineStatus);
+    window.addEventListener('online', function() {
+        checkOnlineStatus();
+        // Try to sync any pending data when back online
+        if (typeof syncOfflineLogins === 'function') {
+            syncOfflineLogins();
+        }
+    });
     window.addEventListener('offline', checkOnlineStatus);
     
     // Bootstrap form validation
@@ -555,6 +562,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             errorDiv.className = 'alert alert-danger py-2 small';
                             errorDiv.innerHTML = `<i class="fas fa-exclamation-circle me-2"></i>${data.message}`;
                             
+                            // Remove any existing error messages
+                            const existingErrors = form.querySelectorAll('.alert-danger');
+                            existingErrors.forEach(el => el.remove());
+                            
                             form.insertBefore(errorDiv, form.firstChild);
                             
                             // Reset button
@@ -572,6 +583,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                 const errorDiv = document.createElement('div');
                                 errorDiv.className = 'alert alert-danger py-2 small';
                                 errorDiv.innerHTML = '<i class="fas fa-exclamation-circle me-2"></i>Offline login failed. No stored credentials found.';
+                                
+                                // Remove any existing error messages
+                                const existingErrors = form.querySelectorAll('.alert-danger');
+                                existingErrors.forEach(el => el.remove());
                                 
                                 form.insertBefore(errorDiv, form.firstChild);
                             }
@@ -599,6 +614,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             } else {
                                 errorDiv.innerHTML = '<i class="fas fa-exclamation-circle me-2"></i>Offline login failed. No stored credentials found for this username and role.';
                             }
+                            
+                            // Remove any existing error messages
+                            const existingErrors = form.querySelectorAll('.alert-danger');
+                            existingErrors.forEach(el => el.remove());
                             
                             form.insertBefore(errorDiv, form.firstChild);
                             
@@ -641,6 +660,49 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 100);
     }
 });
+
+// Function to proactively fetch and store credentials
+function fetchAndStoreCredentials() {
+    // Only attempt if the user has logged in before
+    const hasAttemptedLogin = localStorage.getItem('has_attempted_login');
+    if (!hasAttemptedLogin) return;
+    
+    // Check if we have a stored username and role from previous login
+    const offlineLoginData = localStorage.getItem('offline_login_data');
+    if (offlineLoginData) {
+        try {
+            const data = JSON.parse(offlineLoginData);
+            if (data.username && data.role) {
+                // Quietly refresh the stored credentials in the background
+                fetch('api/auth.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        username: data.username,
+                        role: data.role,
+                        action: 'refresh_credentials'
+                    })
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success && result.user) {
+                        // Update stored credentials
+                        storeCredentials(data.username, data.role, result.user)
+                            .then(() => console.log('Credentials refreshed for offline use'))
+                            .catch(error => console.error('Failed to refresh credentials:', error));
+                    }
+                })
+                .catch(error => {
+                    console.log('Could not refresh credentials:', error);
+                });
+            }
+        } catch (e) {
+            console.error('Error parsing stored login data:', e);
+        }
+    }
+}
 </script>
 
 <?php include 'footer.php'; ?>

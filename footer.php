@@ -43,7 +43,7 @@
                     </div>
                 <?php endif; ?>
                 
-                <?php if ($user_role == 'student' || $user_role == 'parent'): ?>
+                <?php if ($user_role == 'student' || $user_role == 'parent' || $user_role == 'teacher' || $user_role == 'admin'): ?>
                     <!-- Attendance -->
                     <div class="nav-item">
                         <a href="attendance.php" class="nav-link <?php echo $current_page == 'attendance.php' ? 'active' : ''; ?>">
@@ -116,9 +116,7 @@
     <?php endif; ?>
     
     <!-- Offline Status Indicator -->
-    <div class="offline-indicator">
-        <i class="fas fa-wifi-slash me-2"></i> Offline
-    </div>
+    <!-- Removed duplicate offline-indicator banner from footer -->
     
     <!-- Bootstrap Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -149,36 +147,7 @@
             });
             
             // Offline mode handling
-            function updateOfflineStatus() {
-                if (!navigator.onLine) {
-                    // We're offline
-                    $('.online-only').addClass('disabled').attr('disabled', true);
-                    $('.offline-indicator').addClass('active');
-                    
-                    // Show offline message if not already shown
-                    if ($('.offline-message:visible').length === 0) {
-                        const offlineAlert = $('<div class="offline-message mb-3" role="alert">' +
-                            '<i class="fas fa-wifi-slash me-2"></i>' +
-                            'You are currently offline. Some features may be limited.' +
-                            '</div>');
-                        
-                        // Add to the top of the main content
-                        $('.container:first').prepend(offlineAlert);
-                    }
-                } else {
-                    // We're online
-                    $('.online-only').removeClass('disabled').attr('disabled', false);
-                    $('.offline-indicator').removeClass('active');
-                    $('.offline-message').remove();
-                }
-            }
-            
-            // Check offline status on page load
-            updateOfflineStatus();
-            
-            // Listen for online/offline events
-            window.addEventListener('online', updateOfflineStatus);
-            window.addEventListener('offline', updateOfflineStatus);
+            // Removed updateOfflineStatus function and related event listeners for offline-indicator and offline-message
         });
     </script>
     
