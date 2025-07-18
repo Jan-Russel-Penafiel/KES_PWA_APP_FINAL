@@ -10,6 +10,13 @@
         "message": "You are viewing cached data while offline.",
         "type": "info",
         "date": "2023-01-01T00:00:00Z"
+      },
+      {
+        "id": 2,
+        "title": "Offline Login",
+        "message": "You can now log in even when offline using previously stored credentials.",
+        "type": "success",
+        "date": "2023-01-01T00:00:00Z"
       }
     ],
     "attendance": {
@@ -26,6 +33,22 @@
     },
     "user": {
       "message": "Your user profile is available in offline mode with limited functionality."
+    },
+    "auth": {
+      "login_enabled": true,
+      "message": "Offline login is enabled. You can log in with previously used credentials.",
+      "roles": ["admin", "teacher", "student", "parent"]
+    },
+    "system": {
+      "offline_features": [
+        "login",
+        "dashboard_view",
+        "profile_view",
+        "qr_scanning",
+        "attendance_recording"
+      ],
+      "sync_on_reconnect": true,
+      "version": "1.0.3"
     }
   }
 } 

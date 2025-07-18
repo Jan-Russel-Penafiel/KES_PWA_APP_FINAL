@@ -630,6 +630,323 @@ function setDateRange(range) {
 }
 </script>
 
+<script>
+// Initialize offline storage for attendance records
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if we're in offline mode
+    if (!navigator.onLine) {
+        showOfflineMode();
+        loadOfflineAttendanceRecords();
+    }
+    
+    // Listen for online/offline events
+    window.addEventListener('online', handleOnlineStatusChange);
+    window.addEventListener('offline', handleOnlineStatusChange);
+    
+    // Initialize IndexedDB if available
+    if (typeof initOfflineDB === 'function') {
+        initOfflineDB().catch(error => console.error('Failed to initialize offline storage:', error));
+    }
+});
+
+// Handle online/offline status changes
+function handleOnlineStatusChange() {
+    if (navigator.onLine) {
+        // Back online
+        hideOfflineMode();
+        
+        // Try to sync data
+        if (typeof syncOfflineData === 'function') {
+            syncOfflineData().then(() => {
+                // Reload the page to get fresh data
+                window.location.reload();
+            }).catch(error => {
+                console.error('Error syncing offline data:', error);
+            });
+        }
+    } else {
+        // Went offline
+        showOfflineMode();
+        loadOfflineAttendanceRecords();
+    }
+}
+
+// Show offline mode UI
+function showOfflineMode() {
+    // Show offline indicator
+    const offlineIndicator = document.getElementById('offline-mode-indicator');
+    if (offlineIndicator) {
+        offlineIndicator.classList.remove('d-none');
+    } else {
+        // Create and insert offline indicator
+        const indicator = document.createElement('div');
+        indicator.id = 'offline-mode-indicator';
+        indicator.className = 'alert alert-warning mb-3';
+        indicator.innerHTML = `
+            <i class="fas fa-wifi-slash me-2"></i>
+            <strong>You are offline.</strong> Viewing cached attendance records. Some features may be limited.
+        `;
+        
+        const container = document.querySelector('main.container');
+        if (container && container.firstChild) {
+            container.insertBefore(indicator, container.firstChild);
+        }
+    }
+    
+    // Disable filter form elements
+    const formElements = document.querySelectorAll('form select, form input, form button');
+    formElements.forEach(el => {
+        el.disabled = true;
+    });
+    
+    // Add offline badge to filter section
+    const filterCard = document.querySelector('.card-header');
+    if (filterCard) {
+        if (!filterCard.querySelector('.badge.bg-warning')) {
+            const badge = document.createElement('span');
+            badge.className = 'badge bg-warning text-dark ms-2';
+            badge.textContent = 'Offline';
+            filterCard.appendChild(badge);
+        }
+    }
+}
+
+// Hide offline mode UI
+function hideOfflineMode() {
+    // Hide offline indicator
+    const offlineIndicator = document.getElementById('offline-mode-indicator');
+    if (offlineIndicator) {
+        offlineIndicator.classList.add('d-none');
+    }
+    
+    // Enable filter form elements
+    const formElements = document.querySelectorAll('form select, form input, form button');
+    formElements.forEach(el => {
+        el.disabled = false;
+    });
+    
+    // Remove offline badge from filter section
+    const filterBadge = document.querySelector('.card-header .badge.bg-warning');
+    if (filterBadge) {
+        filterBadge.remove();
+    }
+}
+
+// Load attendance records from IndexedDB when offline
+function loadOfflineAttendanceRecords() {
+    // Check if we have the necessary functions
+    if (typeof db === 'undefined' || !db) {
+        console.warn('IndexedDB not initialized');
+        showOfflineMessage('No offline attendance data available');
+        return;
+    }
+    
+    try {
+        // Try to get attendance records from IndexedDB
+        const transaction = db.transaction([STORE_NAMES.ATTENDANCE], 'readonly');
+        const store = transaction.objectStore(STORE_NAMES.ATTENDANCE);
+        const request = store.getAll();
+        
+        request.onsuccess = (event) => {
+            const records = event.target.result;
+            
+            if (records && records.length > 0) {
+                // Filter records based on user role
+                const userRole = '<?php echo $user_role; ?>';
+                const userId = <?php echo $current_user['id']; ?>;
+                
+                let filteredRecords = records;
+                
+                if (userRole === 'teacher') {
+                    // Teachers should only see their own records
+                    filteredRecords = records.filter(record => record.teacher_id === userId);
+                } else if (userRole === 'student') {
+                    // Students should only see their own records
+                    filteredRecords = records.filter(record => record.student_id === userId);
+                }
+                
+                if (filteredRecords.length > 0) {
+                    displayOfflineAttendanceRecords(filteredRecords);
+                } else {
+                    showOfflineMessage('No offline attendance records found for your account');
+                }
+            } else {
+                showOfflineMessage('No offline attendance records available');
+            }
+        };
+        
+        request.onerror = (event) => {
+            console.error('Error loading offline attendance records:', event.target.error);
+            showOfflineMessage('Error loading offline attendance records');
+        };
+    } catch (error) {
+        console.error('Error accessing IndexedDB:', error);
+        showOfflineMessage('Error accessing offline attendance data');
+    }
+}
+
+// Display offline attendance records
+function displayOfflineAttendanceRecords(records) {
+    // Group records by date
+    const recordsByDate = {};
+    records.forEach(record => {
+        const date = new Date(record.timestamp).toISOString().split('T')[0];
+        if (!recordsByDate[date]) {
+            recordsByDate[date] = [];
+        }
+        recordsByDate[date].push(record);
+    });
+    
+    // Get the container for attendance records
+    const attendanceContainer = document.querySelector('main.container');
+    if (!attendanceContainer) {
+        console.error('Attendance container not found');
+        return;
+    }
+    
+    // Remove existing records
+    const existingRecords = document.querySelectorAll('.attendance-record-card');
+    existingRecords.forEach(el => el.remove());
+    
+    // Sort dates (newest first)
+    const sortedDates = Object.keys(recordsByDate).sort().reverse();
+    
+    // Create a container for the new records
+    const recordsContainer = document.createElement('div');
+    recordsContainer.className = 'offline-attendance-records';
+    
+    // Add a header for offline records
+    const header = document.createElement('div');
+    header.className = 'row mb-3';
+    header.innerHTML = `
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h4 class="text-warning">
+                    <i class="fas fa-wifi-slash me-2"></i>Offline Attendance Records
+                </h4>
+                <span class="badge bg-warning text-dark">Cached Data</span>
+            </div>
+            <p class="text-muted small mb-0">
+                These records will be synchronized when you're back online.
+            </p>
+        </div>
+    `;
+    recordsContainer.appendChild(header);
+    
+    // Add records for each date
+    sortedDates.forEach(date => {
+        const dateRecords = recordsByDate[date];
+        
+        // Create a card for this date
+        const card = document.createElement('div');
+        card.className = 'card mb-4 attendance-record-card';
+        
+        // Format the date
+        const dateObj = new Date(date);
+        const formattedDate = dateObj.toLocaleDateString('en-US', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+        
+        card.innerHTML = `
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-calendar-day me-2"></i>${formattedDate}
+                </h5>
+                <span class="badge bg-warning text-dark">Offline</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Time</th>
+                                <th>Type</th>
+                                <th>Location</th>
+                                <th>Status</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="offline-records-${date}">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        
+        recordsContainer.appendChild(card);
+        
+        // Get the tbody element
+        const tbody = document.getElementById(`offline-records-${date}`);
+        
+        // Sort records by timestamp (newest first)
+        dateRecords.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        // Add records to the table
+        dateRecords.forEach(record => {
+            const tr = document.createElement('tr');
+            
+            // Format the timestamp
+            const timestamp = new Date(record.timestamp);
+            const formattedTime = timestamp.toLocaleTimeString();
+            
+            tr.innerHTML = `
+                <td>${formattedTime}</td>
+                <td>${record.qr_data ? 'QR Scan' : (record.lrn ? 'LRN Entry' : 'Manual Entry')}</td>
+                <td>${record.scan_location || 'N/A'}</td>
+                <td><span class="badge bg-warning text-dark">Pending</span></td>
+                <td>${record.scan_notes || '-'}</td>
+            `;
+            
+            tbody.appendChild(tr);
+        });
+    });
+    
+    // Insert the records container after the filters
+    const filterCard = document.querySelector('.card');
+    if (filterCard && filterCard.nextSibling) {
+        attendanceContainer.insertBefore(recordsContainer, filterCard.nextSibling);
+    } else {
+        attendanceContainer.appendChild(recordsContainer);
+    }
+}
+
+// Show a message when no offline data is available
+function showOfflineMessage(message) {
+    // Get the container for attendance records
+    const attendanceContainer = document.querySelector('main.container');
+    if (!attendanceContainer) {
+        console.error('Attendance container not found');
+        return;
+    }
+    
+    // Remove existing records
+    const existingRecords = document.querySelectorAll('.attendance-record-card');
+    existingRecords.forEach(el => el.remove());
+    
+    // Create a card for the message
+    const card = document.createElement('div');
+    card.className = 'card mb-4 attendance-record-card';
+    card.innerHTML = `
+        <div class="card-body text-center p-5">
+            <i class="fas fa-wifi-slash fa-3x text-muted mb-3"></i>
+            <h5>${message}</h5>
+            <p class="text-muted">Attendance records will be available when you're back online.</p>
+        </div>
+    `;
+    
+    // Insert the card after the filters
+    const filterCard = document.querySelector('.card');
+    if (filterCard && filterCard.nextSibling) {
+        attendanceContainer.insertBefore(card, filterCard.nextSibling);
+    } else {
+        attendanceContainer.appendChild(card);
+    }
+}
+</script>
+
 <style>
 /* Mobile-friendly styles */
 @media (max-width: 576px) {

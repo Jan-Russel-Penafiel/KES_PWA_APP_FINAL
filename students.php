@@ -211,7 +211,7 @@ try {
 
 <div class="row">
     <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-3 mb-4">
             <div>
                 <h1 class="h3 fw-bold text-primary">
                     <i class="fas fa-users me-2"></i>Students
@@ -225,9 +225,9 @@ try {
                     ?>
                 </p>
             </div>
-            <div class="text-end">
+            <div class="text-sm-end">
                 <?php if ($user_role == 'admin' || $user_role == 'teacher'): ?>
-                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addStudentModal">
+                    <button class="btn btn-primary w-100 w-sm-auto" data-bs-toggle="modal" data-bs-target="#addStudentModal">
                         <i class="fas fa-plus me-2"></i>Add Student
                     </button>
                 <?php endif; ?>
@@ -238,20 +238,32 @@ try {
 </div>
 
 <!-- Search and Filter -->
-<div class="row g-3 mb-4">
-    <div class="col-12 col-md-6">
-        <div class="input-group">
-            <span class="input-group-text bg-white border-end-0"><i class="fas fa-search text-muted"></i></span>
-            <input type="text" id="student-search" class="form-control border-start-0 ps-0" placeholder="Search students...">
-        </div>
+<div class="card mb-4 shadow-sm border-0">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-filter me-2"></i>Search & Filter
+        </h5>
+        <button class="btn btn-link btn-sm p-0 text-muted" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse">
+            <i class="fas fa-chevron-down"></i>
+        </button>
     </div>
-    <div class="col-12 col-md-6">
-        <select id="section-filter" class="form-select">
-            <option value="">All Sections</option>
-            <?php foreach ($sections as $section): ?>
-                <option value="<?php echo $section['id']; ?>"><?php echo $section['section_name']; ?></option>
-            <?php endforeach; ?>
-        </select>
+    <div class="card-body collapse show" id="filterCollapse">
+        <div class="row g-3">
+            <div class="col-12 col-md-6">
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-0"><i class="fas fa-search text-muted"></i></span>
+                    <input type="text" id="student-search" class="form-control bg-light border-0" placeholder="Search students...">
+                </div>
+            </div>
+            <div class="col-12 col-md-6">
+                <select id="section-filter" class="form-select bg-light">
+                    <option value="">All Sections</option>
+                    <?php foreach ($sections as $section): ?>
+                        <option value="<?php echo $section['id']; ?>"><?php echo $section['section_name']; ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -280,11 +292,11 @@ try {
         </div>
     <?php else: ?>
         <?php foreach ($students as $student): ?>
-            <div class="col-12 col-sm-6 col-lg-4 student-card" 
+            <div class="col-12 col-md-6 col-lg-4 student-card" 
                  data-name="<?php echo strtolower($student['full_name']); ?>" 
                  data-username="<?php echo strtolower($student['username']); ?>"
                  data-section="<?php echo $student['section_id']; ?>">
-                <div class="card border-0 shadow-sm h-100">
+                <div class="card border-0 shadow-sm h-100 animate__animated animate__fadeIn">
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between align-items-start mb-3">
                             <div class="d-flex align-items-center w-100">
@@ -299,7 +311,7 @@ try {
                                     <button class="btn btn-sm btn-link text-muted p-0" type="button" data-bs-toggle="dropdown">
                                         <i class="fas fa-ellipsis-v"></i>
                                     </button>
-                                    <ul class="dropdown-menu dropdown-menu-end">
+                                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
                                         <li><a class="dropdown-item d-flex align-items-center" href="qr-code.php?student_id=<?php echo $student['id']; ?>">
                                             <i class="fas fa-qrcode me-2 text-primary"></i>View QR Code
                                         </a></li>
@@ -401,13 +413,13 @@ try {
 <?php if ($user_role == 'admin' || $user_role == 'teacher'): ?>
     <!-- Add Student Modal -->
     <div class="modal fade" id="addStudentModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
-                <div class="modal-header">
+                <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title">
                         <i class="fas fa-user-plus me-2"></i>Add New Student
                     </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <form method="POST" action="">
                     <div class="modal-body">
@@ -481,13 +493,13 @@ try {
 
     <!-- Edit Student Modal -->
     <div class="modal fade" id="editStudentModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
-                <div class="modal-header">
+                <div class="modal-header bg-info text-white">
                     <h5 class="modal-title">
                         <i class="fas fa-edit me-2"></i>Edit Student
                     </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <form method="POST" action="">
                     <div class="modal-body">
@@ -542,9 +554,9 @@ try {
 
     <!-- Link Parent Modal -->
     <div class="modal fade" id="linkParentModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
-                <div class="modal-header">
+                <div class="modal-header bg-warning text-dark">
                     <h5 class="modal-title">
                         <i class="fas fa-link me-2"></i>Link Parent
                     </h5>
@@ -612,6 +624,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const searchTerm = searchInput.value.toLowerCase();
         const selectedSection = sectionFilter.value;
         
+        let visibleCount = 0;
+        
         studentCards.forEach(card => {
             const name = card.dataset.name;
             const username = card.dataset.username;
@@ -623,6 +637,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (matchesSearch && matchesSection) {
                 card.style.display = 'block';
                 card.classList.add('fade-in');
+                visibleCount++;
             } else {
                 card.style.display = 'none';
                 card.classList.remove('fade-in');
@@ -630,12 +645,26 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         // Update results count
-        const visibleCards = document.querySelectorAll('.student-card[style*="block"], .student-card:not([style*="none"])').length;
-        document.querySelector('.small.text-muted').textContent = `Showing: ${visibleCards} of ${studentCards.length}`;
+        const countElement = document.querySelector('.small.text-muted');
+        if (countElement) {
+            countElement.textContent = `Showing: ${visibleCount} of ${studentCards.length}`;
+        }
     }
     
-    searchInput.addEventListener('input', filterStudents);
-    sectionFilter.addEventListener('change', filterStudents);
+    if (searchInput) {
+        searchInput.addEventListener('input', filterStudents);
+    }
+    
+    if (sectionFilter) {
+        sectionFilter.addEventListener('change', filterStudents);
+    }
+    
+    // Add animation for initial load
+    studentCards.forEach((card, index) => {
+        setTimeout(() => {
+            card.classList.add('animate__animated', 'animate__fadeIn');
+        }, index * 50);
+    });
 });
 
 // Edit student function
@@ -684,18 +713,21 @@ document.getElementById('edit_lrn')?.addEventListener('input', function() {
 });
 
 // Initialize Select2 when modals are shown
-document.addEventListener('shown.bs.modal', function() {
-    $('.select2').select2({
-        theme: 'bootstrap-5',
-        width: '100%',
-        dropdownParent: $('.modal:visible')
-    });
+document.addEventListener('shown.bs.modal', function(event) {
+    if (typeof jQuery !== 'undefined' && typeof jQuery.fn.select2 !== 'undefined') {
+        $('.select2').select2({
+            theme: 'bootstrap-5',
+            width: '100%',
+            dropdownParent: $(event.target)
+        });
+    }
 });
 </script>
 
 <?php include 'footer.php'; ?>
 
 <style>
+/* Enhanced mobile responsiveness */
 @media (max-width: 576px) {
     .profile-avatar {
         width: 40px !important;
@@ -718,8 +750,43 @@ document.addEventListener('shown.bs.modal', function() {
         padding: 0.25rem 0.5rem;
         font-size: 0.75rem;
     }
+    
+    .form-control, .form-select {
+        font-size: 0.875rem;
+    }
+    
+    .modal-dialog {
+        margin: 0.5rem;
+    }
+    
+    .modal-title {
+        font-size: 1.1rem;
+    }
+    
+    .student-card {
+        transition: none !important;
+    }
+    
+    /* Improve touch targets on mobile */
+    .btn, .nav-link {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .dropdown-item {
+        padding-top: 0.5rem;
+        padding-bottom: 0.5rem;
+    }
+    
+    /* Better search on mobile */
+    .input-group {
+        margin-bottom: 0.75rem;
+    }
 }
 
+/* Animation styles */
 .fade-in {
     animation: fadeIn 0.3s ease-in;
 }
@@ -733,7 +800,39 @@ document.addEventListener('shown.bs.modal', function() {
     transition: transform 0.2s;
 }
 
-.student-card:active {
-    transform: scale(0.98);
+.student-card .card {
+    transition: all 0.3s ease;
+    border-top: 3px solid transparent;
+}
+
+.student-card .card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
+    border-top: 3px solid #007bff;
+}
+
+/* Fix Select2 in modals */
+.select2-container--bootstrap-5 {
+    width: 100% !important;
+}
+
+/* Fix layout in modals for mobile */
+@media (max-width: 576px) {
+    .select2-container--bootstrap-5 .select2-selection {
+        height: calc(1.5em + 0.75rem + 2px);
+        font-size: 0.875rem;
+    }
+    
+    .modal-body {
+        padding: 1rem;
+    }
+    
+    .modal-footer {
+        padding: 0.75rem 1rem;
+    }
+    
+    .form-text {
+        font-size: 0.7rem;
+    }
 }
 </style>

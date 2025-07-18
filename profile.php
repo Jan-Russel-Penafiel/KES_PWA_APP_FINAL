@@ -800,3 +800,143 @@ document.querySelectorAll('#preferences input, #preferences select').forEach(inp
 </style>
 
 <?php include 'footer.php'; ?>
+
+<script>
+// Initialize offline support for profile page
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if we're in offline mode
+    if (!navigator.onLine) {
+        showOfflineMode();
+    }
+    
+    // Listen for online/offline events
+    window.addEventListener('online', handleOnlineStatusChange);
+    window.addEventListener('offline', handleOnlineStatusChange);
+    
+    // Store profile data for offline use
+    storeProfileDataForOffline();
+});
+
+// Handle online/offline status changes
+function handleOnlineStatusChange() {
+    if (navigator.onLine) {
+        // Back online
+        hideOfflineMode();
+    } else {
+        // Went offline
+        showOfflineMode();
+    }
+}
+
+// Show offline mode UI
+function showOfflineMode() {
+    // Show offline indicator if not already present
+    if (!document.getElementById('offline-mode-indicator')) {
+        const indicator = document.createElement('div');
+        indicator.id = 'offline-mode-indicator';
+        indicator.className = 'alert alert-warning mb-3';
+        indicator.innerHTML = `
+            <i class="fas fa-wifi-slash me-2"></i>
+            <strong>You are offline.</strong> Some profile features may be limited.
+        `;
+        
+        const container = document.querySelector('main.container');
+        if (container && container.firstChild) {
+            container.insertBefore(indicator, container.firstChild);
+        }
+    }
+    
+    // Disable form elements
+    const formElements = document.querySelectorAll('form input, form select, form textarea, form button');
+    formElements.forEach(el => {
+        el.disabled = true;
+    });
+    
+    // Add offline badge to tab navigation
+    const tabNavs = document.querySelectorAll('.nav-link');
+    tabNavs.forEach(nav => {
+        if (!nav.querySelector('.badge')) {
+            const badge = document.createElement('span');
+            badge.className = 'badge bg-warning text-dark ms-2';
+            badge.textContent = 'Offline';
+            badge.style.fontSize = '0.7rem';
+            nav.appendChild(badge);
+        }
+    });
+    
+    // Add offline message to forms
+    const forms = document.querySelectorAll('form');
+    forms.forEach(form => {
+        if (!form.querySelector('.offline-message')) {
+            const message = document.createElement('div');
+            message.className = 'alert alert-warning offline-message mt-3';
+            message.innerHTML = '<i class="fas fa-wifi-slash me-2"></i> Form submissions are disabled while offline.';
+            form.appendChild(message);
+        }
+    });
+}
+
+// Hide offline mode UI
+function hideOfflineMode() {
+    // Hide offline indicator
+    const offlineIndicator = document.getElementById('offline-mode-indicator');
+    if (offlineIndicator) {
+        offlineIndicator.remove();
+    }
+    
+    // Enable form elements
+    const formElements = document.querySelectorAll('form input, form select, form textarea, form button');
+    formElements.forEach(el => {
+        el.disabled = false;
+    });
+    
+    // Remove offline badges
+    const badges = document.querySelectorAll('.badge.bg-warning');
+    badges.forEach(badge => {
+        if (badge.textContent === 'Offline') {
+            badge.remove();
+        }
+    });
+    
+    // Remove offline messages
+    const messages = document.querySelectorAll('.offline-message');
+    messages.forEach(message => {
+        message.remove();
+    });
+}
+
+// Store profile data in localStorage for offline use
+function storeProfileDataForOffline() {
+    // Only store data when online
+    if (!navigator.onLine) return;
+    
+    // Get user data from the page
+    const userData = {
+        id: <?php echo $current_user['id']; ?>,
+        username: "<?php echo addslashes($current_user['username']); ?>",
+        full_name: "<?php echo addslashes($current_user['full_name']); ?>",
+        email: "<?php echo addslashes($current_user['email'] ?? ''); ?>",
+        phone: "<?php echo addslashes($current_user['phone'] ?? ''); ?>",
+        role: "<?php echo $current_user['role']; ?>",
+        status: "<?php echo $current_user['status']; ?>",
+        section_id: <?php echo $current_user['section_id'] ?? 'null'; ?>,
+        created_at: "<?php echo $current_user['created_at'] ?? ''; ?>",
+        updated_at: "<?php echo $current_user['updated_at'] ?? ''; ?>"
+    };
+    
+    // Store in localStorage
+    localStorage.setItem('kes_smart_profile_data', JSON.stringify(userData));
+    
+    // Also store user stats if available
+    <?php if (!empty($user_stats)): ?>
+    const userStats = <?php echo json_encode($user_stats); ?>;
+    localStorage.setItem('kes_smart_user_stats', JSON.stringify(userStats));
+    <?php endif; ?>
+    
+    // Store preferences
+    const preferences = <?php echo json_encode($preferences); ?>;
+    localStorage.setItem('kes_smart_preferences', JSON.stringify(preferences));
+    
+    console.log('Profile data stored for offline use');
+}
+</script>

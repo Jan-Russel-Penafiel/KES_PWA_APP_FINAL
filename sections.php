@@ -83,15 +83,29 @@ try {
     $teachers = [];
 }
 
-// Get all sections with teacher names
+// Get sections based on user role
 try {
-    $section_stmt = $pdo->query("
-        SELECT s.*, u.full_name as teacher_name 
-        FROM sections s 
-        LEFT JOIN users u ON s.teacher_id = u.id 
-        ORDER BY s.grade_level ASC, s.section_name ASC
-    ");
-    $sections = $section_stmt->fetchAll(PDO::FETCH_ASSOC);
+    if ($user_role == 'admin') {
+        // Admin sees all sections
+        $section_stmt = $pdo->query("
+            SELECT s.*, u.full_name as teacher_name 
+            FROM sections s 
+            LEFT JOIN users u ON s.teacher_id = u.id 
+            ORDER BY s.grade_level ASC, s.section_name ASC
+        ");
+        $sections = $section_stmt->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        // Teacher only sees their own sections
+        $section_stmt = $pdo->prepare("
+            SELECT s.*, u.full_name as teacher_name 
+            FROM sections s 
+            LEFT JOIN users u ON s.teacher_id = u.id 
+            WHERE s.teacher_id = ?
+            ORDER BY s.grade_level ASC, s.section_name ASC
+        ");
+        $section_stmt->execute([$current_user['id']]);
+        $sections = $section_stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 } catch (PDOException $e) {
     $sections = [];
 }
@@ -240,7 +254,13 @@ include 'header.php';
                 <h1 class="h3 fw-bold text-primary">
                     <i class="fas fa-school me-2"></i>Manage Sections
                 </h1>
-                <p class="text-muted mb-0">Add, edit, or delete class sections</p>
+                <p class="text-muted mb-0">
+                    <?php if ($user_role == 'admin'): ?>
+                    Add, edit, or delete class sections
+                    <?php else: ?>
+                    View your assigned sections
+                    <?php endif; ?>
+                </p>
             </div>
             <?php if ($user_role == 'admin'): ?>
             <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addSectionModal">
@@ -278,7 +298,13 @@ include 'header.php';
         <?php if (empty($sections)): ?>
             <div class="text-center py-5">
                 <i class="fas fa-school fa-3x text-muted mb-3"></i>
-                <p class="text-muted">No sections found. Click "Add New Section" to create one.</p>
+                <p class="text-muted">
+                    <?php if ($user_role == 'admin'): ?>
+                    No sections found. Click "Add New Section" to create one.
+                    <?php else: ?>
+                    You have no assigned sections.
+                    <?php endif; ?>
+                </p>
             </div>
         <?php else: ?>
             <!-- Search and Filter -->

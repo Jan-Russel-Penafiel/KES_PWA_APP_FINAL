@@ -1,13 +1,21 @@
 <?php
 require_once 'config.php';
 
-// Check if user is logged in
+// Check if user is logged in through PHP session
 if (!isLoggedIn()) {
-    redirect('login.php');
+    // If no PHP session, we'll check for client-side session in JavaScript
+    // This allows for offline authentication
 }
 
-$current_user = getCurrentUser($pdo);
-$user_role = $_SESSION['role'];
+// Initialize variables for both online and offline mode
+$user_role = isset($_SESSION['role']) ? $_SESSION['role'] : '';
+$current_user = [];
+
+// If we have a PHP session, get user data from database
+if (isset($_SESSION['user_id']) && !empty($_SESSION['user_id'])) {
+    $current_user = getCurrentUser($pdo);
+    $user_role = $_SESSION['role'];
+}
 
 $page_title = 'Dashboard';
 include 'header.php';
@@ -659,8 +667,76 @@ function updateDateTime() {
     document.getElementById('current-datetime').textContent = now.toLocaleString('en-US', options);
 }
 
+// Check for offline session
+function checkOfflineSession() {
+    <?php if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])): ?>
+    try {
+        const sessionData = localStorage.getItem('kes_smart_session');
+        if (sessionData) {
+            const userData = JSON.parse(sessionData);
+            
+            // Update the UI with user data
+            document.querySelector('.text-muted.small.mb-0').textContent = 'Welcome back, ' + userData.full_name + '!';
+            
+            // Set user role
+            const roleBadge = document.querySelector('.badge.bg-primary');
+            if (roleBadge) {
+                roleBadge.textContent = userData.role.charAt(0).toUpperCase() + userData.role.slice(1);
+            }
+            
+            // Add offline indicator to the page
+            const offlineAlert = document.createElement('div');
+            offlineAlert.className = 'alert alert-warning mb-3';
+            offlineAlert.innerHTML = '<i class="fas fa-wifi-slash me-2"></i> You are browsing in offline mode. Some features may be limited.';
+            
+            const mainContainer = document.querySelector('main.container');
+            if (mainContainer && mainContainer.firstChild) {
+                mainContainer.insertBefore(offlineAlert, mainContainer.firstChild);
+            }
+            
+            console.log('Using offline session data');
+            
+            // If we're back online, try to sync the session
+            if (navigator.onLine) {
+                // Attempt to sync session with the server
+                fetch('api/auth.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        action: 'verify',
+                        username: userData.username,
+                        role: userData.role
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Refresh the page to get a proper PHP session
+                        window.location.reload();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error syncing session:', error);
+                });
+            }
+        } else {
+            // No offline session, redirect to login
+            window.location.href = 'login.php';
+        }
+    } catch (error) {
+        console.error('Error checking offline session:', error);
+        window.location.href = 'login.php';
+    }
+    <?php endif; ?>
+}
+
 // Animate dashboard elements
 document.addEventListener('DOMContentLoaded', function() {
+    // Check for offline session first
+    checkOfflineSession();
+    
     // Update date and time
     updateDateTime();
     setInterval(updateDateTime, 60000);

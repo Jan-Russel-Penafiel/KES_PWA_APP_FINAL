@@ -42,7 +42,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $error_message = 'Invalid username, role combination, or account is inactive.';
             }
         } catch(PDOException $e) {
-            $error_message = 'Login failed. Please try again.';
+            // Try offline login when database connection fails
+            $error_message = 'Login failed. Attempting offline login...';
         }
     }
 }
@@ -68,6 +69,11 @@ include 'header.php';
                     <div class="card-body p-4">
                         <h4 class="text-center h5 fw-bold mb-4">Login to Your Account</h4>
                         
+                        <div id="connection-status" class="alert alert-warning py-2 small mb-3 d-none" role="alert">
+                            <i class="fas fa-wifi-slash me-2"></i>
+                            You're offline. Using cached credentials.
+                        </div>
+                        
                         <?php if ($error_message): ?>
                             <div class="alert alert-danger py-2 small" role="alert">
                                 <i class="fas fa-exclamation-circle me-2"></i>
@@ -75,7 +81,7 @@ include 'header.php';
                             </div>
                         <?php endif; ?>
                         
-                        <form method="POST" action="" class="needs-validation" novalidate>
+                        <form method="POST" action="" class="needs-validation" novalidate id="login-form">
                             <div class="mb-3">
                                 <label for="username" class="form-label small fw-medium">
                                     <i class="fas fa-user me-2"></i>Username
@@ -192,15 +198,315 @@ include 'header.php';
 </div>
 
 <script>
+// IndexedDB for offline authentication
+const DB_NAME = 'kes-smart-offline-auth';
+const DB_VERSION = 1;
+const STORE_NAME = 'credentials';
+let db;
+
+// Check if browser supports IndexedDB
+function isIndexedDBSupported() {
+    return window.indexedDB !== undefined && 
+           window.indexedDB !== null && 
+           typeof window.indexedDB === 'object';
+}
+
+// Initialize IndexedDB
+function initIndexedDB() {
+    return new Promise((resolve, reject) => {
+        try {
+            // Check if IndexedDB is available
+            if (!window.indexedDB) {
+                console.error('IndexedDB is not supported in this browser');
+                reject('IndexedDB is not supported in this browser');
+                return;
+            }
+            
+            // Open IndexedDB database
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            
+            request.onerror = (event) => {
+                console.error('IndexedDB error:', event.target.error);
+                reject('Could not initialize offline login database.');
+            };
+            
+            request.onsuccess = (event) => {
+                db = event.target.result;
+                console.log('IndexedDB initialized successfully');
+                resolve(db);
+            };
+            
+            request.onupgradeneeded = (event) => {
+                try {
+                    const db = event.target.result;
+                    
+                    // Create object store for credentials if it doesn't exist
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        const store = db.createObjectStore(STORE_NAME, { keyPath: 'username' });
+                        store.createIndex('role', 'role', { unique: false });
+                        console.log('Created credentials store');
+                    }
+                } catch (error) {
+                    console.error('Error during database upgrade:', error);
+                    reject(error);
+                }
+            };
+        } catch (error) {
+            console.error('Error initializing IndexedDB:', error);
+            reject(error);
+        }
+    });
+}
+
+// Store user credentials in IndexedDB for offline use
+function storeCredentials(username, role, userData) {
+    return new Promise((resolve, reject) => {
+        if (!db) {
+            console.error('Cannot store credentials: Database not initialized');
+            reject(new Error('Database not initialized'));
+            return;
+        }
+        
+        try {
+            // Start a transaction
+            const transaction = db.transaction([STORE_NAME], 'readwrite');
+            const store = transaction.objectStore(STORE_NAME);
+            
+            // Store the credentials
+            const request = store.put({
+                username: username,
+                role: role,
+                userData: userData,
+                timestamp: new Date().getTime()
+            });
+            
+            request.onsuccess = () => {
+                console.log(`Credentials stored successfully for ${username}`);
+                resolve(true);
+            };
+            
+            request.onerror = (event) => {
+                console.error('Error storing credentials:', event.target.error);
+                reject(event.target.error);
+            };
+            
+            // Add transaction complete handler
+            transaction.oncomplete = () => {
+                console.log('Transaction completed successfully');
+            };
+            
+            transaction.onerror = (event) => {
+                console.error('Transaction error:', event.target.error);
+                reject(event.target.error);
+            };
+        } catch (error) {
+            console.error('Error in storeCredentials:', error);
+            reject(error);
+        }
+    });
+}
+
+// Check if credentials exist and are valid
+function checkOfflineCredentials(username, role) {
+    return new Promise((resolve, reject) => {
+        if (!db) {
+            console.warn('Database not initialized when checking credentials');
+            resolve(false);
+            return;
+        }
+        
+        try {
+            const transaction = db.transaction([STORE_NAME], 'readonly');
+            const store = transaction.objectStore(STORE_NAME);
+            const request = store.get(username);
+            
+            request.onsuccess = (event) => {
+                const data = event.target.result;
+                if (data && data.role === role) {
+                    resolve(data);
+                } else {
+                    resolve(false);
+                }
+            };
+            
+            request.onerror = (event) => {
+                console.error('Error retrieving credentials:', event.target.error);
+                reject(event.target.error);
+            };
+        } catch (error) {
+            console.error('Error during credential check:', error);
+            reject(error);
+        }
+    });
+}
+
+// Perform offline login
+async function performOfflineLogin(username, role) {
+    try {
+        // Check if IndexedDB is initialized
+        if (!db) {
+            console.error('Database not initialized for offline login');
+            
+            // Show the database error notification if it exists
+            const dbErrorNotification = document.getElementById('db-error-notification');
+            if (dbErrorNotification) {
+                dbErrorNotification.classList.remove('d-none');
+            }
+            
+            return false;
+        }
+        
+        const credentials = await checkOfflineCredentials(username, role);
+        if (credentials) {
+            // Store login data in localStorage for the offline auth page
+            localStorage.setItem('offline_login_data', JSON.stringify({
+                username: username,
+                role: role,
+                userData: credentials.userData
+            }));
+            
+            // If we're online, use form POST submission
+            if (navigator.onLine) {
+                // Create a form to submit the data for offline login
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = 'offline-auth.php';
+                
+                // Add fields
+                const usernameField = document.createElement('input');
+                usernameField.type = 'hidden';
+                usernameField.name = 'username';
+                usernameField.value = username;
+                
+                const roleField = document.createElement('input');
+                roleField.type = 'hidden';
+                roleField.name = 'role';
+                roleField.value = role;
+                
+                const userDataField = document.createElement('input');
+                userDataField.type = 'hidden';
+                userDataField.name = 'user_data';
+                userDataField.value = JSON.stringify(credentials.userData);
+                
+                const offlineField = document.createElement('input');
+                offlineField.type = 'hidden';
+                offlineField.name = 'offline_login';
+                offlineField.value = '1';
+                
+                // Append fields to form
+                form.appendChild(usernameField);
+                form.appendChild(roleField);
+                form.appendChild(userDataField);
+                form.appendChild(offlineField);
+                
+                // Append form to document and submit
+                document.body.appendChild(form);
+                form.submit();
+            } else {
+                // If offline, use URL parameters to navigate to offline auth page
+                const params = new URLSearchParams({
+                    username: username,
+                    role: role,
+                    user_data: JSON.stringify(credentials.userData)
+                });
+                
+                window.location.href = `offline-auth.php?${params.toString()}`;
+            }
+            
+            return true;
+        } else {
+            return false;
+        }
+    } catch (error) {
+        console.error('Offline login error:', error);
+        
+        // Show the database error notification if it exists
+        const dbErrorNotification = document.getElementById('db-error-notification');
+        if (dbErrorNotification) {
+            dbErrorNotification.classList.remove('d-none');
+            dbErrorNotification.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>Error during offline login: ' + error.message;
+        }
+        
+        return false;
+    }
+}
+
+// Check connection status
+function checkOnlineStatus() {
+    const isOnline = navigator.onLine;
+    const statusElement = document.getElementById('connection-status');
+    
+    if (statusElement) {
+        if (!isOnline) {
+            statusElement.classList.remove('d-none');
+        } else {
+            statusElement.classList.add('d-none');
+        }
+    }
+    
+    return isOnline;
+}
+
+// Sync login attempts from IndexedDB when back online
+function syncOfflineLogins() {
+    // This would sync any pending login attempts stored in IndexedDB
+    // Implementation would depend on how you want to handle offline sessions
+}
+
 // Form validation and submission
 document.addEventListener('DOMContentLoaded', function() {
+    // Check if IndexedDB is supported
+    if (!isIndexedDBSupported()) {
+        console.error('IndexedDB is not supported in this browser');
+        
+        // Show a warning about offline login not being available
+        const dbErrorNotification = document.createElement('div');
+        dbErrorNotification.id = 'db-error-notification';
+        dbErrorNotification.className = 'alert alert-warning py-2 small';
+        dbErrorNotification.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>Your browser does not support offline login. Please use a modern browser for full functionality.';
+        
+        const form = document.querySelector('form');
+        if (form) {
+            form.insertBefore(dbErrorNotification, form.firstChild);
+        }
+        
+        return;
+    }
+    
+    // Initialize IndexedDB
+    initIndexedDB()
+        .then(() => {
+            console.log('IndexedDB successfully initialized');
+        })
+        .catch(error => {
+            console.error('Failed to initialize IndexedDB:', error);
+            // Create a hidden notification that will be shown if offline login is attempted
+            const dbErrorNotification = document.createElement('div');
+            dbErrorNotification.id = 'db-error-notification';
+            dbErrorNotification.className = 'alert alert-warning py-2 small d-none';
+            dbErrorNotification.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>Offline storage is not available. Login may not work offline.';
+            
+            const form = document.querySelector('form');
+            if (form) {
+                form.insertBefore(dbErrorNotification, form.firstChild);
+            }
+        });
+    
+    // Check connection status on page load
+    checkOnlineStatus();
+    
+    // Update connection status when online/offline events are triggered
+    window.addEventListener('online', checkOnlineStatus);
+    window.addEventListener('offline', checkOnlineStatus);
+    
     // Bootstrap form validation
     const forms = document.querySelectorAll('.needs-validation');
     
     Array.from(forms).forEach(form => {
-        form.addEventListener('submit', event => {
+        form.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            
             if (!form.checkValidity()) {
-                event.preventDefault();
                 event.stopPropagation();
             } else {
                 // Show loading state
@@ -209,11 +515,99 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Logging in...';
                 submitBtn.disabled = true;
                 
-                // Re-enable button after 5 seconds (in case of errors)
-                setTimeout(() => {
-                    submitBtn.innerHTML = originalText;
-                    submitBtn.disabled = false;
-                }, 5000);
+                const username = document.getElementById('username').value;
+                const role = document.getElementById('role').value;
+                
+                // Check if online or offline
+                if (navigator.onLine) {
+                    // If online, try regular login and store credentials for offline use
+                    fetch('api/auth.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: new URLSearchParams({
+                            username: username,
+                            role: role,
+                            action: 'login'
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Store credentials for offline use
+                            storeCredentials(username, role, data.user)
+                                .then(() => {
+                                    console.log('Credentials stored for offline use');
+                                    // Mark that we've successfully logged in at least once
+                                    localStorage.setItem('has_attempted_login', 'true');
+                                })
+                                .catch(error => {
+                                    console.error('Failed to store credentials:', error);
+                                });
+                            
+                            // Regular form submission for login
+                            form.removeEventListener('submit', arguments.callee);
+                            form.submit();
+                        } else {
+                            // Show error
+                            const errorDiv = document.createElement('div');
+                            errorDiv.className = 'alert alert-danger py-2 small';
+                            errorDiv.innerHTML = `<i class="fas fa-exclamation-circle me-2"></i>${data.message}`;
+                            
+                            form.insertBefore(errorDiv, form.firstChild);
+                            
+                            // Reset button
+                            submitBtn.innerHTML = originalText;
+                            submitBtn.disabled = false;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Login error:', error);
+                        
+                        // Try offline login as fallback
+                        performOfflineLogin(username, role).then(success => {
+                            if (!success) {
+                                // Show offline login failure
+                                const errorDiv = document.createElement('div');
+                                errorDiv.className = 'alert alert-danger py-2 small';
+                                errorDiv.innerHTML = '<i class="fas fa-exclamation-circle me-2"></i>Offline login failed. No stored credentials found.';
+                                
+                                form.insertBefore(errorDiv, form.firstChild);
+                            }
+                            
+                            // Reset button after 3 seconds if no redirect happens
+                            setTimeout(() => {
+                                submitBtn.innerHTML = originalText;
+                                submitBtn.disabled = false;
+                            }, 3000);
+                        });
+                    });
+                } else {
+                    // If offline, try login with stored credentials
+                    performOfflineLogin(username, role).then(success => {
+                        if (!success) {
+                            // Show offline login failure
+                            const errorDiv = document.createElement('div');
+                            errorDiv.className = 'alert alert-danger py-2 small';
+                            
+                            // Check if this is a first-time login or if we've logged in before
+                            const hasAttemptedLogin = localStorage.getItem('has_attempted_login');
+                            
+                            if (!hasAttemptedLogin) {
+                                errorDiv.innerHTML = '<i class="fas fa-exclamation-circle me-2"></i>Offline login failed. You need to login online at least once to use offline login.';
+                            } else {
+                                errorDiv.innerHTML = '<i class="fas fa-exclamation-circle me-2"></i>Offline login failed. No stored credentials found for this username and role.';
+                            }
+                            
+                            form.insertBefore(errorDiv, form.firstChild);
+                            
+                            // Reset button
+                            submitBtn.innerHTML = originalText;
+                            submitBtn.disabled = false;
+                        }
+                    });
+                }
             }
             
             form.classList.add('was-validated');
@@ -246,38 +640,6 @@ document.addEventListener('DOMContentLoaded', function() {
             card.style.transform = 'translateY(0)';
         }, 100);
     }
-});
-
-// PWA install prompt for login page
-window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    
-    // Show custom install prompt
-    const installBanner = document.createElement('div');
-    installBanner.className = 'alert alert-info alert-dismissible fade show position-fixed start-50 translate-middle-x mt-2 shadow-sm';
-    installBanner.style.zIndex = '9999';
-    installBanner.style.maxWidth = '90%';
-    installBanner.style.top = '0';
-    installBanner.innerHTML = `
-        <div class="d-flex align-items-center">
-            <i class="fas fa-download me-2"></i>
-            <span class="small">Install KES-SMART for better experience</span>
-            <button type="button" class="btn btn-sm btn-info ms-3" id="install-app-btn">Install</button>
-            <button type="button" class="btn-close ms-2" data-bs-dismiss="alert"></button>
-        </div>
-    `;
-    
-    document.body.appendChild(installBanner);
-    
-    document.getElementById('install-app-btn').addEventListener('click', () => {
-        e.prompt();
-        e.userChoice.then((choiceResult) => {
-            if (choiceResult.outcome === 'accepted') {
-                console.log('User accepted the install prompt');
-            }
-            installBanner.remove();
-        });
-    });
 });
 </script>
 

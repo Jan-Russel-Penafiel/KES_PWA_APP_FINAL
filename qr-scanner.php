@@ -465,39 +465,35 @@ try {
 
 <div class="row">
     <div class="col-12">
-        <!-- Mobile-first header layout -->
-        <div class="mb-4">
-            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center">
-                <div class="mb-3 mb-md-0">
-                    <h1 class="h3 fw-bold text-primary mb-2">
-                        <i class="fas fa-qrcode me-2"></i>QR Code Scanner
-                    </h1>
-                    <p class="text-muted mb-0 d-none d-sm-block">Scan student QR codes or enter LRN for attendance and automatic SMS notifications</p>
-                    <p class="text-muted mb-0 d-sm-none small">Scan QR codes or enter LRN for attendance</p>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 fw-bold text-primary">
+                    <i class="fas fa-qrcode me-2"></i>QR Code Scanner
+                </h1>
+                <p class="text-muted mb-0">
+                    Scan student QR codes or enter LRN for attendance
+                </p>
+            </div>
+            <div class="text-end">
+                <div class="btn-group">
+                    <button id="startScanBtn" class="btn btn-primary">
+                        <i class="fas fa-camera me-1"></i>
+                        <span class="d-none d-sm-inline">Start Scanner</span>
+                    </button>
+                    <button id="stopScanBtn" class="btn btn-danger" style="display: none;">
+                        <i class="fas fa-stop me-1"></i>
+                        <span class="d-none d-sm-inline">Stop Scanner</span>
+                    </button>
+                    <button id="calendarBtn" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#calendarModal">
+                        <i class="fas fa-calendar me-1"></i>
+                        <span class="d-none d-sm-inline">Calendar</span>
+                    </button>
                 </div>
-                <div class="d-flex flex-column align-items-stretch align-items-md-end w-100 w-md-auto">
-                    <div class="btn-group mb-2 w-100 w-md-auto">
-                        <button id="startScanBtn" class="btn btn-success">
-                            <i class="fas fa-camera me-1"></i>
-                            <span class="d-none d-sm-inline">Start </span>Scanner
-                        </button>
-                        <button id="stopScanBtn" class="btn btn-danger" style="display: none;">
-                            <i class="fas fa-stop me-1"></i>
-                            <span class="d-none d-sm-inline">Stop </span>Scanner
-                        </button>
-                        <button id="calendarBtn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#calendarModal">
-                            <i class="fas fa-calendar me-1"></i>
-                            <span class="d-none d-sm-inline">Calendar</span> Calendar
-                        </button>
-                    </div>
-                    <div class="text-center text-md-end">
-                        <small class="text-muted">
-                            SMS Status: 
-                            <span class="badge bg-<?php echo ($sms_config && $sms_config['status'] == 'active') ? 'success' : 'danger'; ?>">
-                                <?php echo ($sms_config && $sms_config['status'] == 'active') ? 'Active' : 'Inactive'; ?>
-                            </span>
-                        </small>
-                    </div>
+                <div class="small text-muted mt-1">
+                    SMS Status: 
+                    <span class="badge bg-<?php echo ($sms_config && $sms_config['status'] == 'active') ? 'success' : 'danger'; ?>">
+                        <?php echo ($sms_config && $sms_config['status'] == 'active') ? 'Active' : 'Inactive'; ?>
+                    </span>
                 </div>
             </div>
         </div>
@@ -505,7 +501,7 @@ try {
 </div>
 
 <!-- Scanner Status -->
-<div class="row mb-4">
+<div class="row g-3 mb-4">
     <div class="col-12">
         <div class="alert alert-info" id="scannerStatus">
             <i class="fas fa-info-circle me-2"></i>
@@ -515,10 +511,10 @@ try {
 </div>
 
 <!-- Scanner Interface -->
-<div class="row mb-4">
-    <div class="col-12 col-xl-8 mb-4 mb-xl-0">
-        <!-- Camera Selection Section (Mobile Optimized) -->
-        <div class="card mb-3" id="cameraSelectionCard" style="display: none;">
+<div class="row g-3">
+    <div class="col-12 col-lg-8">
+        <!-- Camera Selection Section -->
+        <div class="card border-0 shadow-sm mb-3" id="cameraSelectionCard">
             <div class="card-header bg-light">
                 <h6 class="card-title mb-0">
                     <i class="fas fa-video me-2"></i>Camera Selection
@@ -541,13 +537,13 @@ try {
             </div>
         </div>
 
-        <div class="card border-0 shadow-sm">
+        <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-light">
-                <h5 class="card-title mb-0">
+                <h6 class="card-title mb-0">
                     <i class="fas fa-camera me-2"></i>QR Code Scanner
-                </h5>
+                </h6>
             </div>
-            <div class="card-body text-center p-2 p-sm-3">
+            <div class="card-body p-3">
                 <div id="scan-region" class="position-relative mobile-optimized mb-3">
                     <!-- QR Scanner will be rendered here -->
                     <div class="text-center py-4">
@@ -559,79 +555,49 @@ try {
                 <!-- Scanner Controls -->
                 <div class="mb-3 d-flex justify-content-center">
                     <div class="btn-group">
-                        <button id="cam-switch" class="btn btn-outline-primary d-none">
-                            <i class="fas fa-sync-alt me-1"></i>Switch Camera
-                        </button>
                         <button id="flash-toggle" class="btn btn-outline-secondary">
                             <i class="fas fa-bolt me-1"></i>Flash
                         </button>
                     </div>
                 </div>
+            </div>
+        </div>
                 
-                <!-- Camera Selection -->
-                <div class="mb-3">
-                    <select class="form-select" id="cam-list">
-                        <option value="">Loading cameras...</option>
-                    </select>
-                </div>
-                
-                <!-- Manual LRN Input -->
-                <div class="card bg-light border-primary">
-                    <div class="card-header bg-primary text-white py-2">
-                        <h6 class="mb-0">
-                            <i class="fas fa-keyboard me-2"></i>Manual LRN Entry
-                        </h6>
+        <!-- Manual LRN Input -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-light">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-keyboard me-2"></i>Manual LRN Entry
+                </h6>
+            </div>
+            <div class="card-body p-3">
+                <form id="lrn-form">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0"><i class="fas fa-id-card text-muted"></i></span>
+                        <input type="text" class="form-control border-start-0 ps-0" id="lrn-input" placeholder="Enter student LRN...">
+                        <button class="btn btn-primary" type="submit">
+                            <i class="fas fa-user-check me-1 d-none d-lg-inline"></i>
+                            <span class="d-none d-sm-inline">Check </span>In/Out
+                        </button>
                     </div>
-                    <div class="card-body p-3">
-                        <form id="lrn-form">
-                        <div class="input-group input-group-lg mobile-input-group">
-                            <span class="input-group-text">
-                                <i class="fas fa-id-card"></i>
-                            </span>
-                                <input type="text" class="form-control" id="lrn-input" placeholder="Enter student LRN...">
-                                <button class="btn btn-primary" type="submit">
-                                <i class="fas fa-user-check me-1 d-none d-lg-inline"></i>
-                                <span class="d-none d-sm-inline">Check </span>In/Out
-                            </button>
-                        </div>
-                        </form>
-                        <small class="text-muted d-block mt-2">
-                            <i class="fas fa-info-circle me-1"></i>
-                            Enter the student's LRN to record attendance manually
-                        </small>
-                    </div>
-                </div>
+                    <small class="text-muted d-block mt-2">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Enter the student's LRN to record attendance manually
+                    </small>
+                </form>
             </div>
         </div>
     </div>
     
-    <div class="col-12 col-xl-4">
-        <!-- Mobile-friendly collapsible sections -->
-        <div class="d-xl-none mb-3">
-            <div class="btn-group w-100" role="group">
-                <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#mobileSettings" aria-expanded="false">
-                    <i class="fas fa-cog me-1"></i>Settings
-                </button>
-                <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#mobileRecent" aria-expanded="false">
-                    <i class="fas fa-history me-1"></i>Recent
-                </button>
-                <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#mobileScanResults" aria-expanded="false">
-                    <i class="fas fa-clipboard-check me-1"></i>Results
-                </button>
-                <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#mobileAttendance" aria-expanded="false">
-                    <i class="fas fa-calendar-check me-1"></i>Attendance
-                </button>
-            </div>
-        </div>
-
+    <div class="col-12 col-lg-4">
         <!-- Scan Settings -->
-        <div class="card mb-4 collapse d-xl-block border-0 shadow-sm" id="mobileSettings">
+        <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-light">
                 <h6 class="card-title mb-0">
                     <i class="fas fa-cog me-2"></i>Scan Settings
                 </h6>
             </div>
-            <div class="card-body">
+            <div class="card-body p-3">
                 <div class="mb-3">
                     <label for="scan-location" class="form-label">Scan Location</label>
                     <select class="form-select" id="scan-location">
@@ -666,7 +632,7 @@ try {
         </div>
         
         <!-- Recent Scans -->
-        <div class="card mb-4 collapse d-xl-block border-0 shadow-sm" id="mobileRecent">
+        <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-light d-flex justify-content-between align-items-center">
                 <h6 class="card-title mb-0">
                     <i class="fas fa-history me-2"></i>Recent Scans
@@ -675,7 +641,7 @@ try {
                     <i class="fas fa-trash-alt"></i>
                 </button>
             </div>
-            <div class="card-body">
+            <div class="card-body p-3">
                 <div id="recentScans">
                     <div class="text-center text-muted py-3">
                         <i class="fas fa-qrcode fa-2x mb-2"></i>
@@ -686,7 +652,7 @@ try {
         </div>
 
         <!-- Scan Results -->
-        <div class="card mb-4 collapse d-xl-block border-0 shadow-sm" id="mobileScanResults">
+        <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-light d-flex justify-content-between align-items-center">
                 <h6 class="card-title mb-0">
                     <i class="fas fa-clipboard-check me-2"></i>Scan Results
@@ -695,8 +661,8 @@ try {
                     <i class="fas fa-trash-alt"></i>
                 </button>
             </div>
-            <div class="card-body p-0">
-                <div id="scan-result" class="p-3">
+            <div class="card-body p-3">
+                <div id="scan-result">
                     <div class="text-center text-muted py-3">
                         <i class="fas fa-qrcode fa-2x mb-2"></i>
                         <p class="mb-0">No scan results yet</p>
@@ -704,66 +670,65 @@ try {
                 </div>
             </div>
         </div>
-
-        <!-- Attendance Records -->
-        <div class="card collapse d-xl-block border-0 shadow-sm" id="mobileAttendance">
-            <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                <h6 class="card-title mb-0">
-                    <i class="fas fa-calendar-check me-2"></i>Today's Attendance
-                </h6>
-                <button class="btn btn-sm btn-outline-primary" onclick="refreshAttendanceRecords()">
-                    <i class="fas fa-sync-alt"></i>
-                </button>
-            </div>
-            <div class="card-body">
-                <div id="attendanceRecords">
-                    <div class="text-center text-muted py-3">
-                        <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
-                        <p class="mb-0">Loading attendance records...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 </div>
 
-<!-- Bottom Navigation for Mobile -->
-<div class="fixed-bottom bg-white d-md-none py-2 border-top" style="display: none;">
-    <div class="container">
-        <div class="row g-0">
-            <div class="col text-center">
-                <a href="dashboard.php" class="btn btn-link text-muted px-1">
-                    <i class="fas fa-home d-block mb-1"></i>
-                    <span class="small">Dashboard</span>
-                </a>
-            </div>
-            <div class="col text-center">
-                <a href="attendance.php" class="btn btn-link text-muted px-1">
-                    <i class="fas fa-clipboard-check d-block mb-1"></i>
-                    <span class="small">Attendance</span>
-                </a>
-            </div>
-            <div class="col text-center">
-                <a href="qr-scanner.php" class="btn btn-link text-primary px-1">
-                    <i class="fas fa-qrcode d-block mb-1"></i>
-                    <span class="small">Scan</span>
-                </a>
-            </div>
-            <div class="col text-center">
-                <a href="students.php" class="btn btn-link text-muted px-1">
-                    <i class="fas fa-user-graduate d-block mb-1"></i>
-                    <span class="small">Students</span>
-                </a>
-            </div>
-            <div class="col text-center">
-                <a href="profile.php" class="btn btn-link text-muted px-1">
-                    <i class="fas fa-user d-block mb-1"></i>
-                    <span class="small">Profile</span>
-                </a>
-            </div>
-        </div>
-    </div>
+<!-- Card Navigation -->
+
 </div>
+
+<style>
+.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.card {
+    transition: transform 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-3px);
+}
+
+.card:active {
+    transform: scale(0.98);
+}
+
+@media (max-width: 576px) {
+    .profile-avatar {
+        width: 35px !important;
+        height: 35px !important;
+    }
+    
+    .card-body {
+        padding: 0.75rem !important;
+    }
+    
+    .student-info {
+        font-size: 0.8125rem;
+    }
+    
+    h6 {
+        font-size: 0.9rem;
+    }
+    
+    .small {
+        font-size: 0.75rem;
+    }
+    
+    .btn-sm {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+    }
+}
+</style>
+
+<!-- Bottom Navigation is handled by footer.php -->
 
 <!-- Scan Result Modal -->
 <div class="modal fade" id="scanResultModal" tabindex="-1">
@@ -3050,3 +3015,247 @@ function startScanner() {
 </style>
 
 <?php include 'footer.php'; ?>
+
+<script>
+// Initialize offline storage for attendance records
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if the offline-forms.js script has been loaded
+    if (typeof initOfflineDB !== 'function') {
+        console.error('Offline forms module not loaded');
+        return;
+    }
+    
+    // Initialize IndexedDB
+    initOfflineDB().catch(error => console.error('Failed to initialize offline storage:', error));
+    
+    // Add offline mode handling to the QR scanner form
+    const qrForm = document.getElementById('qr-form');
+    if (qrForm) {
+        qrForm.addEventListener('submit', function(event) {
+            // If offline, intercept the form submission
+            if (!navigator.onLine) {
+                event.preventDefault();
+                
+                const qrData = document.getElementById('qr_data').value;
+                const scanLocation = document.getElementById('scan_location').value;
+                const scanNotes = document.getElementById('scan_notes').value;
+                
+                // Store the scan in offline storage
+                handleOfflineQrScan(qrData, scanLocation, scanNotes);
+            }
+        });
+    }
+    
+    // Add offline mode handling to the LRN form
+    const lrnForm = document.getElementById('lrn-form');
+    if (lrnForm) {
+        lrnForm.addEventListener('submit', function(event) {
+            // If offline, intercept the form submission
+            if (!navigator.onLine) {
+                event.preventDefault();
+                
+                const lrn = document.getElementById('lrn').value;
+                const scanLocation = document.getElementById('lrn_scan_location').value;
+                const scanNotes = document.getElementById('lrn_scan_notes').value;
+                
+                // Store the scan in offline storage
+                handleOfflineLrnScan(lrn, scanLocation, scanNotes);
+            }
+        });
+    }
+    
+    // Check connection status on page load
+    updateOfflineStatus();
+    
+    // Listen for online/offline events
+    window.addEventListener('online', updateOfflineStatus);
+    window.addEventListener('offline', updateOfflineStatus);
+});
+
+// Handle offline QR code scan
+function handleOfflineQrScan(qrData, scanLocation, scanNotes) {
+    if (!qrData) {
+        showOfflineAlert('error', 'QR data is required');
+        return;
+    }
+    
+    // Store the attendance record for syncing later
+    storeOfflineAttendance('qr', {
+        qr_data: qrData,
+        scan_location: scanLocation || 'Main Gate',
+        scan_notes: scanNotes || '',
+        timestamp: new Date().toISOString(),
+        teacher_id: <?php echo $current_user['id']; ?>,
+        teacher_name: "<?php echo addslashes($current_user['full_name']); ?>"
+    })
+    .then(() => {
+        showOfflineAlert('success', 'Attendance recorded offline. Will sync when online.');
+        
+        // Clear the form
+        document.getElementById('qr_data').value = '';
+        
+        // Add to the recent scans table
+        addToRecentScansTable({
+            student_name: 'Pending sync...',
+            status: 'pending',
+            time: new Date().toLocaleTimeString(),
+            offline: true
+        });
+        
+        // Reset the scanner if it's active
+        if (typeof resetScanner === 'function') {
+            resetScanner();
+        }
+    })
+    .catch(error => {
+        showOfflineAlert('error', 'Failed to store offline attendance: ' + error.message);
+    });
+}
+
+// Handle offline LRN scan
+function handleOfflineLrnScan(lrn, scanLocation, scanNotes) {
+    if (!lrn) {
+        showOfflineAlert('error', 'LRN is required');
+        return;
+    }
+    
+    if (!/^\d{12}$/.test(lrn)) {
+        showOfflineAlert('error', 'LRN must be exactly 12 digits');
+        return;
+    }
+    
+    // Store the attendance record for syncing later
+    storeOfflineAttendance('lrn', {
+        lrn: lrn,
+        scan_location: scanLocation || 'Main Gate',
+        scan_notes: scanNotes || '',
+        timestamp: new Date().toISOString(),
+        teacher_id: <?php echo $current_user['id']; ?>,
+        teacher_name: "<?php echo addslashes($current_user['full_name']); ?>"
+    })
+    .then(() => {
+        showOfflineAlert('success', 'LRN attendance recorded offline. Will sync when online.');
+        
+        // Clear the form
+        document.getElementById('lrn').value = '';
+        
+        // Add to the recent scans table
+        addToRecentScansTable({
+            student_name: 'Pending sync (LRN: ' + lrn + ')',
+            status: 'pending',
+            time: new Date().toLocaleTimeString(),
+            offline: true
+        });
+    })
+    .catch(error => {
+        showOfflineAlert('error', 'Failed to store offline attendance: ' + error.message);
+    });
+}
+
+// Show alert for offline mode
+function showOfflineAlert(type, message) {
+    const alertContainer = document.getElementById('offline-alert-container');
+    if (!alertContainer) return;
+    
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const icon = type === 'success' ? 'check-circle' : 'exclamation-circle';
+    
+    const alert = document.createElement('div');
+    alert.className = `alert ${alertClass} alert-dismissible fade show`;
+    alert.innerHTML = `
+        <i class="fas fa-${icon} me-2"></i>
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    alertContainer.appendChild(alert);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        alert.classList.remove('show');
+        setTimeout(() => alert.remove(), 300);
+    }, 5000);
+}
+
+// Add a record to the recent scans table
+function addToRecentScansTable(data) {
+    const recentScansTable = document.getElementById('recent-scans-table');
+    if (!recentScansTable) return;
+    
+    const tbody = recentScansTable.querySelector('tbody');
+    if (!tbody) return;
+    
+    const tr = document.createElement('tr');
+    tr.className = data.offline ? 'table-warning' : '';
+    
+    tr.innerHTML = `
+        <td>${data.student_name}</td>
+        <td>
+            ${data.offline ? 
+                '<span class="badge bg-warning text-dark">Pending</span>' : 
+                `<span class="badge bg-${data.status === 'present' ? 'success' : (data.status === 'late' ? 'warning' : 'danger')}">${data.status.charAt(0).toUpperCase() + data.status.slice(1)}</span>`
+            }
+        </td>
+        <td>${data.time}</td>
+        <td>${data.offline ? '<i class="fas fa-wifi-slash text-warning"></i> Offline' : '<i class="fas fa-check-circle text-success"></i>'}</td>
+    `;
+    
+    // Insert at the top
+    if (tbody.firstChild) {
+        tbody.insertBefore(tr, tbody.firstChild);
+    } else {
+        tbody.appendChild(tr);
+    }
+    
+    // Limit to 10 rows
+    while (tbody.children.length > 10) {
+        tbody.removeChild(tbody.lastChild);
+    }
+}
+
+// Update UI based on online/offline status
+function updateOfflineStatus() {
+    const isOnline = navigator.onLine;
+    const offlineIndicator = document.getElementById('offline-mode-indicator');
+    
+    if (offlineIndicator) {
+        if (!isOnline) {
+            offlineIndicator.classList.remove('d-none');
+        } else {
+            offlineIndicator.classList.add('d-none');
+            
+            // Try to sync data when back online
+            if (typeof syncOfflineData === 'function') {
+                syncOfflineData().then(() => {
+                    showOfflineAlert('success', 'Offline attendance records synced successfully.');
+                }).catch(error => {
+                    console.error('Error syncing offline data:', error);
+                });
+            }
+        }
+    }
+    
+    // Update form buttons
+    const submitButtons = document.querySelectorAll('button[type="submit"]');
+    submitButtons.forEach(button => {
+        if (!isOnline) {
+            button.innerHTML = '<i class="fas fa-wifi-slash me-2"></i>' + button.innerHTML;
+            button.classList.add('btn-warning');
+            button.classList.remove('btn-primary');
+        } else {
+            button.innerHTML = button.innerHTML.replace('<i class="fas fa-wifi-slash me-2"></i>', '');
+            button.classList.add('btn-primary');
+            button.classList.remove('btn-warning');
+        }
+    });
+}
+</script>
+
+<!-- Add offline mode indicator -->
+<div id="offline-mode-indicator" class="alert alert-warning d-none mb-3">
+    <i class="fas fa-wifi-slash me-2"></i>
+    <strong>You are offline.</strong> Attendance records will be stored locally and synced when you're back online.
+</div>
+
+<!-- Add container for offline alerts -->
+<div id="offline-alert-container" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050;"></div>

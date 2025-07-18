@@ -222,11 +222,13 @@
         // Service Worker Registration
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
+                navigator.serviceWorker.register('sw.js', {
+                    scope: 'https://aphid-major-dolphin.ngrok-free.app/smart/'
+                })
                     .then((registration) => {
-                        console.log('ServiceWorker registration successful');
+                        console.log('ServiceWorker registration successful with scope:', registration.scope);
                     }, (error) => {
-                        console.log('ServiceWorker registration failed');
+                        console.error('ServiceWorker registration failed:', error);
                     });
             });
         }
@@ -259,7 +261,7 @@
                             data.notifications.forEach(notification => {
                                 new Notification(notification.title, {
                                     body: notification.message,
-                                    icon: 'assets/icons/icon-192x192.png'
+                                    icon: 'https://img.icons8.com/color/192/000000/clipboard.png'
                                 });
                             });
                         }
