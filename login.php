@@ -65,7 +65,7 @@ include 'header.php';
                     <p class="text-muted small">Student Monitoring System</p>
                 </div>
                 
-                <div class="card shadow-sm border-0 rounded-3">
+                <div class="card shadow-sm border-0 rounded-4">
                     <div class="card-body p-4">
                         <h4 class="text-center h5 fw-bold mb-4">Login to Your Account</h4>
                         
@@ -86,14 +86,20 @@ include 'header.php';
                                 <label for="username" class="form-label small fw-medium">
                                     <i class="fas fa-user me-2"></i>Username
                                 </label>
-                                <input type="text" 
-                                       class="form-control" 
-                                       id="username" 
-                                       name="username" 
-                                       required 
-                                       autofocus
-                                       placeholder="Enter your username"
-                                       value="<?php echo isset($_POST['username']) ? htmlspecialchars($_POST['username']) : ''; ?>">
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0">
+                                        <i class="fas fa-user text-primary"></i>
+                                    </span>
+                                    <input type="text" 
+                                           class="form-control border-start-0" 
+                                           id="username" 
+                                           name="username" 
+                                           required 
+                                           autofocus
+                                           placeholder="Enter your username"
+                                           autocomplete="username"
+                                           value="<?php echo isset($_POST['username']) ? htmlspecialchars($_POST['username']) : ''; ?>">
+                                </div>
                                 <div class="invalid-feedback">
                                     Please enter your username
                                 </div>
@@ -103,31 +109,36 @@ include 'header.php';
                                 <label for="role" class="form-label small fw-medium">
                                     <i class="fas fa-user-tag me-2"></i>Role
                                 </label>
-                                <select class="form-select" 
-                                        id="role" 
-                                        name="role" 
-                                        required>
-                                    <option value="">Select your role</option>
-                                    <option value="admin" <?php echo (isset($_POST['role']) && $_POST['role'] == 'admin') ? 'selected' : ''; ?>>
-                                        Administrator
-                                    </option>
-                                    <option value="teacher" <?php echo (isset($_POST['role']) && $_POST['role'] == 'teacher') ? 'selected' : ''; ?>>
-                                        Teacher
-                                    </option>
-                                    <option value="student" <?php echo (isset($_POST['role']) && $_POST['role'] == 'student') ? 'selected' : ''; ?>>
-                                        Student
-                                    </option>
-                                    <option value="parent" <?php echo (isset($_POST['role']) && $_POST['role'] == 'parent') ? 'selected' : ''; ?>>
-                                        Parent
-                                    </option>
-                                </select>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0">
+                                        <i class="fas fa-user-tag text-primary"></i>
+                                    </span>
+                                    <select class="form-select border-start-0" 
+                                            id="role" 
+                                            name="role" 
+                                            required>
+                                        <option value="">Select your role</option>
+                                        <option value="admin" <?php echo (isset($_POST['role']) && $_POST['role'] == 'admin') ? 'selected' : ''; ?>>
+                                            Administrator
+                                        </option>
+                                        <option value="teacher" <?php echo (isset($_POST['role']) && $_POST['role'] == 'teacher') ? 'selected' : ''; ?>>
+                                            Teacher
+                                        </option>
+                                        <option value="student" <?php echo (isset($_POST['role']) && $_POST['role'] == 'student') ? 'selected' : ''; ?>>
+                                            Student
+                                        </option>
+                                        <option value="parent" <?php echo (isset($_POST['role']) && $_POST['role'] == 'parent') ? 'selected' : ''; ?>>
+                                            Parent
+                                        </option>
+                                    </select>
+                                </div>
                                 <div class="invalid-feedback">
                                     Please select your role
                                 </div>
                             </div>
                             
                             <div class="d-grid mb-3">
-                                <button type="submit" class="btn btn-primary">
+                                <button type="submit" class="btn btn-primary py-2">
                                     <i class="fas fa-sign-in-alt me-2"></i>Login
                                 </button>
                             </div>
@@ -196,6 +207,66 @@ include 'header.php';
     <i class="fas fa-clock me-1"></i>
     <span id="current-datetime"></span>
 </div>
+
+<style>
+/* Additional login page styles */
+.form-control:focus, .form-select:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+}
+
+.input-group-text {
+    border-radius: 25px 0 0 25px;
+}
+
+.input-group .form-control, .input-group .form-select {
+    border-radius: 0 25px 25px 0;
+}
+
+.form-control, .form-select, .input-group-text {
+    padding: 0.6rem 1rem;
+    font-size: 0.95rem;
+}
+
+/* Improve mobile experience */
+@media (max-width: 576px) {
+    .card {
+        border-radius: 1.5rem;
+    }
+    
+    .form-control, .form-select, .input-group-text {
+        font-size: 16px; /* Prevents iOS zoom on input focus */
+    }
+    
+    .btn {
+        padding-top: 0.75rem;
+        padding-bottom: 0.75rem;
+    }
+    
+    #current-datetime {
+        display: none; /* Hide on very small screens */
+    }
+}
+
+/* Form animation */
+.form-control, .form-select {
+    transition: all 0.2s ease-in-out;
+}
+
+.form-control:focus, .form-select:focus {
+    transform: translateY(-2px);
+}
+
+/* Button hover effect */
+.btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+</style>
 
 <script>
 // IndexedDB for offline authentication
@@ -659,6 +730,18 @@ document.addEventListener('DOMContentLoaded', function() {
             card.style.transform = 'translateY(0)';
         }, 100);
     }
+    
+    // Improve form field interactions
+    const formFields = document.querySelectorAll('.form-control, .form-select');
+    formFields.forEach(field => {
+        field.addEventListener('focus', function() {
+            this.closest('.input-group')?.classList.add('shadow-sm');
+        });
+        
+        field.addEventListener('blur', function() {
+            this.closest('.input-group')?.classList.remove('shadow-sm');
+        });
+    });
 });
 
 // Function to proactively fetch and store credentials

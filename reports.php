@@ -202,6 +202,39 @@ echo '<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/selec
             width: 100% !important;
         }
     }
+    
+    /* Format Selection Modal Styles */
+    .format-option {
+        transition: all 0.2s ease;
+        border: 2px solid transparent !important;
+    }
+    .format-option:hover {
+        border-color: #007bff !important;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,123,255,0.15);
+    }
+    .format-option.border-primary {
+        border-color: #007bff !important;
+        background-color: rgba(0,123,255,0.05) !important;
+    }
+    .format-option .card-body {
+        padding: 1.5rem;
+    }
+    .format-option .card-title {
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+    .format-option .card-text {
+        margin-bottom: 0;
+        color: #6c757d;
+    }
+    #formatSelectionModal .modal-body {
+        padding: 1.5rem;
+    }
+    #formatSelectionModal .modal-title {
+        font-weight: 600;
+        color: #495057;
+    }
 </style>';
 
 // Get available sections and students based on user role
@@ -1559,7 +1592,7 @@ function outputPDF($data, $filename, $type) {
                                                 ($user['role'] == 'student' ? 'user-graduate' : 'user'));
                                                 
                                     if (!empty($user['profile_image'])) {
-                                        echo '<img src="' . htmlspecialchars($user['profile_image']) . '" alt="Profile" class="img-fluid rounded-circle" style="width: 80px; height: 80px; object-fit: cover;">';
+                                        echo '<img src="uploads/student_photos/' . htmlspecialchars($user['profile_image']) . '" alt="Profile" class="img-fluid rounded-circle" style="width: 80px; height: 80px; object-fit: cover;">';
                                     } else {
                                         echo '<div class="bg-' . $role_color . ' bg-opacity-25 rounded-circle d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">';
                                         echo '<i class="fas fa-' . $profile_icon . ' fa-2x text-' . $role_color . '"></i>';
@@ -2402,7 +2435,23 @@ function outputPDF($data, $filename, $type) {
                                     </html>
                                 `);
                                 printWindow.document.close();
-                                printWindow.print();
+                                
+                                // Add print button instead of auto-print
+                                const printScript = printWindow.document.createElement('script');
+                                printScript.innerHTML = `
+                                    document.body.insertAdjacentHTML('afterbegin', 
+                                        '<div style="text-align: center; margin: 20px; page-break-after: avoid;" class="no-print">' +
+                                        '<button onclick="window.print()" style="background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; margin-right: 10px; cursor: pointer;">Print QR Code</button>' +
+                                        '<button onclick="window.close()" style="background: #6c757d; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">Close</button>' +
+                                        '</div>'
+                                    );
+                                    
+                                    // Add CSS to hide print buttons when printing
+                                    const style = document.createElement('style');
+                                    style.innerHTML = '@media print { .no-print { display: none !important; } }';
+                                    document.head.appendChild(style);
+                                `;
+                                printWindow.document.head.appendChild(printScript);
                             });
                         });
                         
@@ -2482,7 +2531,23 @@ function outputPDF($data, $filename, $type) {
                                 </html>
                             `);
                             printWindow.document.close();
-                            printWindow.print();
+                            
+                            // Add print button instead of auto-print
+                            const printScript = printWindow.document.createElement('script');
+                            printScript.innerHTML = `
+                                document.body.insertAdjacentHTML('afterbegin', 
+                                    '<div style="text-align: center; margin: 20px; page-break-after: avoid;" class="no-print">' +
+                                    '<button onclick="window.print()" style="background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; margin-right: 10px; cursor: pointer;">Print All QR Codes</button>' +
+                                    '<button onclick="window.close()" style="background: #6c757d; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">Close</button>' +
+                                    '</div>'
+                                );
+                                
+                                // Add CSS to hide print buttons when printing
+                                const style = printWindow.document.createElement('style');
+                                style.innerHTML = '@media print { .no-print { display: none !important; } }';
+                                printWindow.document.head.appendChild(style);
+                            `;
+                            printWindow.document.head.appendChild(printScript);
                         });
                     });
                     </script>
@@ -3044,6 +3109,62 @@ function outputPDF($data, $filename, $type) {
     </div>
 </div>
 
+<!-- Format Selection Modal for Print All -->
+<div class="modal fade" id="formatSelectionModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-export me-2"></i>Select Export Format
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">Choose the format for exporting the data:</p>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="card border-2 format-option" data-format="html" style="cursor: pointer;">
+                            <div class="card-body text-center">
+                                <i class="fas fa-file-code fa-2x text-primary mb-2"></i>
+                                <h6 class="card-title">HTML View</h6>
+                                <p class="card-text small text-muted">View in browser with print option</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-2 format-option" data-format="csv" style="cursor: pointer;">
+                            <div class="card-body text-center">
+                                <i class="fas fa-file-csv fa-2x text-success mb-2"></i>
+                                <h6 class="card-title">CSV</h6>
+                                <p class="card-text small text-muted">Excel compatible download</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-2 format-option" data-format="pdf" style="cursor: pointer;">
+                            <div class="card-body text-center">
+                                <i class="fas fa-file-pdf fa-2x text-danger mb-2"></i>
+                                <h6 class="card-title">PDF</h6>
+                                <p class="card-text small text-muted">Printable document</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <input type="hidden" id="selectedFormat" value="">
+                <input type="hidden" id="selectedTabTarget" value="">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-primary" id="confirmFormatSelection" disabled>
+                    <i class="fas fa-download me-1"></i>Export
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 function showReportModal(type) {
     document.getElementById('reportType').value = type;
@@ -3220,9 +3341,54 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (!tabContent) return;
             
-            // Create a new window for printing
+            // Store the target and show format selection modal
+            document.getElementById('selectedTabTarget').value = targetId;
+            document.getElementById('selectedFormat').value = '';
+            
+            // Reset format selection
+            document.querySelectorAll('.format-option').forEach(function(option) {
+                option.classList.remove('border-primary', 'bg-light');
+            });
+            document.getElementById('confirmFormatSelection').disabled = true;
+            
+            // Show format selection modal
+            new bootstrap.Modal(document.getElementById('formatSelectionModal')).show();
+        });
+    });
+    
+    // Handle format selection
+    document.querySelectorAll('.format-option').forEach(function(option) {
+        option.addEventListener('click', function() {
+            // Remove selection from other options
+            document.querySelectorAll('.format-option').forEach(function(opt) {
+                opt.classList.remove('border-primary', 'bg-light');
+            });
+            
+            // Add selection to this option
+            this.classList.add('border-primary', 'bg-light');
+            
+            // Store selected format
+            const format = this.getAttribute('data-format');
+            document.getElementById('selectedFormat').value = format;
+            document.getElementById('confirmFormatSelection').disabled = false;
+        });
+    });
+    
+    // Handle format confirmation
+    document.getElementById('confirmFormatSelection').addEventListener('click', function() {
+        const targetId = document.getElementById('selectedTabTarget').value;
+        const format = document.getElementById('selectedFormat').value;
+        const tabContent = document.getElementById(targetId);
+        
+        if (!tabContent || !format) return;
+        
+        // Hide the modal
+        bootstrap.Modal.getInstance(document.getElementById('formatSelectionModal')).hide();
+        
+        if (format === 'html') {
+            // Original print functionality for HTML
             const printWindow = window.open('', '_blank');
-            const tabTitle = this.closest('.d-flex').querySelector('h5').textContent;
+            const tabTitle = document.querySelector(`[data-target="${targetId}"]`).closest('.d-flex').querySelector('h5').textContent;
             
             // Create the HTML content with table-based layout
             let html = '<!DOCTYPE html><html><head>';
@@ -3294,16 +3460,293 @@ document.addEventListener('DOMContentLoaded', function() {
                     html += '<div class="alert alert-warning">No table format available for this tab.</div>';
             }
             
-            html += '<script>';
-            html += 'window.onload = function() { setTimeout(function() { window.print(); }, 500); };';
-            html += '<\/script>';
+            // Add a print button and instructions instead of auto-print
+            html += '<div class="no-print mb-3">';
+            html += '<button onclick="window.print()" class="btn btn-primary me-2">';
+            html += '<i class="fas fa-print me-1"></i>Print Document';
+            html += '</button>';
+            html += '<button onclick="window.close()" class="btn btn-secondary">';
+            html += '<i class="fas fa-times me-1"></i>Close';
+            html += '</button>';
+            html += '</div>';
+            
+            html += '<style>';
+            html += '@media print { .no-print { display: none !important; } }';
+            html += '</style>';
             html += '</body></html>';
             
             // Write the HTML to the new window and close the document
             printWindow.document.write(html);
             printWindow.document.close();
-        });
+        } else if (format === 'csv') {
+            // Generate CSV and download
+            generateTabCSV(targetId, tabContent);
+        } else if (format === 'pdf') {
+            // Generate PDF using the existing report system
+            generateTabPDF(targetId, tabContent);
+        }
     });
+    
+    // Function to generate CSV from tab content
+    function generateTabCSV(targetId, tabContent) {
+        let csvContent = '';
+        const fileName = targetId + '_export_' + new Date().toISOString().slice(0, 10) + '.csv';
+        
+        // Generate CSV content based on tab type
+        switch(targetId) {
+            case 'users':
+                csvContent = generateUsersCSV(tabContent);
+                break;
+            case 'sections':
+                csvContent = generateSectionsCSV(tabContent);
+                break;
+            case 'attendance':
+                csvContent = generateAttendanceCSV(tabContent);
+                break;
+            case 'students-section':
+                csvContent = generateStudentsSectionCSV(tabContent);
+                break;
+            case 'qr-codes':
+                csvContent = generateQRCodesCSV(tabContent);
+                break;
+            case 'attendance-section':
+                csvContent = generateAttendanceSectionCSV(tabContent);
+                break;
+            case 'attendance-student':
+                csvContent = generateAttendanceStudentCSV(tabContent);
+                break;
+            case 'sms':
+                csvContent = generateSMSCSV(tabContent);
+                break;
+            default:
+                csvContent = 'No data available for export';
+        }
+        
+        // Create and download CSV file
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', fileName);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+    
+    // CSV generation functions for each tab type
+    function generateUsersCSV(tabContent) {
+        let csv = 'ID,Name,Username,Email,Role,Status,Section,Phone\n';
+        
+        const userCards = tabContent.querySelectorAll('.col .card');
+        userCards.forEach(function(card) {
+            const name = card.querySelector('.card-title')?.textContent?.trim() || '';
+            const username = card.querySelector('.text-muted.small')?.textContent?.trim() || '';
+            const email = card.querySelector('.fas.fa-envelope')?.parentElement?.textContent?.replace('📧', '')?.trim() || '';
+            const badges = card.querySelectorAll('.badge');
+            const role = badges[0]?.textContent?.trim() || '';
+            const status = badges[1]?.textContent?.trim() || '';
+            const section = card.querySelector('.fas.fa-users')?.parentElement?.textContent?.replace('👥', '')?.trim() || '';
+            const phone = card.querySelector('.fas.fa-phone')?.parentElement?.textContent?.replace('📱', '')?.trim() || '';
+            const id = card.querySelector('.card-header .badge')?.textContent?.replace('ID: ', '')?.trim() || '';
+            
+            csv += `"${id}","${name}","${username}","${email}","${role}","${status}","${section}","${phone}"\n`;
+        });
+        
+        return csv;
+    }
+    
+    function generateSectionsCSV(tabContent) {
+        let csv = 'ID,Section Name,Grade Level,Teacher,Student Count,Status\n';
+        
+        const sectionCards = tabContent.querySelectorAll('.col .card');
+        sectionCards.forEach(function(card) {
+            const sectionName = card.querySelector('.card-title')?.textContent?.trim() || '';
+            const gradeLevel = card.querySelector('.fw-bold')?.textContent?.trim() || '';
+            const teacher = card.querySelector('.fas.fa-chalkboard-teacher')?.parentElement?.textContent?.replace('👨‍🏫', '')?.trim() || '';
+            const studentCount = card.querySelector('.fas.fa-users')?.parentElement?.textContent?.replace('👥', '')?.trim() || '';
+            const status = card.querySelector('.badge')?.textContent?.trim() || '';
+            const id = card.querySelector('.card-header .badge')?.textContent?.replace('ID: ', '')?.trim() || '';
+            
+            csv += `"${id}","${sectionName}","${gradeLevel}","${teacher}","${studentCount}","${status}"\n`;
+        });
+        
+        return csv;
+    }
+    
+    function generateAttendanceCSV(tabContent) {
+        let csv = 'Date,Student Name,Section,Status,Time In,Time Out,Teacher,Remarks\n';
+        
+        const attendanceCards = tabContent.querySelectorAll('.col .card');
+        attendanceCards.forEach(function(card) {
+            const date = card.querySelector('.card-header .small')?.textContent?.trim() || '';
+            const studentName = card.querySelector('h6')?.textContent?.trim() || '';
+            const section = card.querySelector('.fas.fa-users')?.parentElement?.textContent?.replace('👥', '')?.trim() || '';
+            const status = card.querySelector('.badge')?.textContent?.trim() || '';
+            const timeIn = card.querySelector('.fas.fa-clock')?.parentElement?.textContent?.replace('🕐', '')?.trim() || '';
+            const timeOut = card.querySelector('.fas.fa-sign-out-alt')?.parentElement?.textContent?.replace('🚪', '')?.trim() || '';
+            const teacher = card.querySelector('.fas.fa-chalkboard-teacher')?.parentElement?.textContent?.replace('👨‍🏫', '')?.trim() || '';
+            const remarks = card.querySelector('.card-text')?.textContent?.trim() || '';
+            
+            csv += `"${date}","${studentName}","${section}","${status}","${timeIn}","${timeOut}","${teacher}","${remarks}"\n`;
+        });
+        
+        return csv;
+    }
+    
+    function generateStudentsSectionCSV(tabContent) {
+        let csv = 'Section,Student Name,Username,LRN,Status\n';
+        
+        const sectionCards = tabContent.querySelectorAll('.card.mb-4');
+        sectionCards.forEach(function(sectionCard) {
+            const sectionName = sectionCard.querySelector('.card-header h5')?.textContent?.trim() || '';
+            const studentCards = sectionCard.querySelectorAll('.row .col .card');
+            
+            studentCards.forEach(function(studentCard) {
+                const studentName = studentCard.querySelector('.fw-bold')?.textContent?.trim() || '';
+                const username = studentCard.querySelector('.text-muted.small')?.textContent?.trim() || '';
+                const lrn = studentCard.querySelector('.badge.bg-info')?.textContent?.replace('LRN: ', '')?.trim() || '';
+                const status = studentCard.querySelector('.badge.bg-success, .badge.bg-warning')?.textContent?.trim() || '';
+                
+                csv += `"${sectionName}","${studentName}","${username}","${lrn}","${status}"\n`;
+            });
+        });
+        
+        return csv;
+    }
+    
+    function generateQRCodesCSV(tabContent) {
+        let csv = 'Student ID,Name,Username,LRN,Section,Grade Level,QR Code\n';
+        
+        const qrCards = tabContent.querySelectorAll('.qr-card');
+        qrCards.forEach(function(card) {
+            const studentName = card.querySelector('.fw-bold')?.textContent?.trim() || '';
+            const studentId = card.querySelector('.badge')?.textContent?.trim() || '';
+            const details = card.querySelector('.small')?.textContent?.trim() || '';
+            // Parse details to extract username, LRN, section, etc.
+            const username = details.match(/Username: ([^|]+)/)?.[1]?.trim() || '';
+            const lrn = details.match(/LRN: ([^|]+)/)?.[1]?.trim() || '';
+            const section = details.match(/Section: ([^|]+)/)?.[1]?.trim() || '';
+            const gradeLevel = details.match(/Grade: ([^|]+)/)?.[1]?.trim() || '';
+            
+            csv += `"${studentId}","${studentName}","${username}","${lrn}","${section}","${gradeLevel}","Generated"\n`;
+        });
+        
+        return csv;
+    }
+    
+    function generateAttendanceSectionCSV(tabContent) {
+        let csv = 'Section,Grade Level,Total Records,Present,Absent,Late,Out\n';
+        
+        const sectionCards = tabContent.querySelectorAll('.card.mb-4');
+        sectionCards.forEach(function(card) {
+            const sectionName = card.querySelector('.card-header h5')?.textContent?.trim() || '';
+            const gradeLevel = card.querySelector('.card-header h5')?.textContent?.match(/Grade \d+/)?.[0] || '';
+            const totalRecords = card.querySelector('.display-4')?.textContent?.trim() || '0';
+            
+            // Extract attendance counts from the card content
+            const present = card.textContent.match(/Present:\s*(\d+)/)?.[1] || '0';
+            const absent = card.textContent.match(/Absent:\s*(\d+)/)?.[1] || '0';
+            const late = card.textContent.match(/Late:\s*(\d+)/)?.[1] || '0';
+            const out = card.textContent.match(/Out:\s*(\d+)/)?.[1] || '0';
+            
+            csv += `"${sectionName}","${gradeLevel}","${totalRecords}","${present}","${absent}","${late}","${out}"\n`;
+        });
+        
+        return csv;
+    }
+    
+    function generateAttendanceStudentCSV(tabContent) {
+        let csv = 'Student Name,Section,Total Records,Present,Absent,Late,Out,Attendance Rate\n';
+        
+        const studentCards = tabContent.querySelectorAll('.col .card');
+        studentCards.forEach(function(card) {
+            const studentName = card.querySelector('.fw-bold')?.textContent?.trim() || '';
+            const section = card.querySelector('.small.mb-0')?.textContent?.trim() || '';
+            
+            // Extract attendance counts from the card content
+            const present = card.textContent.match(/Present:\s*(\d+)/)?.[1] || '0';
+            const absent = card.textContent.match(/Absent:\s*(\d+)/)?.[1] || '0';
+            const late = card.textContent.match(/Late:\s*(\d+)/)?.[1] || '0';
+            const out = card.textContent.match(/Out:\s*(\d+)/)?.[1] || '0';
+            const totalRecords = parseInt(present) + parseInt(absent) + parseInt(late) + parseInt(out);
+            const attendanceRate = totalRecords > 0 ? ((parseInt(present) / totalRecords) * 100).toFixed(1) + '%' : '0%';
+            
+            csv += `"${studentName}","${section}","${totalRecords}","${present}","${absent}","${late}","${out}","${attendanceRate}"\n`;
+        });
+        
+        return csv;
+    }
+    
+    function generateSMSCSV(tabContent) {
+        let csv = 'Date,Message,Phone Number,Status,Type\n';
+        
+        const smsCards = tabContent.querySelectorAll('.col .card');
+        smsCards.forEach(function(card) {
+            const date = card.querySelector('.card-header .small')?.textContent?.trim() || '';
+            const message = card.querySelector('.card-text')?.textContent?.trim() || '';
+            const phone = card.querySelector('.fas.fa-phone')?.parentElement?.textContent?.replace('📱', '')?.trim() || '';
+            const status = card.querySelector('.badge')?.textContent?.trim() || '';
+            const type = card.querySelector('.card-title')?.textContent?.trim() || '';
+            
+            csv += `"${date}","${message}","${phone}","${status}","${type}"\n`;
+        });
+        
+        return csv;
+    }
+    
+    // Function to generate PDF from tab content
+    function generateTabPDF(targetId, tabContent) {
+        // Map targetId to existing report types
+        let reportType = '';
+        let queryParams = new URLSearchParams();
+        
+        switch(targetId) {
+            case 'users':
+                reportType = 'students_list';
+                break;
+            case 'sections':
+                reportType = 'students_per_section';
+                break;
+            case 'attendance':
+                reportType = 'attendance_records';
+                // Add default date range
+                queryParams.append('date_from', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
+                queryParams.append('date_to', new Date().toISOString().split('T')[0]);
+                break;
+            case 'students-section':
+                reportType = 'students_per_section';
+                break;
+            case 'qr-codes':
+                reportType = 'student_qr';
+                break;
+            case 'attendance-section':
+                reportType = 'attendance_per_section';
+                // Add default date range
+                queryParams.append('date_from', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
+                queryParams.append('date_to', new Date().toISOString().split('T')[0]);
+                break;
+            case 'attendance-student':
+                reportType = 'attendance_per_student';
+                // Add default date range
+                queryParams.append('date_from', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
+                queryParams.append('date_to', new Date().toISOString().split('T')[0]);
+                break;
+            default:
+                alert('PDF export not available for this data type.');
+                return;
+        }
+        
+        // Build URL for PDF generation
+        queryParams.append('generate', '1');
+        queryParams.append('type', reportType);
+        queryParams.append('format', 'pdf');
+        
+        const url = 'reports.php?' + queryParams.toString();
+        
+        // Open PDF in new tab
+        window.open(url, '_blank');
+    }
 });
 </script>
 

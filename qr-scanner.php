@@ -17,6 +17,7 @@ if (!in_array($user_role, ['teacher', 'admin'])) {
 // Handle QR code scan submission
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'scan_qr') {
     $qr_data = sanitize_input($_POST['qr_data']);
+    $subject_id = intval($_POST['subject_id'] ?? 0);
     $scan_location = sanitize_input($_POST['scan_location'] ?? 'Main Gate');
     $scan_notes = sanitize_input($_POST['scan_notes'] ?? '');
     
@@ -24,6 +25,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
         // Validate QR data format (should be student ID or username)
         if (empty($qr_data)) {
             throw new Exception('Invalid QR code data.');
+        }
+        
+        // Validate subject selection
+        if (!$subject_id) {
+            throw new Exception('Please select a subject for attendance recording.');
         }
         
         // Find student by QR code
@@ -36,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
         }
         
         // Process attendance for the found student
-        $result = processStudentAttendance($pdo, $student, $current_user, $user_role, $scan_location, $scan_notes, true);
+        $result = processStudentAttendance($pdo, $student, $current_user, $user_role, $subject_id, $scan_location, $scan_notes, true);
         
         header('Content-Type: application/json');
         echo json_encode($result);
@@ -56,6 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
 // Handle manual LRN input submission
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'scan_lrn') {
     $lrn = sanitize_input($_POST['lrn']);
+    $subject_id = intval($_POST['subject_id'] ?? 0);
     $scan_location = sanitize_input($_POST['scan_location'] ?? 'Main Gate');
     $scan_notes = sanitize_input($_POST['scan_notes'] ?? '');
     
@@ -69,6 +76,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
             throw new Exception('LRN must be exactly 12 digits.');
         }
         
+        // Validate subject selection
+        if (!$subject_id) {
+            throw new Exception('Please select a subject for attendance recording.');
+        }
+        
         // Find student by LRN
         $stmt = $pdo->prepare("SELECT id, username, full_name, lrn, section_id FROM users WHERE lrn = ? AND role = 'student' AND status = 'active'");
         $stmt->execute([$lrn]);
@@ -79,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
         }
         
         // Process attendance for the found student
-        $result = processStudentAttendance($pdo, $student, $current_user, $user_role, $scan_location, $scan_notes, false);
+        $result = processStudentAttendance($pdo, $student, $current_user, $user_role, $subject_id, $scan_location, $scan_notes, false);
         
         header('Content-Type: application/json');
         echo json_encode($result);
@@ -97,17 +109,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
 }
 
 // Function to process student attendance (shared by QR and LRN)
-function processStudentAttendance($pdo, $student, $current_user, $user_role, $scan_location, $scan_notes, $is_qr_scan) {
-    // Check if teacher has permission to scan this student
+function processStudentAttendance($pdo, $student, $current_user, $user_role, $subject_id, $scan_location, $scan_notes, $is_qr_scan) {
+    // Validate subject exists and teacher has permission
+    $subject_check = $pdo->prepare("SELECT id, subject_name, teacher_id FROM subjects WHERE id = ? AND status = 'active'");
+    $subject_check->execute([$subject_id]);
+    $subject = $subject_check->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$subject) {
+        throw new Exception('Selected subject not found or inactive.');
+    }
+    
+    // Check if teacher has permission to record attendance for this subject
     if ($user_role == 'teacher') {
-        $check_stmt = $pdo->prepare("SELECT 1 FROM users u JOIN sections s ON u.section_id = s.id WHERE u.id = ? AND s.teacher_id = ?");
-        $check_stmt->execute([$student['id'], $current_user['id']]);
-        if (!$check_stmt->fetch()) {
-            throw new Exception('You can only scan students in your section.');
+        if ($subject['teacher_id'] != $current_user['id']) {
+            throw new Exception('You can only record attendance for subjects you teach.');
+        }
+        
+        // Also check if student is enrolled in this subject
+        $enrollment_check = $pdo->prepare("SELECT 1 FROM student_subjects WHERE student_id = ? AND subject_id = ? AND status = 'enrolled'");
+        $enrollment_check->execute([$student['id'], $subject_id]);
+        if (!$enrollment_check->fetch()) {
+            throw new Exception('Student is not enrolled in this subject.');
         }
     }
     
-    // Check if attendance already recorded for today
+    // Check if attendance already recorded for today for this subject
     $today = date('Y-m-d');
     $current_time = date('H:i:s');
     $current_time_formatted = date('g:i A');
@@ -116,8 +142,8 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $sc
     $late_threshold = '07:15:00';  // 7:15 AM
     $absent_cutoff = '16:15:00';   // 4:15 PM
     
-    $check_attendance = $pdo->prepare("SELECT id, status, time_in, time_out FROM attendance WHERE student_id = ? AND attendance_date = ?");
-    $check_attendance->execute([$student['id'], $today]);
+    $check_attendance = $pdo->prepare("SELECT id, status, time_in, time_out FROM attendance WHERE student_id = ? AND subject_id = ? AND attendance_date = ?");
+    $check_attendance->execute([$student['id'], $subject_id, $today]);
     $existing_attendance = $check_attendance->fetch(PDO::FETCH_ASSOC);
     
     $attendance_id = null;
@@ -141,7 +167,7 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $sc
             $attendance_id = $existing_attendance['id'];
             $is_checkout = true;
         } elseif ($existing_attendance['time_out']) {
-            // Student has already checked in and out today
+            // Student has already checked in and out today for this subject
             $student_name = $student['full_name'];
             $time_in = date('g:i A', strtotime($existing_attendance['time_in']));
             $time_out = date('g:i A', strtotime($existing_attendance['time_out']));
@@ -149,10 +175,11 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $sc
             
             return [
                 'success' => false,
-                'message' => "Student {$student_name} has already checked in and out today. Check-in: {$time_in}, Check-out: {$time_out}",
+                'message' => "Student {$student_name} has already checked in and out today for {$subject['subject_name']}. Check-in: {$time_in}, Check-out: {$time_out}",
                 'student_id' => $student['id'],
                 'student_name' => $student_name,
                 'student_lrn' => $student['lrn'] ?? null,
+                'subject_name' => $subject['subject_name'],
                 'attendance_date' => $today,
                 'time_in' => $time_in,
                 'time_out' => $time_out,
@@ -177,7 +204,7 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $sc
             $attendance_id = $existing_attendance['id'];
         }
     } else {
-        // No existing attendance record
+        // No existing attendance record for this subject
         if ($current_time > $absent_cutoff) {
             throw new Exception('Attendance recording period has ended. Students cannot check in after 4:15 PM.');
         }
@@ -190,8 +217,8 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $sc
         }
         
         // Create new attendance record (check-in only)
-        $insert_stmt = $pdo->prepare("INSERT INTO attendance (student_id, teacher_id, section_id, attendance_date, time_in, status, remarks, qr_scanned) VALUES (?, ?, ?, ?, NOW(), ?, ?, ?)");
-        $insert_stmt->execute([$student['id'], $current_user['id'], $student['section_id'], $today, $attendance_status, $scan_location . ($scan_notes ? ' - ' . $scan_notes : ''), $is_qr_scan ? 1 : 0]);
+        $insert_stmt = $pdo->prepare("INSERT INTO attendance (student_id, teacher_id, section_id, subject_id, attendance_date, time_in, status, remarks, qr_scanned) VALUES (?, ?, ?, ?, ?, NOW(), ?, ?, ?)");
+        $insert_stmt->execute([$student['id'], $current_user['id'], $student['section_id'], $subject_id, $today, $attendance_status, $scan_location . ($scan_notes ? ' - ' . $scan_notes : ''), $is_qr_scan ? 1 : 0]);
         $attendance_id = $pdo->lastInsertId();
     }
     
@@ -232,15 +259,15 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $sc
     if ($is_checkout) {
         // Checkout SMS - always send regardless of previous SMS
         if ($attendance_status == 'out') {
-            $sms_message = "Hi! Your child {$student['full_name']} has left school early at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+            $sms_message = "Hi! Your child {$student['full_name']} has left {$subject['subject_name']} class early at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
         } else {
-            $sms_message = "Hi! Your child {$student['full_name']} has left school at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+            $sms_message = "Hi! Your child {$student['full_name']} has left {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
         }
         $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'checkout');
     } elseif (!$sms_already_sent) {
         // Check-in SMS - only if not already sent today
-        $status_text = ($attendance_status == 'late') ? 'arrived late at' : 'arrived at';
-        $sms_message = "Hi! Your child {$student['full_name']} has {$status_text} school at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+        $status_text = ($attendance_status == 'late') ? 'arrived late to' : 'arrived at';
+        $sms_message = "Hi! Your child {$student['full_name']} has {$status_text} {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
         $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'attendance');
     }
     
@@ -251,6 +278,7 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $sc
         'student_id' => $student['username'],
         'student_lrn' => $student['lrn'] ?? null,
         'section' => $section_name,
+        'subject' => $subject['subject_name'],
         'time' => $current_time_formatted,
         'date' => $current_date,
         'attendance_id' => $attendance_id,
@@ -461,6 +489,22 @@ try {
 } catch(PDOException $e) {
     // SMS config not available
 }
+
+// Get subjects for current teacher
+$subjects = [];
+try {
+    if ($user_role == 'admin') {
+        $subjects_stmt = $pdo->query("SELECT id, subject_name, subject_code, grade_level FROM subjects WHERE status = 'active' ORDER BY subject_name");
+        $subjects = $subjects_stmt->fetchAll(PDO::FETCH_ASSOC);
+    } elseif ($user_role == 'teacher') {
+        $subjects_stmt = $pdo->prepare("SELECT id, subject_name, subject_code, grade_level FROM subjects WHERE teacher_id = ? AND status = 'active' ORDER BY subject_name");
+        $subjects_stmt->execute([$current_user['id']]);
+        $subjects = $subjects_stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch(PDOException $e) {
+    // Handle database error silently
+    $subjects = [];
+}
 ?>
 
 <div class="row">
@@ -505,7 +549,53 @@ try {
     <div class="col-12">
         <div class="alert alert-info" id="scannerStatus">
             <i class="fas fa-info-circle me-2"></i>
-            <strong>Ready to scan:</strong> Click "Start Scanner" to begin scanning or use manual LRN entry below.
+            <strong>Ready to scan:</strong> Select a subject below and click "Start Scanner" to begin scanning or use manual LRN entry.
+        </div>
+    </div>
+</div>
+
+<!-- Subject Selection -->
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card bg-light border-primary">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-book me-2"></i>Select Subject for Attendance
+                </h5>
+            </div>
+            <div class="card-body">
+                <?php if (empty($subjects)): ?>
+                    <div class="alert alert-warning mb-0">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>No subjects assigned.</strong> 
+                        <?php if ($user_role == 'teacher'): ?>
+                            Please contact the administrator to assign subjects to your account.
+                        <?php else: ?>
+                            No active subjects found in the system.
+                        <?php endif; ?>
+                    </div>
+                <?php else: ?>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label for="subject-select" class="form-label fw-semibold">Subject <span class="text-danger">*</span></label>
+                            <select class="form-select form-select-lg" id="subject-select" name="subject_id" required>
+                                <option value="">Choose a subject...</option>
+                                <?php foreach ($subjects as $subject): ?>
+                                    <option value="<?php echo $subject['id']; ?>">
+                                        <?php echo htmlspecialchars($subject['subject_name']); ?> 
+                                        (<?php echo htmlspecialchars($subject['subject_code']); ?>) - 
+                                        Grade <?php echo htmlspecialchars($subject['grade_level']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="form-text">
+                                <i class="fas fa-info-circle me-1"></i>
+                                You must select a subject before recording attendance. Only students enrolled in the selected subject can be marked present.
+                            </div>
+                        </div>
+                    </div>
+                <?php endif; ?>
+            </div>
         </div>
     </div>
 </div>
@@ -544,11 +634,23 @@ try {
                 </h6>
             </div>
             <div class="card-body p-3">
+                <div class="alert alert-info mb-3">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Scanning Tips:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>Hold the QR code steady within the scanning area</li>
+                        <li>Ensure good lighting for better scan quality</li>
+                        <li>If scanning fails, try moving the QR code closer or further away</li>
+                        <li>Use manual LRN entry below if QR scanning doesn't work</li>
+                    </ul>
+                </div>
+                
                 <div id="scan-region" class="position-relative mobile-optimized mb-3">
                     <!-- QR Scanner will be rendered here -->
                     <div class="text-center py-4">
                         <i class="fas fa-camera fa-3x text-muted mb-3"></i>
                         <h5 class="text-muted">Scanner Ready</h5>
+                        <p class="text-muted small">Click "Start Scanner" to begin</p>
                     </div>
                 </div>
                 
@@ -558,10 +660,23 @@ try {
                         <button id="flash-toggle" class="btn btn-outline-secondary">
                             <i class="fas fa-bolt me-1"></i>Flash
                         </button>
+                        <button id="debug-qr" class="btn btn-outline-info" onclick="testQRCode()">
+                            <i class="fas fa-bug me-1"></i>Test QR
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
+        
+        <!-- Debug QR Test (for development) -->
+        <script>
+        function testQRCode() {
+            const testQR = prompt('Enter QR code content to test:', 'KES-SMART-STUDENT-student-2025');
+            if (testQR) {
+                handleScanResult(testQR);
+            }
+        }
+        </script>
                 
         <!-- Manual LRN Input -->
         <div class="card border-0 shadow-sm">
@@ -1116,8 +1231,8 @@ try {
                         camSwitch.classList.remove('d-none');
                     }
                     
-                    // Start scanner with default camera
-                    startScanner();
+                    // Don't auto-start scanner - wait for user to select subject and click start
+                    console.log('Scanner initialized successfully. Waiting for user input.');
                 } else {
                     // No cameras available
                     scanRegion.innerHTML = '<div class="alert alert-danger">No cameras found. Please allow camera access.</div>';
@@ -1178,22 +1293,59 @@ try {
             
             if (startScanBtn && stopScanBtn && scannerStatus) {
                 startScanBtn.addEventListener('click', function() {
+                    const subjectSelect = document.getElementById('subject-select');
+                    if (!subjectSelect || !subjectSelect.value) {
+                        showToast('Please select a subject before starting the scanner', 'warning');
+                        return;
+                    }
+                    
                     this.style.display = 'none';
                     stopScanBtn.style.display = 'inline-block';
                     scannerStatus.innerHTML = '<i class="fas fa-camera me-2"></i><strong>Scanner active:</strong> Point your camera at a student QR code.';
                     scannerStatus.className = 'alert alert-success';
+                    
+                    // Add scanning animation
+                    const scanRegion = document.getElementById('scan-region');
+                    if (scanRegion) {
+                        scanRegion.classList.add('scanning');
+                    }
+                    
                     startScanner();
                 });
                 
                 stopScanBtn.addEventListener('click', function() {
                     this.style.display = 'none';
                     startScanBtn.style.display = 'inline-block';
-                    scannerStatus.innerHTML = '<i class="fas fa-info-circle me-2"></i><strong>Scanner stopped:</strong> Click "Start Scanner" to begin scanning.';
+                    scannerStatus.innerHTML = '<i class="fas fa-info-circle me-2"></i><strong>Scanner stopped:</strong> Select a subject and click "Start Scanner" to begin scanning.';
                     scannerStatus.className = 'alert alert-info';
+                    
+                    // Remove scanning animation
+                    const scanRegion = document.getElementById('scan-region');
+                    if (scanRegion) {
+                        scanRegion.classList.remove('scanning');
+                    }
+                    
                     if (scanner && scanner.isScanning) {
                         scanner.stop();
                     }
                 });
+        }
+        
+        // Add subject selection change handler
+        const subjectSelect = document.getElementById('subject-select');
+        if (subjectSelect) {
+            subjectSelect.addEventListener('change', function() {
+                const scannerStatus = document.getElementById('scanner-status');
+                if (scannerStatus) {
+                    if (this.value) {
+                        scannerStatus.innerHTML = '<i class="fas fa-check-circle me-2"></i><strong>Subject selected:</strong> ' + this.options[this.selectedIndex].text + '. Click "Start Scanner" to begin scanning.';
+                        scannerStatus.className = 'alert alert-info';
+                    } else {
+                        scannerStatus.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i><strong>No subject selected:</strong> Please select a subject before starting the scanner.';
+                        scannerStatus.className = 'alert alert-warning';
+                    }
+                }
+            });
         }
     } catch (error) {
             console.error('Error initializing QR scanner:', error);
@@ -1236,8 +1388,42 @@ function startScanner() {
         const cameraId = cameras[selectedCamera].id;
         const config = {
             fps: 10,
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0
+            qrbox: { width: 300, height: 300 },
+            aspectRatio: 1.0,
+            disableFlip: false,
+            rememberLastUsedCamera: true,
+            supportedScanTypes: [
+                Html5QrcodeScanType.SCAN_TYPE_CAMERA
+            ],
+            experimentalFeatures: {
+                useBarCodeDetectorIfSupported: true
+            },
+            videoConstraints: {
+                facingMode: "environment",
+                advanced: [{
+                    focusMode: "continuous",
+                    torch: false
+                }]
+            },
+            formatsToSupport: [
+                Html5QrcodeSupportedFormats.QR_CODE,
+                Html5QrcodeSupportedFormats.AZTEC,
+                Html5QrcodeSupportedFormats.CODABAR,
+                Html5QrcodeSupportedFormats.CODE_39,
+                Html5QrcodeSupportedFormats.CODE_93,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.DATA_MATRIX,
+                Html5QrcodeSupportedFormats.MAXICODE,
+                Html5QrcodeSupportedFormats.ITF,
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.PDF_417,
+                Html5QrcodeSupportedFormats.RSS_14,
+                Html5QrcodeSupportedFormats.RSS_EXPANDED,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E,
+                Html5QrcodeSupportedFormats.UPC_EAN_EXTENSION
+            ]
         };
         
         scanner.start(
@@ -1247,19 +1433,72 @@ function startScanner() {
             handleScanError
         )
         .catch(err => {
-            console.error('Error starting camera:', err);
+            console.error('Error starting camera with advanced config:', err);
+            
+            // Try with simplified configuration as fallback
+            const simpleConfig = {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0,
+                rememberLastUsedCamera: true
+            };
+            
+            return scanner.start(
+                cameraId, 
+                simpleConfig,
+                handleScanResult,
+                handleScanError
+            );
+        })
+        .catch(err => {
+            console.error('Error starting camera with simple config:', err);
             showToast('Error starting camera: ' + err.message, 'danger');
+            
+            // Show manual LRN entry as alternative
+            const alertHtml = `
+                <div class="alert alert-warning">
+                    <h6><i class="fas fa-exclamation-triangle me-2"></i>Camera Error</h6>
+                    <p class="mb-2">Unable to start camera: ${err.message}</p>
+                    <p class="mb-0">Please use the manual student selection below instead.</p>
+                </div>
+            `;
+            document.getElementById('scan-region').innerHTML = alertHtml;
         });
     }
     
     // Handle scan error
     function handleScanError(err) {
-        console.error('QR scan error:', err);
-        // Don't show error to user for every frame
+        // Only log detailed errors, don't spam the console for every failed scan attempt
+        if (err && typeof err === 'string' && !err.includes('No MultiFormat Readers')) {
+            console.warn('QR scan error:', err);
+        }
+        
+        // For specific errors, we might want to take action
+        if (err && typeof err === 'string') {
+            if (err.includes('No MultiFormat Readers')) {
+                // This is a common error when no valid QR code is detected
+                // Don't show to user as it happens frequently during scanning
+                return;
+            } else if (err.includes('Camera not accessible')) {
+                showToast('Camera access lost. Please refresh the page.', 'warning');
+            } else if (err.includes('Permission denied')) {
+                showToast('Camera permission denied. Please allow camera access.', 'danger');
+            }
+        }
     }
     
     // Handle scan result
     function handleScanResult(qrCodeMessage) {
+        // Debug: Log the QR code content
+        console.log('QR Code detected:', qrCodeMessage);
+        
+        // Validate QR code content
+        if (!qrCodeMessage || qrCodeMessage.trim() === '') {
+            console.warn('Empty QR code detected');
+            showToast('Empty QR code detected. Please try again.', 'warning');
+            return;
+        }
+        
         // Stop scanner temporarily
         if (scanner && scanner.isScanning) {
             scanner.pause();
@@ -1283,9 +1522,25 @@ function startScanner() {
     }
     
         // Process QR scan online
+        const subjectSelect = document.getElementById('subject-select');
+        if (!subjectSelect || !subjectSelect.value) {
+            showScanResult({
+                success: false,
+                message: 'Please select a subject before scanning QR codes.'
+            }, 'danger');
+            // Resume scanning after delay
+            setTimeout(() => {
+                if (scanner && scanner.isPaused) {
+                    scanner.resume();
+                }
+            }, 2000);
+            return;
+        }
+        
         const formData = new FormData();
         formData.append('action', 'scan_qr');
         formData.append('qr_data', qrCodeMessage);
+        formData.append('subject_id', subjectSelect.value);
         formData.append('scan_location', scanLocation);
         formData.append('scan_notes', scanNotes);
         
@@ -1456,6 +1711,7 @@ function startScanner() {
                         <div class="row mt-3">
             <div class="col-6">
                                 <p class="mb-1"><strong>Student:</strong> ${data.student_name || 'Unknown'}</p>
+                                <p class="mb-1"><strong>Subject:</strong> ${data.subject || 'Unknown Subject'}</p>
                                 <p class="mb-1"><strong>Date:</strong> ${data.attendance_date || new Date().toLocaleDateString()}</p>
             </div>
             <div class="col-6">
@@ -1867,10 +2123,16 @@ function startScanner() {
         document.getElementById('lrn-form').addEventListener('submit', function(event) {
             event.preventDefault();
             
+            const subjectSelect = document.getElementById('subject-select');
             const studentSelect = $('#student-select');
             const lrn = studentSelect.val();
             const scanLocation = document.getElementById('scan-location').value;
             const scanNotes = document.getElementById('scan-notes').value;
+            
+            if (!subjectSelect || !subjectSelect.value) {
+                showToast('Please select a subject before recording attendance', 'warning');
+                return;
+            }
             
             if (!lrn) {
                 showToast('Please select a student', 'warning');
@@ -1951,6 +2213,7 @@ function startScanner() {
             const formData = new FormData();
             formData.append('action', 'scan_lrn');
             formData.append('lrn', lrn);
+            formData.append('subject_id', subjectSelect.value);
             formData.append('scan_location', scanLocation);
             formData.append('scan_notes', scanNotes);
             
@@ -2781,8 +3044,8 @@ function startScanner() {
 }
 
 /* Google QR Scanner custom styling */
-#scanner-container {
-    min-height: 300px;
+#scan-region {
+    min-height: 350px;
     width: 100%;
     position: relative;
     background: #f8f9fa;
@@ -2793,9 +3056,16 @@ function startScanner() {
     justify-content: center;
 }
 
-#scanner-container.scanning {
+#scan-region.scanning {
     border: 2px solid #007bff;
     background: transparent;
+}
+
+#qr-reader {
+    width: 100% !important;
+    min-height: 350px !important;
+    border-radius: 8px;
+    overflow: hidden;
 }
 
 .html5-qrcode-element {
@@ -2810,28 +3080,6 @@ function startScanner() {
     max-width: 100% !important;
     height: auto !important;
     width: 100% !important;
-}
-
-/* Override QR scanner default styles for mobile */
-#scanner-container .html5-qrcode-element {
-    width: 100% !important;
-}
-
-/* Ensure QR reader and video are properly visible */
-#qr-reader {
-    width: 100% !important;
-    min-height: 300px !important;
-    overflow: visible !important;
-    position: relative !important;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-}
-
-#qr-reader video {
-    width: 100% !important;
-    height: auto !important;
-    min-height: 300px !important;
-    border-radius: 8px;
     object-fit: cover;
 }
 
@@ -2844,6 +3092,22 @@ function startScanner() {
 #html5-qrcode-button-camera-start,
 #html5-qrcode-button-camera-stop {
     display: none !important; /* Hide default buttons */
+}
+
+/* Improve QR box visibility */
+.html5-qrcode-element canvas {
+    border-radius: 8px !important;
+}
+
+/* QR Scanner scanning animation */
+@keyframes scanningPulse {
+    0% { box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(0, 123, 255, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(0, 123, 255, 0); }
+}
+
+#scan-region.scanning {
+    animation: scanningPulse 2s infinite;
 }
 
 /* Success animation */

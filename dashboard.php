@@ -23,6 +23,85 @@ if (isset($_SESSION['user_id']) && !empty($_SESSION['user_id'])) {
 
 $page_title = 'Dashboard';
 include 'header.php';
+?>
+
+<!-- Student ID Card Styles -->
+<style>
+.student-id-card .card {
+    font-family: 'Arial', sans-serif;
+}
+
+.photo-frame {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.photo-frame:hover {
+    transform: scale(1.02);
+}
+
+.student-info .fw-bold {
+    letter-spacing: 0.5px;
+}
+
+.qr-code-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+#qr-code-small {
+    border: 2px solid #007bff;
+    border-radius: 8px;
+    padding: 4px;
+    background: white;
+}
+
+.student-id-card .card-body {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+}
+
+@media (max-width: 768px) {
+    .student-id-card {
+        max-width: 100% !important;
+    }
+    
+    .photo-frame {
+        width: 100px !important;
+        height: 120px !important;
+    }
+    
+    .student-info .fw-bold {
+        font-size: 0.8rem !important;
+    }
+    
+    #qr-code-small {
+        width: 70px !important;
+        height: 70px !important;
+    }
+}
+
+.object-fit-cover {
+    object-fit: cover;
+}
+
+/* Print styles for ID card */
+@media print {
+    .student-id-card {
+        page-break-inside: avoid;
+        margin: 0 !important;
+        max-width: none !important;
+    }
+    
+    .btn, .alert, .navbar, .footer {
+        display: none !important;
+    }
+}
+</style>
+
+<?php
 
 // Get dashboard statistics based on user role
 try {
@@ -285,6 +364,93 @@ try {
         </div>
     </div>
 
+    <!-- Teacher QR Code for Attendance -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm rounded-3">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-qrcode me-2"></i>Generate Attendance QR Code</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <form id="attendance-qr-form">
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="qr-section" class="form-label">Section</label>
+                                        <select class="form-select" id="qr-section" name="section_id" required>
+                                            <option value="">Select Section</option>
+                                            <?php
+                                            try {
+                                                $teacher_sections_stmt = $pdo->prepare("SELECT id, section_name, grade_level FROM sections WHERE teacher_id = ? AND status = 'active' ORDER BY section_name");
+                                                $teacher_sections_stmt->execute([$current_user['id']]);
+                                                $teacher_sections = $teacher_sections_stmt->fetchAll(PDO::FETCH_ASSOC);
+                                                
+                                                foreach ($teacher_sections as $section) {
+                                                    echo "<option value='{$section['id']}'>{$section['section_name']} - Grade {$section['grade_level']}</option>";
+                                                }
+                                            } catch (PDOException $e) {
+                                                echo "<option value=''>Error loading sections</option>";
+                                            }
+                                            ?>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="qr-subject" class="form-label">Subject</label>
+                                        <select class="form-select" id="qr-subject" name="subject_id" required>
+                                            <option value="">Select Subject</option>
+                                            <?php
+                                            try {
+                                                $teacher_subjects_stmt = $pdo->prepare("SELECT id, subject_name, subject_code FROM subjects WHERE teacher_id = ? AND status = 'active' ORDER BY subject_name");
+                                                $teacher_subjects_stmt->execute([$current_user['id']]);
+                                                $teacher_subjects = $teacher_subjects_stmt->fetchAll(PDO::FETCH_ASSOC);
+                                                
+                                                foreach ($teacher_subjects as $subject) {
+                                                    echo "<option value='{$subject['id']}'>{$subject['subject_name']} ({$subject['subject_code']})</option>";
+                                                }
+                                            } catch (PDOException $e) {
+                                                echo "<option value=''>Error loading subjects</option>";
+                                            }
+                                            ?>
+                                        </select>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-qrcode me-2"></i>Generate QR Code
+                                </button>
+                                <button type="button" class="btn btn-secondary ms-2" onclick="clearQRCode()">
+                                    <i class="fas fa-times me-2"></i>Clear
+                                </button>
+                            </form>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <div id="teacher-qr-code" class="border rounded p-3" style="min-height: 200px; display: flex; align-items: center; justify-content: center; background-color: #f8f9fa;">
+                                    <div class="text-muted">
+                                        <i class="fas fa-qrcode fa-3x mb-2"></i>
+                                        <p class="mb-0">Select section and subject to generate QR code</p>
+                                    </div>
+                                </div>
+                                <div id="qr-actions" class="mt-3 d-none">
+                                    <button type="button" class="btn btn-outline-primary btn-sm me-2" onclick="downloadTeacherQR()">
+                                        <i class="fas fa-download me-1"></i>Download
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="printTeacherQR()">
+                                        <i class="fas fa-print me-1"></i>Print
+                                    </button>
+                                </div>
+                                <div id="qr-info" class="mt-2 small text-muted d-none">
+                                    <p class="mb-1"><strong>Instructions:</strong></p>
+                                    <p class="mb-0">Students scan this QR code with their phones to mark attendance</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 <?php elseif ($user_role == 'student'): ?>
     <!-- Student Dashboard -->
     <div class="row g-3 mb-4">
@@ -348,13 +514,193 @@ try {
         </div>
     </div>
 
-    <!-- QR Code Section -->
+    <!-- QR Scanner Section -->
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-lg-8 mx-auto">
+            <div class="card shadow-sm rounded-3">
+                <div class="card-header bg-success text-white text-center">
+                    <h5 class="mb-0"><i class="fas fa-qrcode me-2"></i>Scan Attendance QR Code</h5>
+                </div>
+                <div class="card-body text-center p-4">
+                    <p class="text-muted mb-3">Scan your teacher's QR code to mark your attendance</p>
+                    <button type="button" class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#qrScannerModal">
+                        <i class="fas fa-camera me-2"></i>Open QR Scanner
+                    </button>
+                    <div class="mt-3">
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Ask your teacher to show the attendance QR code
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Student ID Card Section -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm rounded-3">
+                <div class="card-header bg-transparent py-3 text-center">
+                    <h5 class="card-title h6 fw-bold mb-0">
+                        <i class="fas fa-id-card me-2"></i>My Student ID Card
+                    </h5>
+                </div>
+                <div class="card-body p-3">
+                    <!-- Student ID Card Design -->
+                    <div class="student-id-card mx-auto" id="student-id-card" style="max-width: 500px;">
+                        <div class="card border border-2 border-primary shadow-lg" style="background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);">
+                            <!-- Card Header -->
+                            <div class="card-header bg-transparent border-0 text-white text-center py-2">
+                                <h6 class="mb-0 fw-bold">KES SCHOOL</h6>
+                                <small class="opacity-75">STUDENT IDENTIFICATION CARD</small>
+                            </div>
+                            
+                            <!-- Card Body -->
+                            <div class="card-body bg-white p-3">
+                                <div class="row align-items-center">
+                                    <!-- Student Photo -->
+                                    <div class="col-4 text-center">
+                                        <div class="student-photo-container position-relative">
+                                            <div class="photo-frame border border-2 border-primary rounded-3 overflow-hidden mx-auto" style="width: 120px; height: 140px; background: #f8f9fa;">
+                                                <?php if (!empty($current_user['profile_image_path']) && file_exists($current_user['profile_image_path'])): ?>
+                                                    <img src="<?php echo htmlspecialchars($current_user['profile_image_path']); ?>" 
+                                                         alt="Student Photo" 
+                                                         class="w-100 h-100 object-fit-cover"
+                                                         id="student-photo-display">
+                                                <?php else: ?>
+                                                    <div class="d-flex align-items-center justify-content-center h-100 text-muted">
+                                                        <div class="text-center">
+                                                            <i class="fas fa-user fa-3x mb-2"></i>
+                                                            <div class="small">No Photo</div>
+                                                        </div>
+                                                    </div>
+                                                <?php endif; ?>
+                                            </div>
+                                            
+                                            <!-- Photo Upload Button -->
+                                            <div class="mt-2">
+                                                <label for="photo-upload" class="btn btn-sm btn-outline-primary w-100" style="font-size: 0.7rem;">
+                                                    <i class="fas fa-camera me-1"></i>Upload Photo
+                                                </label>
+                                                <input type="file" id="photo-upload" accept="image/*" class="d-none">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Student Information -->
+                                    <div class="col-5">
+                                        <div class="student-info">
+                                            <div class="mb-2">
+                                                <label class="small text-muted mb-0">STUDENT NAME</label>
+                                                <div class="fw-bold text-primary" style="font-size: 0.9rem;"><?php echo strtoupper(htmlspecialchars($current_user['full_name'])); ?></div>
+                                            </div>
+                                            
+                                            <div class="mb-2">
+                                                <label class="small text-muted mb-0">STUDENT ID</label>
+                                                <div class="fw-bold" style="font-size: 0.8rem;"><?php echo htmlspecialchars($current_user['username']); ?></div>
+                                            </div>
+                                            
+                                            <?php if ($current_user['lrn']): ?>
+                                            <div class="mb-2">
+                                                <label class="small text-muted mb-0">LRN</label>
+                                                <div class="fw-bold" style="font-size: 0.8rem;"><?php echo htmlspecialchars($current_user['lrn']); ?></div>
+                                            </div>
+                                            <?php endif; ?>
+                                            
+                                            <?php 
+                                            // Get section information
+                                            if ($current_user['section_id']) {
+                                                try {
+                                                    $section_stmt = $pdo->prepare("SELECT section_name, grade_level FROM sections WHERE id = ?");
+                                                    $section_stmt->execute([$current_user['section_id']]);
+                                                    $section_info = $section_stmt->fetch(PDO::FETCH_ASSOC);
+                                                } catch (PDOException $e) {
+                                                    $section_info = null;
+                                                }
+                                            }
+                                            ?>
+                                            
+                                            <?php if (isset($section_info) && $section_info): ?>
+                                            <div class="mb-2">
+                                                <label class="small text-muted mb-0">SECTION</label>
+                                                <div class="fw-bold" style="font-size: 0.8rem;"><?php echo htmlspecialchars($section_info['section_name']); ?></div>
+                                            </div>
+                                            
+                                            <div class="mb-2">
+                                                <label class="small text-muted mb-0">GRADE LEVEL</label>
+                                                <div class="fw-bold" style="font-size: 0.8rem;"><?php echo htmlspecialchars($section_info['grade_level']); ?></div>
+                                            </div>
+                                            <?php endif; ?>
+                                            
+                                            <div class="mb-1">
+                                                <label class="small text-muted mb-0">SCHOOL YEAR</label>
+                                                <div class="fw-bold" style="font-size: 0.8rem;"><?php echo date('Y') . '-' . (date('Y') + 1); ?></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- QR Code -->
+                                    <div class="col-3 text-center">
+                                        <div class="qr-code-section">
+                                            <div id="qr-code-small" class="mx-auto mb-2" style="width: 80px; height: 80px;"></div>
+                                            <div class="small text-muted" style="font-size: 0.6rem;">SCAN FOR ATTENDANCE</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Card Footer -->
+                                <div class="mt-3 pt-2 border-top">
+                                    <div class="row align-items-center">
+                                        <div class="col-6">
+                                            <div class="small text-muted">
+                                                <strong>Valid Until:</strong> <?php echo date('M Y', strtotime('+1 year')); ?>
+                                            </div>
+                                        </div>
+                                        <div class="col-6 text-end">
+                                            <div class="small text-muted">
+                                                <strong>Emergency:</strong> <?php echo $current_user['phone'] ?? 'N/A'; ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="text-center mt-4">
+                        <div class="d-flex flex-wrap justify-content-center gap-2">
+                            <button onclick="printStudentID()" class="btn btn-primary">
+                                <i class="fas fa-print me-2"></i>Print ID Card
+                            </button>
+                            <button onclick="downloadStudentID()" class="btn btn-outline-primary">
+                                <i class="fas fa-download me-2"></i>Download ID Card
+                            </button>
+                            <button onclick="shareStudentID()" class="btn btn-outline-info">
+                                <i class="fas fa-share-alt me-2"></i>Share ID Card
+                            </button>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Your student ID card contains your QR code for attendance scanning. Keep it safe and present it when required.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Separate QR Code Section for Quick Access -->
     <div class="row g-3 mb-4">
         <div class="col-12 col-lg-6 mx-auto">
             <div class="card shadow-sm rounded-3">
                 <div class="card-header bg-transparent py-3 text-center">
                     <h5 class="card-title h6 fw-bold mb-0">
-                        <i class="fas fa-qrcode me-2"></i>My QR Code
+                        <i class="fas fa-qrcode me-2"></i>Quick QR Access
                     </h5>
                 </div>
                 <div class="card-body p-3 text-center">
@@ -792,49 +1138,600 @@ document.addEventListener('DOMContentLoaded', function() {
     <?php endif; ?>
 });
 
-<?php if ($user_role == 'student'): ?>
-// Generate QR Code for student
-function generateStudentQR() {
-    const qrData = '<?php echo $qr_data; ?>';
-    const qrContainer = document.getElementById('qr-code');
+<?php if ($user_role == 'teacher'): ?>
+// Teacher QR Code Generation Functions
+document.addEventListener('DOMContentLoaded', function() {
+    const qrForm = document.getElementById('attendance-qr-form');
+    if (qrForm) {
+        qrForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            generateTeacherQR();
+        });
+    }
+});
+
+function generateTeacherQR() {
+    const sectionId = document.getElementById('qr-section').value;
+    const subjectId = document.getElementById('qr-subject').value;
     
-    if (!qrContainer) return;
+    if (!sectionId || !subjectId) {
+        alert('Please select both section and subject');
+        return;
+    }
     
-    console.log('QR Data:', qrData);
+    // Generate teacher QR data: KES-SMART-TEACHER-{teacher_id}-{section_id}-{subject_id}
+    const teacherId = <?php echo $current_user['id']; ?>;
+    const qrData = btoa(`KES-SMART-TEACHER-${teacherId}-${sectionId}-${subjectId}`);
     
-    // Use QR Server API for reliable QR generation
-    const qrSize = 250;
+    const qrContainer = document.getElementById('teacher-qr-code');
+    const qrActions = document.getElementById('qr-actions');
+    const qrInfo = document.getElementById('qr-info');
+    
+    // Show loading
+    qrContainer.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2 text-muted">Generating QR Code...</p></div>';
+    
+    // Generate QR code using API
+    const qrSize = 200;
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${qrSize}x${qrSize}&data=${encodeURIComponent(qrData)}&format=png&margin=10`;
     
     const img = document.createElement('img');
     img.src = qrUrl;
-    img.alt = 'My QR Code';
+    img.alt = 'Teacher QR Code';
     img.style.border = '3px solid #007bff';
     img.style.borderRadius = '15px';
     img.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
     img.style.maxWidth = '100%';
     img.style.height = 'auto';
-    img.style.width = '250px';
+    img.style.width = qrSize + 'px';
+    img.dataset.qrData = qrData;
     
     img.onload = function() {
         qrContainer.innerHTML = '';
         qrContainer.appendChild(img);
-        console.log('QR Code generated successfully');
+        qrActions.classList.remove('d-none');
+        qrInfo.classList.remove('d-none');
+        
+        // Store current QR info for actions
+        window.currentTeacherQR = {
+            data: qrData,
+            sectionId: sectionId,
+            subjectId: subjectId,
+            sectionName: document.getElementById('qr-section').selectedOptions[0].text,
+            subjectName: document.getElementById('qr-subject').selectedOptions[0].text
+        };
+        
+        console.log('Teacher QR Code generated successfully');
     };
     
     img.onerror = function() {
-        console.error('QR Code generation failed');
-        qrContainer.innerHTML = `
-            <div class="alert alert-info">
-                <i class="fas fa-info-circle"></i>
-                <strong>QR Code Data:</strong><br>
-                <div class="mt-2 p-2 bg-white rounded border">
-                    <code style="word-break: break-all;">${qrData}</code>
+        qrContainer.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> Failed to generate QR code. Please try again.</div>';
+        console.error('Teacher QR Code generation failed');
+    };
+}
+
+function clearQRCode() {
+    const qrContainer = document.getElementById('teacher-qr-code');
+    const qrActions = document.getElementById('qr-actions');
+    const qrInfo = document.getElementById('qr-info');
+    
+    qrContainer.innerHTML = `
+        <div class="text-muted">
+            <i class="fas fa-qrcode fa-3x mb-2"></i>
+            <p class="mb-0">Select section and subject to generate QR code</p>
+        </div>
+    `;
+    qrActions.classList.add('d-none');
+    qrInfo.classList.add('d-none');
+    
+    // Reset form
+    document.getElementById('attendance-qr-form').reset();
+    window.currentTeacherQR = null;
+}
+
+function downloadTeacherQR() {
+    const img = document.querySelector('#teacher-qr-code img');
+    
+    if (img && window.currentTeacherQR) {
+        const link = document.createElement('a');
+        link.download = `teacher_qr_${window.currentTeacherQR.sectionName.replace(/\s+/g, '_')}_${window.currentTeacherQR.subjectName.replace(/\s+/g, '_')}.png`;
+        link.href = img.src;
+        link.click();
+    } else {
+        alert('No QR code to download. Please generate a QR code first.');
+    }
+}
+
+function printTeacherQR() {
+    const img = document.querySelector('#teacher-qr-code img');
+    
+    if (img && window.currentTeacherQR) {
+        const printWindow = window.open('', '_blank');
+        const qrElement = `<img src="${img.src}" style="border: 3px solid #000; border-radius: 15px; max-width: 300px;">`;
+        
+        const teacherInfo = `
+            <div style="text-align: center; padding: 20px; font-family: Arial, sans-serif;">
+                <h1 style="color: #007bff; margin-bottom: 10px;">KES-SMART</h1>
+                <h2 style="margin-bottom: 20px;">Attendance QR Code</h2>
+                <p style="margin-bottom: 5px;"><strong>Teacher:</strong> <?php echo $current_user['full_name']; ?></p>
+                <p style="margin-bottom: 5px;"><strong>Section:</strong> ${window.currentTeacherQR.sectionName}</p>
+                <p style="margin-bottom: 20px;"><strong>Subject:</strong> ${window.currentTeacherQR.subjectName}</p>
+                <div style="margin: 20px 0;">
+                    ${qrElement}
                 </div>
-                <small class="d-block mt-2">Use a QR code scanner app to scan this data manually.</small>
+                <p style="margin-top: 20px; font-size: 12px; color: #666;">
+                    Students should scan this QR code to mark their attendance.<br>
+                    Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
+                </p>
             </div>
         `;
+        
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>Attendance QR Code - ${window.currentTeacherQR.sectionName}</title>
+                <style>
+                    body { margin: 0; padding: 20px; }
+                    @media print { body { padding: 0; } }
+                </style>
+            </head>
+            <body>
+                ${teacherInfo}
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+    } else {
+        alert('No QR code to print. Please generate a QR code first.');
+    }
+}
+<?php endif; ?>
+
+<?php if ($user_role == 'student'): ?>
+// Generate QR Code for student
+function generateStudentQR() {
+    const qrData = '<?php echo $qr_data; ?>';
+    const qrContainer = document.getElementById('qr-code');
+    const qrContainerSmall = document.getElementById('qr-code-small');
+    
+    console.log('QR Data:', qrData);
+    
+    // Generate QR codes for both containers
+    generateQRForContainer(qrData, qrContainer, 250);
+    generateQRForContainer(qrData, qrContainerSmall, 80);
+}
+
+function generateQRForContainer(qrData, container, size) {
+    if (!container) return;
+    
+    // Use QR Server API for reliable QR generation
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(qrData)}&format=png&margin=10`;
+    
+    const img = document.createElement('img');
+    img.src = qrUrl;
+    img.alt = 'QR Code';
+    img.style.border = '2px solid #007bff';
+    img.style.borderRadius = '8px';
+    img.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+    img.style.width = size + 'px';
+    
+    img.onload = function() {
+        container.innerHTML = '';
+        container.appendChild(img);
+        console.log('QR Code generated successfully for container');
     };
+    
+    img.onerror = function() {
+        console.error('QR Code generation failed for container');
+        if (size > 100) {
+            container.innerHTML = `
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>QR Code Data:</strong><br>
+                    <div class="mt-2 p-2 bg-white rounded border">
+                        <code style="word-break: break-all;">${qrData}</code>
+                    </div>
+                    <small class="d-block mt-2">Use a QR code scanner app to scan this data manually.</small>
+                </div>
+            `;
+        } else {
+            container.innerHTML = `
+                <div class="alert alert-warning small">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    QR Code failed to load
+                </div>
+            `;
+        }
+    };
+}
+
+// Photo Upload Functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const photoUpload = document.getElementById('photo-upload');
+    
+    if (photoUpload) {
+        photoUpload.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                // Validate file type
+                if (!file.type.startsWith('image/')) {
+                    alert('Please select a valid image file.');
+                    return;
+                }
+                
+                // Validate file size (max 5MB)
+                if (file.size > 5 * 1024 * 1024) {
+                    alert('File size should not exceed 5MB.');
+                    return;
+                }
+                
+                // Create FormData to upload the file
+                const formData = new FormData();
+                formData.append('photo', file);
+                formData.append('action', 'upload_photo');
+                
+                // Show loading
+                const photoContainer = document.querySelector('.photo-frame');
+                photoContainer.innerHTML = `
+                    <div class="d-flex align-items-center justify-content-center h-100">
+                        <div class="text-center">
+                            <div class="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
+                            <div class="small text-muted">Uploading...</div>
+                        </div>
+                    </div>
+                `;
+                
+                // Upload the file
+                fetch('upload-photo.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Update the photo display
+                        photoContainer.innerHTML = `
+                            <img src="${data.photo_path}" 
+                                 alt="Student Photo" 
+                                 class="w-100 h-100 object-fit-cover"
+                                 id="student-photo-display">
+                        `;
+                        
+                        // Show success message
+                        showAlert('Photo uploaded successfully!', 'success');
+                    } else {
+                        // Show error and revert
+                        showAlert(data.message || 'Failed to upload photo.', 'danger');
+                        revertPhotoDisplay();
+                    }
+                })
+                .catch(error => {
+                    console.error('Upload error:', error);
+                    showAlert('An error occurred while uploading the photo.', 'danger');
+                    revertPhotoDisplay();
+                });
+            }
+        });
+    }
+    
+    function revertPhotoDisplay() {
+        const photoContainer = document.querySelector('.photo-frame');
+        <?php if (!empty($current_user['profile_image_path']) && file_exists($current_user['profile_image_path'])): ?>
+        photoContainer.innerHTML = `
+            <img src="<?php echo htmlspecialchars($current_user['profile_image_path']); ?>" 
+                 alt="Student Photo" 
+                 class="w-100 h-100 object-fit-cover"
+                 id="student-photo-display">
+        `;
+        <?php else: ?>
+        photoContainer.innerHTML = `
+            <div class="d-flex align-items-center justify-content-center h-100 text-muted">
+                <div class="text-center">
+                    <i class="fas fa-user fa-3x mb-2"></i>
+                    <div class="small">No Photo</div>
+                </div>
+            </div>
+        `;
+        <?php endif; ?>
+    }
+    
+    function showAlert(message, type) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show mt-3`;
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        const cardBody = document.querySelector('#student-id-card').closest('.card-body');
+        cardBody.insertBefore(alertDiv, cardBody.firstChild);
+        
+        // Auto dismiss after 5 seconds
+        setTimeout(() => {
+            if (alertDiv && alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }
+});
+
+// Print Student ID Card
+function printStudentID() {
+    const idCard = document.getElementById('student-id-card');
+    
+    if (!idCard) {
+        alert('ID card not found.');
+        return;
+    }
+    
+    const printWindow = window.open('', '_blank');
+    
+    // Get the current photo
+    const photoImg = idCard.querySelector('img[alt="Student Photo"]');
+    let photoHtml = '';
+    if (photoImg) {
+        photoHtml = `<img src="${photoImg.src}" style="width: 120px; height: 140px; object-fit: cover; border: 2px solid #007bff; border-radius: 8px;">`;
+    } else {
+        photoHtml = `
+            <div style="width: 120px; height: 140px; border: 2px solid #007bff; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #f8f9fa;">
+                <div style="text-align: center; color: #6c757d;">
+                    <div style="font-size: 2rem; margin-bottom: 5px;">👤</div>
+                    <div style="font-size: 0.7rem;">No Photo</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Get the QR code
+    const qrImg = idCard.querySelector('#qr-code-small img');
+    let qrHtml = '';
+    if (qrImg) {
+        qrHtml = `<img src="${qrImg.src}" style="width: 80px; height: 80px; border: 2px solid #007bff; border-radius: 8px;">`;
+    }
+    
+    const idCardHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Student ID Card - <?php echo htmlspecialchars($current_user['full_name']); ?></title>
+            <style>
+                @page {
+                    size: A4;
+                    margin: 1in;
+                }
+                
+                body {
+                    font-family: Arial, sans-serif;
+                    margin: 0;
+                    padding: 20px;
+                    background: #f5f5f5;
+                }
+                
+                .id-card-print {
+                    width: 85.6mm;
+                    height: 54mm;
+                    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+                    border-radius: 10px;
+                    margin: 20px auto;
+                    overflow: hidden;
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+                    border: 2px solid #007bff;
+                }
+                
+                .card-header-print {
+                    background: transparent;
+                    color: white;
+                    text-align: center;
+                    padding: 5px;
+                    border-bottom: 1px solid rgba(255,255,255,0.3);
+                }
+                
+                .school-name {
+                    font-size: 11px;
+                    font-weight: bold;
+                    margin: 0;
+                }
+                
+                .card-type {
+                    font-size: 7px;
+                    margin: 0;
+                    opacity: 0.8;
+                }
+                
+                .card-body-print {
+                    background: white;
+                    padding: 8px;
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 8px;
+                }
+                
+                .photo-section {
+                    flex-shrink: 0;
+                }
+                
+                .info-section {
+                    flex: 1;
+                    min-width: 0;
+                }
+                
+                .qr-section {
+                    flex-shrink: 0;
+                    text-align: center;
+                }
+                
+                .info-item {
+                    margin-bottom: 3px;
+                }
+                
+                .info-label {
+                    font-size: 6px;
+                    color: #6c757d;
+                    margin: 0;
+                    line-height: 1;
+                }
+                
+                .info-value {
+                    font-size: 7px;
+                    font-weight: bold;
+                    color: #333;
+                    margin: 0;
+                    line-height: 1.2;
+                }
+                
+                .student-name {
+                    color: #007bff;
+                    font-size: 8px;
+                }
+                
+                .qr-label {
+                    font-size: 5px;
+                    color: #6c757d;
+                    margin-top: 2px;
+                    line-height: 1;
+                }
+                
+                .card-footer-print {
+                    background: white;
+                    border-top: 1px solid #dee2e6;
+                    padding: 4px 8px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                
+                .footer-text {
+                    font-size: 5px;
+                    color: #6c757d;
+                    margin: 0;
+                }
+                
+                .print-instructions {
+                    text-align: center;
+                    margin: 20px 0;
+                    color: #666;
+                    font-size: 12px;
+                }
+                
+                @media print {
+                    body {
+                        background: white;
+                        padding: 0;
+                    }
+                    
+                    .print-instructions {
+                        display: none;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="print-instructions">
+                <p><strong>Printing Instructions:</strong></p>
+                <p>• Set printer to actual size (100%)<br>
+                • Use high-quality paper for best results<br>
+                • Consider laminating for durability</p>
+            </div>
+            
+            <div class="id-card-print">
+                <div class="card-header-print">
+                    <h6 class="school-name">KES SCHOOL</h6>
+                    <p class="card-type">STUDENT IDENTIFICATION CARD</p>
+                </div>
+                
+                <div class="card-body-print">
+                    <div class="photo-section">
+                        ${photoHtml}
+                    </div>
+                    
+                    <div class="info-section">
+                        <div class="info-item">
+                            <p class="info-label">STUDENT NAME</p>
+                            <p class="info-value student-name"><?php echo strtoupper(htmlspecialchars($current_user['full_name'])); ?></p>
+                        </div>
+                        <div class="info-item">
+                            <p class="info-label">STUDENT ID</p>
+                            <p class="info-value"><?php echo htmlspecialchars($current_user['username']); ?></p>
+                        </div>
+                        <?php if ($current_user['lrn']): ?>
+                        <div class="info-item">
+                            <p class="info-label">LRN</p>
+                            <p class="info-value"><?php echo htmlspecialchars($current_user['lrn']); ?></p>
+                        </div>
+                        <?php endif; ?>
+                        <?php if (isset($section_info) && $section_info): ?>
+                        <div class="info-item">
+                            <p class="info-label">SECTION</p>
+                            <p class="info-value"><?php echo htmlspecialchars($section_info['section_name']); ?></p>
+                        </div>
+                        <div class="info-item">
+                            <p class="info-label">GRADE</p>
+                            <p class="info-value"><?php echo htmlspecialchars($section_info['grade_level']); ?></p>
+                        </div>
+                        <?php endif; ?>
+                        <div class="info-item">
+                            <p class="info-label">SCHOOL YEAR</p>
+                            <p class="info-value"><?php echo date('Y') . '-' . (date('Y') + 1); ?></p>
+                        </div>
+                    </div>
+                    
+                    <div class="qr-section">
+                        ${qrHtml}
+                        <p class="qr-label">SCAN FOR<br>ATTENDANCE</p>
+                    </div>
+                </div>
+                
+                <div class="card-footer-print">
+                    <p class="footer-text">Valid Until: <?php echo date('M Y', strtotime('+1 year')); ?></p>
+                    <p class="footer-text">Emergency: <?php echo $current_user['phone'] ?? 'N/A'; ?></p>
+                </div>
+            </div>
+        </body>
+        </html>
+    `;
+    
+    printWindow.document.write(idCardHtml);
+    printWindow.document.close();
+    printWindow.print();
+}
+
+// Download Student ID Card
+function downloadStudentID() {
+    // Use the print function and suggest PDF save
+    if (confirm('This will open the print dialog. Choose "Save as PDF" to download the ID card as a file.')) {
+        printStudentID();
+    }
+}
+
+// Share Student ID Card
+async function shareStudentID() {
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: 'My Student ID Card',
+                text: 'Student ID Card for <?php echo htmlspecialchars($current_user['full_name']); ?>',
+                url: window.location.href
+            });
+        } catch (error) {
+            console.error('Error sharing:', error);
+            fallbackShareID();
+        }
+    } else {
+        fallbackShareID();
+    }
+}
+
+function fallbackShareID() {
+    const url = window.location.href;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => {
+            alert('Page link copied to clipboard! You can share this with others.');
+        });
+    } else {
+        alert('Sharing not supported on this device. You can copy the current page URL to share.');
+    }
 }
 
 // Download QR Code
@@ -945,5 +1842,251 @@ function fallbackShare() {
 }
 <?php endif; ?>
 </script>
+
+<!-- QR Scanner Modal -->
+<div class="modal fade" id="qrScannerModal" tabindex="-1" aria-labelledby="qrScannerModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="qrScannerModalLabel">
+                    <i class="fas fa-qrcode me-2"></i>QR Code Scanner
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div id="qr-scanner-container">
+                            <div id="qr-scanner" style="width: 100%;"></div>
+                            <div id="scanner-loading" class="text-center p-4">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading camera...</span>
+                                </div>
+                                <p class="mt-2 text-muted">Initializing camera...</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Instructions</h6>
+                            </div>
+                            <div class="card-body">
+                                <ol class="small">
+                                    <li>Ask your teacher to show the attendance QR code</li>
+                                    <li>Point your camera at the QR code</li>
+                                    <li>Wait for automatic scanning</li>
+                                    <li>Your attendance will be marked automatically</li>
+                                </ol>
+                                
+                                <div class="alert alert-info small mt-3">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Make sure to scan the teacher's QR code, not another student's QR code
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="scan-result" class="mt-3 d-none">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Scan Result</h6>
+                                </div>
+                                <div class="card-body" id="scan-result-content">
+                                    <!-- Scan result will be displayed here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="toggleCamera()" id="camera-toggle-btn">
+                    <i class="fas fa-camera me-1"></i>Restart Camera
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- QR Scanner JavaScript -->
+<?php if ($user_role == 'student'): ?>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+let html5QrcodeScanner = null;
+let isScanning = false;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize scanner when modal is shown
+    const qrModal = document.getElementById('qrScannerModal');
+    qrModal.addEventListener('shown.bs.modal', function() {
+        initializeScanner();
+    });
+    
+    // Stop scanner when modal is hidden
+    qrModal.addEventListener('hidden.bs.modal', function() {
+        stopScanner();
+    });
+});
+
+function initializeScanner() {
+    if (html5QrcodeScanner) {
+        stopScanner();
+    }
+    
+    document.getElementById('scanner-loading').style.display = 'block';
+    document.getElementById('qr-scanner').style.display = 'none';
+    
+    html5QrcodeScanner = new Html5QrcodeScanner(
+        "qr-scanner", 
+        { 
+            fps: 10, 
+            qrbox: {width: 250, height: 250},
+            aspectRatio: 1.0
+        },
+        /* verbose= */ false
+    );
+    
+    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+    
+    // Hide loading after a delay
+    setTimeout(() => {
+        document.getElementById('scanner-loading').style.display = 'none';
+        document.getElementById('qr-scanner').style.display = 'block';
+    }, 2000);
+    
+    isScanning = true;
+}
+
+function onScanSuccess(decodedText, decodedResult) {
+    if (!isScanning) return;
+    
+    console.log(`QR Code scanned: ${decodedText}`);
+    
+    // Stop scanning to prevent multiple scans
+    stopScanner();
+    
+    // Show scan result
+    showScanResult('Processing...', 'info');
+    
+    // Validate QR code format
+    try {
+        const qrData = atob(decodedText);
+        console.log('Decoded QR data:', qrData);
+        
+        if (qrData.startsWith('KES-SMART-TEACHER-')) {
+            // This is a teacher QR code for attendance
+            processAttendanceQR(decodedText);
+        } else if (qrData.startsWith('KES-SMART-STUDENT-')) {
+            showScanResult('This is a student QR code. Please scan your teacher\'s attendance QR code instead.', 'warning');
+        } else {
+            showScanResult('Invalid QR code. Please scan a KES-SMART attendance QR code.', 'danger');
+        }
+    } catch (error) {
+        console.error('Error decoding QR code:', error);
+        showScanResult('Invalid QR code format. Please scan a valid KES-SMART QR code.', 'danger');
+    }
+}
+
+function onScanFailure(error) {
+    // Ignore scan failures - they happen frequently during normal operation
+    console.debug(`QR Code scan error: ${error}`);
+}
+
+function processAttendanceQR(teacherQRData) {
+    const studentQRData = '<?php echo $qr_data; ?>';
+    
+    // Send both QR codes to the server for processing
+    const requestData = {
+        teacher_qr_data: teacherQRData,
+        student_qr_data: studentQRData
+    };
+    
+    fetch('api/process-attendance-qr.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Attendance processing result:', data);
+        
+        if (data.success) {
+            showScanResult(
+                `<div class="text-success">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <strong>Attendance Marked Successfully!</strong>
+                </div>
+                <div class="mt-2 small">
+                    <strong>Subject:</strong> ${data.attendance_data.subject_name}<br>
+                    <strong>Section:</strong> ${data.attendance_data.section_name}<br>
+                    <strong>Time:</strong> ${data.attendance_data.time_in}<br>
+                    <strong>Date:</strong> ${data.attendance_data.date}
+                </div>`,
+                'success'
+            );
+            
+            // Auto-close modal after 3 seconds
+            setTimeout(() => {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('qrScannerModal'));
+                modal.hide();
+                
+                // Refresh the page to update attendance data
+                location.reload();
+            }, 3000);
+            
+        } else {
+            showScanResult(
+                `<div class="text-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    <strong>Error:</strong> ${data.message}
+                </div>`,
+                'danger'
+            );
+        }
+    })
+    .catch(error => {
+        console.error('Error processing attendance:', error);
+        showScanResult(
+            `<div class="text-danger">
+                <i class="fas fa-exclamation-circle me-2"></i>
+                <strong>Error:</strong> Failed to process attendance. Please try again.
+            </div>`,
+            'danger'
+        );
+    });
+}
+
+function showScanResult(message, type) {
+    const resultContainer = document.getElementById('scan-result');
+    const resultContent = document.getElementById('scan-result-content');
+    
+    resultContent.innerHTML = `<div class="alert alert-${type} mb-0">${message}</div>`;
+    resultContainer.classList.remove('d-none');
+}
+
+function stopScanner() {
+    if (html5QrcodeScanner) {
+        html5QrcodeScanner.clear().catch(error => {
+            console.error("Failed to clear scanner:", error);
+        });
+        html5QrcodeScanner = null;
+    }
+    isScanning = false;
+}
+
+function toggleCamera() {
+    if (isScanning) {
+        stopScanner();
+        document.getElementById('camera-toggle-btn').innerHTML = '<i class="fas fa-camera me-1"></i>Start Camera';
+    } else {
+        initializeScanner();
+        document.getElementById('camera-toggle-btn').innerHTML = '<i class="fas fa-stop me-1"></i>Stop Camera';
+    }
+}
+</script>
+<?php endif; ?>
 
 <?php include 'footer.php'; ?>

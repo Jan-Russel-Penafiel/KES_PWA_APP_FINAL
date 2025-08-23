@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Aug 23, 2025 at 06:01 AM
+-- Generation Time: Jul 25, 2025 at 10:20 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -32,7 +32,6 @@ CREATE TABLE `attendance` (
   `student_id` int(11) NOT NULL,
   `teacher_id` int(11) NOT NULL,
   `section_id` int(11) NOT NULL,
-  `subject_id` int(11) DEFAULT NULL,
   `attendance_date` date NOT NULL,
   `time_in` time DEFAULT NULL,
   `time_out` time DEFAULT NULL,
@@ -157,56 +156,6 @@ INSERT INTO `student_parents` (`id`, `student_id`, `parent_id`, `relationship`, 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `student_subjects`
---
-
-CREATE TABLE `student_subjects` (
-  `id` int(11) NOT NULL,
-  `student_id` int(11) NOT NULL,
-  `subject_id` int(11) NOT NULL,
-  `enrolled_date` date DEFAULT curdate(),
-  `status` enum('enrolled','dropped') DEFAULT 'enrolled',
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `subjects`
---
-
-CREATE TABLE `subjects` (
-  `id` int(11) NOT NULL,
-  `subject_name` varchar(100) NOT NULL,
-  `subject_code` varchar(20) NOT NULL,
-  `teacher_id` int(11) DEFAULT NULL,
-  `section_id` int(11) DEFAULT NULL,
-  `grade_level` varchar(20) NOT NULL,
-  `description` text DEFAULT NULL,
-  `schedule` varchar(255) DEFAULT NULL,
-  `status` enum('active','inactive') DEFAULT 'active',
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `subjects`
---
-
-INSERT INTO `subjects` (`id`, `subject_name`, `subject_code`, `teacher_id`, `section_id`, `grade_level`, `description`, `schedule`, `status`, `created_at`, `updated_at`) VALUES
-(5, 'English', 'ENG101', 2, 1, 'Grade 7', 'English Language Arts', 'Monday 9:00-10:00 AM, Tuesday 9:00-10:00 AM, Thursday 9:00-10:00 AM', 'active', '2025-08-17 08:34:17', '2025-08-19 03:57:47'),
-(7, 'Social Studies', 'SS101', NULL, 1, 'Grade 7', 'Social Studies and History', 'Wednesday 10:00-11:00 AM, Friday 10:00-11:00 AM', 'active', '2025-08-17 08:34:17', '2025-08-19 03:57:47'),
-(8, 'Physical Education', 'PE101', NULL, 1, 'Grade 7', 'Physical Education and Health', 'Friday 2:00-3:00 PM', 'active', '2025-08-17 08:34:17', '2025-08-19 03:57:47'),
-(9, 'Advanced Mathematics', 'MATH201', NULL, 2, 'Grade 8', 'Intermediate Mathematics', 'Monday 10:00-11:00 AM, Wednesday 10:00-11:00 AM, Friday 10:00-11:00 AM', 'active', '2025-08-17 08:34:17', '2025-08-19 03:57:47'),
-(10, 'Literature', 'ENG201', NULL, 2, 'Grade 8', 'English Literature and Writing', 'Monday 11:00-12:00 PM, Tuesday 11:00-12:00 PM, Thursday 11:00-12:00 PM', 'active', '2025-08-17 08:34:17', '2025-08-19 03:57:47'),
-(11, 'Biology', 'BIO201', NULL, 2, 'Grade 8', 'Introduction to Biology', 'Tuesday 2:00-3:00 PM, Thursday 2:00-3:00 PM', 'active', '2025-08-17 08:34:17', '2025-08-19 03:57:47'),
-(12, 'Geography', 'GEO201', NULL, 2, 'Grade 8', 'World Geography', 'Wednesday 2:00-3:00 PM', 'active', '2025-08-17 08:34:17', '2025-08-19 03:57:47'),
-(13, 'Computer Science', 'CS201', NULL, 2, 'Grade 8', 'Basic Computer Skills', 'Friday 11:00-12:00 PM', 'active', '2025-08-17 08:34:17', '2025-08-19 03:57:47'),
-(15, 'English1111', 'ENG1011111', 2, NULL, 'Grade 7', 'sadada', 'Monday 9:00-10:00 AM, Tuesday 9:00-10:001 AM, Thursday 9:00-10:001 AM', 'active', '2025-08-19 04:42:47', '2025-08-19 04:42:47');
-
--- --------------------------------------------------------
-
---
 -- Table structure for table `system_settings`
 --
 
@@ -247,7 +196,6 @@ CREATE TABLE `users` (
   `section_id` int(11) DEFAULT NULL,
   `parent_id` int(11) DEFAULT NULL,
   `profile_image` varchar(255) DEFAULT NULL,
-  `profile_image_path` varchar(255) DEFAULT NULL,
   `qr_code` text DEFAULT NULL,
   `status` enum('active','inactive') DEFAULT 'active',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -258,11 +206,11 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `username`, `full_name`, `email`, `phone`, `role`, `lrn`, `section_id`, `parent_id`, `profile_image`, `profile_image_path`, `qr_code`, `status`, `created_at`, `updated_at`) VALUES
-(1, 'admin', 'System Administrator', 'admin@kes-smart.com', NULL, 'admin', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:04:17', '2025-08-19 12:19:42'),
-(2, 'teacher', 'Jan Russel Peñafiel', 'artiedastephany@gmail.com', '09677726912', 'teacher', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:10:24', '2025-08-19 11:48:31'),
-(3, 'student', 'Jan Russel Peñafielaaa', 'artiedastephanya@gmail.com', '09677726912', 'student', '217614409312', 1, NULL, 'student_3_1755572799.jpg', 'uploads/student_photos/thumbnails/student_3_1755572799.jpg', 'S0VTLVNNQVJULVNUVURFTlQtc3R1ZGVudC0yMDI1', 'active', '2025-07-17 09:10:59', '2025-08-19 11:47:35'),
-(4, 'parent', 'Jan Russel Peñafiel', 'penafielliezl3322@gmail.com', '09677726912', 'parent', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:11:21', '2025-08-19 12:19:18');
+INSERT INTO `users` (`id`, `username`, `full_name`, `email`, `phone`, `role`, `lrn`, `section_id`, `parent_id`, `profile_image`, `qr_code`, `status`, `created_at`, `updated_at`) VALUES
+(1, 'admin', 'System Administrator', 'admin@kes-smart.com', NULL, 'admin', NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:04:17', '2025-07-19 05:14:48'),
+(2, 'teacher', 'Jan Russel Peñafiel', 'artiedastephany@gmail.com', '09677726912', 'teacher', NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:10:24', '2025-07-19 04:39:16'),
+(3, 'student', 'Jan Russel Peñafielaaa', 'artiedastephanya@gmail.com', '09677726912', 'student', '217614409312', 1, NULL, NULL, 'S0VTLVNNQVJULVNUVURFTlQtc3R1ZGVudC0yMDI1', 'active', '2025-07-17 09:10:59', '2025-07-19 04:39:36'),
+(4, 'parent', 'Jan Russel Peñafiel', 'penafielliezl3322@gmail.com', '09677726912', 'parent', NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:11:21', '2025-07-19 04:38:19');
 
 --
 -- Indexes for dumped tables
@@ -274,11 +222,8 @@ INSERT INTO `users` (`id`, `username`, `full_name`, `email`, `phone`, `role`, `l
 ALTER TABLE `attendance`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `unique_attendance` (`student_id`,`attendance_date`),
-  ADD UNIQUE KEY `unique_subject_attendance` (`student_id`,`subject_id`,`attendance_date`),
-  ADD KEY `section_id` (`section_id`),
-  ADD KEY `idx_attendance_subject` (`subject_id`),
-  ADD KEY `idx_attendance_subject_date` (`subject_id`,`attendance_date`),
-  ADD KEY `idx_attendance_teacher_subject` (`teacher_id`,`subject_id`);
+  ADD KEY `teacher_id` (`teacher_id`),
+  ADD KEY `section_id` (`section_id`);
 
 --
 -- Indexes for table `qr_scans`
@@ -314,25 +259,6 @@ ALTER TABLE `student_parents`
   ADD PRIMARY KEY (`id`),
   ADD KEY `student_id` (`student_id`),
   ADD KEY `parent_id` (`parent_id`);
-
---
--- Indexes for table `student_subjects`
---
-ALTER TABLE `student_subjects`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `unique_enrollment` (`student_id`,`subject_id`),
-  ADD KEY `idx_student_subjects_student` (`student_id`),
-  ADD KEY `idx_student_subjects_subject` (`subject_id`);
-
---
--- Indexes for table `subjects`
---
-ALTER TABLE `subjects`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `subject_code` (`subject_code`),
-  ADD KEY `idx_subjects_teacher` (`teacher_id`),
-  ADD KEY `idx_subjects_code` (`subject_code`),
-  ADD KEY `idx_subjects_section` (`section_id`);
 
 --
 -- Indexes for table `system_settings`
@@ -393,18 +319,6 @@ ALTER TABLE `student_parents`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
--- AUTO_INCREMENT for table `student_subjects`
---
-ALTER TABLE `student_subjects`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
-
---
--- AUTO_INCREMENT for table `subjects`
---
-ALTER TABLE `subjects`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
-
---
 -- AUTO_INCREMENT for table `system_settings`
 --
 ALTER TABLE `system_settings`
@@ -426,8 +340,7 @@ ALTER TABLE `users`
 ALTER TABLE `attendance`
   ADD CONSTRAINT `attendance_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`),
   ADD CONSTRAINT `attendance_ibfk_2` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`),
-  ADD CONSTRAINT `attendance_ibfk_3` FOREIGN KEY (`section_id`) REFERENCES `sections` (`id`),
-  ADD CONSTRAINT `attendance_ibfk_4` FOREIGN KEY (`subject_id`) REFERENCES `subjects` (`id`);
+  ADD CONSTRAINT `attendance_ibfk_3` FOREIGN KEY (`section_id`) REFERENCES `sections` (`id`);
 
 --
 -- Constraints for table `qr_scans`
@@ -448,20 +361,6 @@ ALTER TABLE `sections`
 ALTER TABLE `student_parents`
   ADD CONSTRAINT `student_parents_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`),
   ADD CONSTRAINT `student_parents_ibfk_2` FOREIGN KEY (`parent_id`) REFERENCES `users` (`id`);
-
---
--- Constraints for table `student_subjects`
---
-ALTER TABLE `student_subjects`
-  ADD CONSTRAINT `student_subjects_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`),
-  ADD CONSTRAINT `student_subjects_ibfk_2` FOREIGN KEY (`subject_id`) REFERENCES `subjects` (`id`);
-
---
--- Constraints for table `subjects`
---
-ALTER TABLE `subjects`
-  ADD CONSTRAINT `subjects_ibfk_1` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`),
-  ADD CONSTRAINT `subjects_ibfk_2` FOREIGN KEY (`section_id`) REFERENCES `sections` (`id`);
 
 --
 -- Constraints for table `users`

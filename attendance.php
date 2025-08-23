@@ -9,7 +9,7 @@ $user_role = $_SESSION['role'];
 
 // Get filter parameters
 $student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : null;
-$section_id = isset($_GET['section_id']) ? intval($_GET['section_id']) : null;
+$subject_id = isset($_GET['subject_id']) ? intval($_GET['subject_id']) : null;
 $date_from = isset($_GET['date_from']) ? $_GET['date_from'] : date('Y-m-01'); // First day of current month
 $date_to = isset($_GET['date_to']) ? $_GET['date_to'] : date('Y-m-t'); // Last day of current month
 $status_filter = isset($_GET['status']) ? $_GET['status'] : '';
@@ -50,16 +50,15 @@ try {
             $where_conditions[] = 'a.student_id IN (SELECT student_id FROM student_parents WHERE parent_id = ?)';
             $query_params[] = $current_user['id'];
         } elseif ($user_role == 'teacher') {
-            $where_conditions[] = 'u.section_id IN (SELECT id FROM sections WHERE teacher_id = ?)';
+            $where_conditions[] = 'subj.teacher_id = ?';
             $query_params[] = $current_user['id'];
         }
         // Admin can see all records when no student_id is specified
     }
     
-    // We already handled student_id above, so we just need to check for section_id
-    if ($section_id) {
-        $where_conditions[] = 'a.section_id = ?';
-        $query_params[] = $section_id;
+    if ($subject_id) {
+        $where_conditions[] = 'a.subject_id = ?';
+        $query_params[] = $subject_id;
     }
     
     if ($status_filter) {
@@ -72,11 +71,12 @@ try {
                u.full_name as student_name, 
                u.username as student_username,
                u.lrn as student_lrn,
-               s.section_name,
+               subj.subject_name,
+               subj.subject_code,
                t.full_name as teacher_name
         FROM attendance a
         JOIN users u ON a.student_id = u.id
-        JOIN sections s ON a.section_id = s.id
+        LEFT JOIN subjects subj ON a.subject_id = subj.id
         JOIN users t ON a.teacher_id = t.id
         WHERE " . implode(' AND ', $where_conditions) . "
         ORDER BY a.attendance_date DESC, a.created_at DESC
@@ -90,7 +90,14 @@ try {
     if ($user_role == 'admin') {
         $students = $pdo->query("SELECT id, full_name, username FROM users WHERE role = 'student' AND status = 'active' ORDER BY full_name")->fetchAll(PDO::FETCH_ASSOC);
     } elseif ($user_role == 'teacher') {
-        $students_stmt = $pdo->prepare("SELECT id, full_name, username FROM users WHERE role = 'student' AND status = 'active' AND section_id IN (SELECT id FROM sections WHERE teacher_id = ?) ORDER BY full_name");
+        $students_stmt = $pdo->prepare("
+            SELECT DISTINCT u.id, u.full_name, u.username 
+            FROM users u 
+            JOIN attendance a ON u.id = a.student_id 
+            JOIN subjects subj ON a.subject_id = subj.id 
+            WHERE u.role = 'student' AND u.status = 'active' AND subj.teacher_id = ? 
+            ORDER BY u.full_name
+        ");
         $students_stmt->execute([$current_user['id']]);
         $students = $students_stmt->fetchAll(PDO::FETCH_ASSOC);
     } elseif ($user_role == 'parent') {
@@ -101,15 +108,15 @@ try {
         $students = [];
     }
     
-    // Get sections for filter
+    // Get subjects for filter
     if ($user_role == 'admin') {
-        $sections = $pdo->query("SELECT id, section_name, grade_level FROM sections WHERE status = 'active' ORDER BY section_name")->fetchAll(PDO::FETCH_ASSOC);
+        $subjects = $pdo->query("SELECT id, subject_name, subject_code, grade_level FROM subjects WHERE status = 'active' ORDER BY subject_name")->fetchAll(PDO::FETCH_ASSOC);
     } elseif ($user_role == 'teacher') {
-        $sections_stmt = $pdo->prepare("SELECT id, section_name, grade_level FROM sections WHERE teacher_id = ? AND status = 'active' ORDER BY section_name");
-        $sections_stmt->execute([$current_user['id']]);
-        $sections = $sections_stmt->fetchAll(PDO::FETCH_ASSOC);
+        $subjects_stmt = $pdo->prepare("SELECT id, subject_name, subject_code, grade_level FROM subjects WHERE teacher_id = ? AND status = 'active' ORDER BY subject_name");
+        $subjects_stmt->execute([$current_user['id']]);
+        $subjects = $subjects_stmt->fetchAll(PDO::FETCH_ASSOC);
     } else {
-        $sections = [];
+        $subjects = [];
     }
     
     // Calculate summary statistics
@@ -137,7 +144,7 @@ try {
 } catch(PDOException $e) {
     $attendance_records = [];
     $students = [];
-    $sections = [];
+    $subjects = [];
     $total_records = $present_count = $absent_count = $late_count = $out_count = $effective_present_count = 0;
     $records_by_date = [];
 }
@@ -187,7 +194,7 @@ try {
         <form method="GET" action="">
             <div class="row g-3">
                 <?php if (!empty($students) && ($user_role != 'student')): ?>
-                    <div class="col-12 col-md-6 col-lg-3">
+                    <div class="col-12 col-md-6 col-lg-4">
                         <label for="student_id" class="form-label">Student</label>
                         <select class="form-select select2" id="student_id" name="student_id">
                             <option value="">All Students</option>
@@ -200,31 +207,31 @@ try {
                     </div>
                 <?php endif; ?>
                 
-                <?php if (!empty($sections)): ?>
-                    <div class="col-12 col-md-6 col-lg-3">
-                        <label for="section_id" class="form-label">Section</label>
-                        <select class="form-select select2" id="section_id" name="section_id">
-                            <option value="">All Sections</option>
-                            <?php foreach ($sections as $section): ?>
-                                <option value="<?php echo $section['id']; ?>" <?php echo $section_id == $section['id'] ? 'selected' : ''; ?>>
-                                    <?php echo $section['section_name']; ?> - <?php echo $section['grade_level']; ?>
+                <?php if (!empty($subjects)): ?>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <label for="subject_id" class="form-label">Subject</label>
+                        <select class="form-select select2" id="subject_id" name="subject_id">
+                            <option value="">All Subjects</option>
+                            <?php foreach ($subjects as $subject): ?>
+                                <option value="<?php echo $subject['id']; ?>" <?php echo $subject_id == $subject['id'] ? 'selected' : ''; ?>>
+                                    <?php echo $subject['subject_name']; ?> (<?php echo $subject['subject_code']; ?>)
                                 </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                 <?php endif; ?>
                 
-                <div class="col-6 col-md-6 col-lg-2">
+                <div class="col-6 col-md-4 col-lg-2">
                     <label for="date_from" class="form-label">From Date</label>
                     <input type="date" class="form-control" id="date_from" name="date_from" value="<?php echo $date_from; ?>">
                 </div>
                 
-                <div class="col-6 col-md-6 col-lg-2">
+                <div class="col-6 col-md-4 col-lg-2">
                     <label for="date_to" class="form-label">To Date</label>
                     <input type="date" class="form-control" id="date_to" name="date_to" value="<?php echo $date_to; ?>">
                 </div>
                 
-                <div class="col-12 col-md-6 col-lg-2">
+                <div class="col-12 col-md-4 col-lg-2">
                     <label for="status" class="form-label">Status</label>
                     <select class="form-select" id="status" name="status">
                         <option value="">All Status</option>
@@ -414,8 +421,10 @@ try {
                                             
                                             <div class="record-details small">
                                                 <p class="mb-2">
-                                                    <i class="fas fa-school me-2 text-primary"></i>
-                                                    <span class="text-truncate d-inline-block" style="max-width: 200px;"><?php echo $record['section_name']; ?></span>
+                                                    <i class="fas fa-book me-2 text-primary"></i>
+                                                    <span class="text-truncate d-inline-block" style="max-width: 200px;">
+                                                        <?php echo $record['subject_name'] ? $record['subject_name'] . ' (' . $record['subject_code'] . ')' : 'No Subject'; ?>
+                                                    </span>
                                                 </p>
                                                 
                                                 <?php if ($record['time_in']): ?>

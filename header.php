@@ -22,7 +22,7 @@ if (!in_array($current_page, $public_pages)) {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="description" content="<?php echo $site_description; ?>">
     <meta name="theme-color" content="#007bff">
     
@@ -69,6 +69,7 @@ if (!in_array($current_page, $public_pages)) {
             background-color: #f8f9fa;
             padding-bottom: 80px; /* Space for bottom navigation */
             overflow-x: hidden; /* Prevent horizontal scrolling on mobile */
+            -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
         }
         
         .navbar-brand {
@@ -162,6 +163,37 @@ if (!in_array($current_page, $public_pages)) {
             right: 5px;
         }
         
+        /* Improved Dropdown Menu */
+        .dropdown-menu {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            padding: 0.5rem;
+            margin-top: 0.5rem;
+            z-index: 1050; /* Higher z-index to ensure it appears above other elements */
+        }
+        
+        .dropdown-item {
+            border-radius: 10px;
+            padding: 0.6rem 1rem;
+            margin-bottom: 0.2rem;
+            transition: all 0.2s;
+        }
+        
+        .dropdown-item:hover {
+            background-color: rgba(0,123,255,0.1);
+        }
+        
+        .dropdown-item:active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .dropdown-item i {
+            width: 20px;
+            text-align: center;
+        }
+        
         /* Mobile Optimizations */
         @media (max-width: 768px) {
             body {
@@ -205,14 +237,20 @@ if (!in_array($current_page, $public_pages)) {
                 align-items: center;
             }
             
-            .dropdown-menu {
-                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            }
-            
             /* Alerts for mobile */
             .alert {
                 padding: 0.75rem;
                 margin-bottom: 0.75rem;
+            }
+            
+            /* Improved dropdown for mobile */
+            .dropdown-menu {
+                width: auto;
+                min-width: 200px;
+                position: absolute;
+                right: 0;
+                left: auto;
+                margin-top: 0.5rem;
             }
         }
         
@@ -234,13 +272,6 @@ if (!in_array($current_page, $public_pages)) {
             .alert {
                 padding: 0.6rem;
                 font-size: 0.9rem;
-            }
-            
-            /* Adjust profile dropdown on small screens */
-            .dropdown-menu {
-                width: 100%;
-                left: 0 !important;
-                right: 0 !important;
             }
         }
         
@@ -335,14 +366,14 @@ if (!in_array($current_page, $public_pages)) {
         /* Offline banner styles */
         #offline-banner {
             position: fixed;
-            bottom: 0;
+            bottom: 70px; /* Position above bottom nav */
             left: 0;
             right: 0;
             background-color: #ffc107;
             color: #212529;
             padding: 8px 16px;
             text-align: center;
-            z-index: 9999;
+            z-index: 999;
             font-weight: bold;
             display: none;
             transform: translateY(100%);
@@ -358,6 +389,25 @@ if (!in_array($current_page, $public_pages)) {
         /* Add more space when offline banner is visible */
         body.has-offline-banner {
             padding-bottom: 120px;
+        }
+        
+        /* Fix for navbar dropdown on mobile */
+        .navbar .dropdown-menu {
+            position: absolute;
+            right: 0;
+            left: auto;
+            top: 100%;
+        }
+        
+        /* Improved touch targets for mobile */
+        @media (max-width: 768px) {
+            .dropdown-item {
+                padding: 0.75rem 1rem;
+            }
+            
+            .navbar .dropdown-toggle::after {
+                margin-left: 0.5rem;
+            }
         }
     </style>
     
@@ -448,41 +498,38 @@ if (!in_array($current_page, $public_pages)) {
         </a>
         
         <?php if (isLoggedIn()): ?>
-            <div class="navbar-nav ms-auto">
-                <div class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle text-white" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <div class="dropdown">
+                <button class="btn btn-primary dropdown-toggle border-0" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fas fa-user-circle me-1"></i>
+                    <span class="d-none d-md-inline">
                         <?php 
                         $current_user = getCurrentUser($pdo);
                         echo $current_user ? $current_user['full_name'] : 'User';
                         ?>
-                    </a>
-                    <ul class="dropdown-menu dropdown-menu-end">
-                        <?php if (hasRole('student')): ?>
-                            <li><a class="dropdown-item" href="student-profile.php"><i class="fas fa-user-graduate me-2"></i>My Profile</a></li>
-                        <?php else: ?>
-                            <li><a class="dropdown-item" href="profile.php"><i class="fas fa-user me-2"></i>Profile</a></li>
-                        <?php endif; ?>
-                        <?php if (hasRole('admin')): ?>
-                            <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
-                            <li><a class="dropdown-item" href="sms-config.php"><i class="fas fa-sms me-2"></i>SMS Config</a></li>
-                            <li><a class="dropdown-item" href="users.php"><i class="fas fa-users me-2"></i>Users</a></li>
-                            <li><a class="dropdown-item" href="sections.php"><i class="fas fa-sms me-2"></i>Sections</a></li>
-                        <?php endif; ?>
-                        <?php if (hasRole('teacher')): ?>
-                          
-                            <li><a class="dropdown-item" href="sections.php"><i class="fas fa-sms me-2"></i>Sections</a></li>
-                        <?php endif; ?>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
-                    </ul>
-                </div>
+                    </span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                    <?php if (hasRole('student')): ?>
+                        <li><a class="dropdown-item" href="profile.php"><i class="fas fa-user-graduate me-2"></i>My Profile</a></li>
+                    <?php else: ?>
+                        <li><a class="dropdown-item" href="profile.php"><i class="fas fa-user me-2"></i>Profile</a></li>
+                    <?php endif; ?>
+                    <?php if (hasRole('admin')): ?>
+                        <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
+                        <li><a class="dropdown-item" href="sms-config.php"><i class="fas fa-sms me-2"></i>SMS Config</a></li>
+                        <li><a class="dropdown-item" href="users.php"><i class="fas fa-users me-2"></i>Users</a></li>
+                        <li><a class="dropdown-item" href="sections.php"><i class="fas fa-layer-group me-2"></i>Sections & Subjects</a></li>
+                    <?php endif; ?>
+                    <?php if (hasRole('teacher')): ?>
+                        <li><a class="dropdown-item" href="sections.php"><i class="fas fa-layer-group me-2"></i>Sections & Subjects</a></li>
+                    <?php endif; ?>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                </ul>
             </div>
         <?php endif; ?>
     </div>
 </nav>
-
-<!-- Offline Status Indicator -->
-<!-- Removed duplicate offline-indicator yellow banner from header -->
 
 <?php if (isset($_SESSION['offline_login']) && $_SESSION['offline_login']): ?>
 <!-- Offline Login Indicator -->
@@ -524,51 +571,3 @@ if (!in_array($current_page, $public_pages)) {
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     <?php endif; ?>
-    
-<!-- Bottom Navigation for Mobile -->
-<?php if (isLoggedIn()): ?>
-<nav class="bottom-nav d-md-none">
-    <div class="container">
-        <div class="d-flex justify-content-between">
-            <a href="dashboard.php" class="nav-link <?php echo $current_page == 'dashboard.php' ? 'active' : ''; ?>">
-                <i class="fas fa-home"></i>
-                <span>Dashboard</span>
-            </a>
-            <a href="attendance.php" class="nav-link <?php echo $current_page == 'attendance.php' ? 'active' : ''; ?>">
-                <i class="fas fa-clipboard-check"></i>
-                <span>Attendance</span>
-            </a>
-            <a href="qr-scanner.php" class="nav-link <?php echo $current_page == 'qr-scanner.php' ? 'active' : ''; ?>">
-                <i class="fas fa-qrcode"></i>
-                <span>Scan</span>
-            </a>
-            <a href="students.php" class="nav-link <?php echo $current_page == 'students.php' ? 'active' : ''; ?>">
-                <i class="fas fa-user-graduate"></i>
-                <span>Students</span>
-            </a>
-            <a href="profile.php" class="nav-link <?php echo $current_page == 'profile.php' ? 'active' : ''; ?>">
-                <i class="fas fa-user"></i>
-                <span>Profile</span>
-            </a>
-        </div>
-    </div>
-</nav>
-<?php endif; ?>
-
-<script>
-    // Offline status detection and indicator
-    // Removed updateOnlineStatus function and related event listeners for offline-indicator
-    // Only the top offline-banner remains
-    // Highlight active nav item in bottom navigation
-    document.addEventListener('DOMContentLoaded', function() {
-        const currentPage = '<?php echo $current_page; ?>';
-        const navLinks = document.querySelectorAll('.bottom-nav .nav-link');
-        
-        navLinks.forEach(link => {
-            const href = link.getAttribute('href');
-            if (href === currentPage) {
-                link.classList.add('active');
-            }
-        });
-    });
-</script>

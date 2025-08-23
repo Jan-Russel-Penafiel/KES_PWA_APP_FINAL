@@ -26,13 +26,7 @@
                         </a>
                     </div>
                     
-                    <!-- Students -->
-                    <div class="nav-item">
-                        <a href="students.php" class="nav-link <?php echo $current_page == 'students.php' ? 'active' : ''; ?>">
-                            <i class="fas fa-users"></i>
-                            <span>Students</span>
-                        </a>
-                    </div>
+                  
 
                     <!-- Reports for teachers and admins -->
                     <div class="nav-item">
@@ -56,19 +50,13 @@
                 <?php if ($user_role == 'admin'): ?>
                     <!-- Users Management - Only for admins -->
                     <div class="nav-item">
-                        <a href="users.php" class="nav-link <?php echo $current_page == 'users.php' ? 'active' : ''; ?>">
-                            <i class="fas fa-user-cog"></i>
-                            <span>Users</span>
+                        <a href="teachers.php" class="nav-link <?php echo $current_page == 'teachers.php' ? 'active' : ''; ?>">
+                            <i class="fas fa-chalkboard-teacher"></i>
+                            <span>Teachers</span>
                         </a>
                     </div>
                     
-                    <!-- SMS Config - Only for admins -->
-                    <div class="nav-item">
-                        <a href="sms-config.php" class="nav-link <?php echo $current_page == 'sms-config.php' ? 'active' : ''; ?>">
-                            <i class="fas fa-sms"></i>
-                            <span>SMS</span>
-                        </a>
-                    </div>
+                 
                 <?php endif; ?>
                 
                 <!-- Reports -->
@@ -98,6 +86,8 @@
                     <i class="fas fa-clipboard-check"></i>
                     <span>Attendance</span>
                 </a>
+                <?php if ($user_role == 'teacher' || $user_role == 'admin'): ?>
+
                 <a href="qr-scanner.php" class="nav-link <?php echo ($current_page == 'qr-scanner.php') ? 'active' : ''; ?>">
                     <i class="fas fa-qrcode"></i>
                     <span>Scan</span>
@@ -106,6 +96,8 @@
                     <i class="fas fa-user-graduate"></i>
                     <span>Students</span>
                 </a>
+                <?php endif; ?>
+
                 <a href="profile.php" class="nav-link <?php echo ($current_page == 'profile.php') ? 'active' : ''; ?>">
                     <i class="fas fa-user-circle"></i>
                     <span>Profile</span>

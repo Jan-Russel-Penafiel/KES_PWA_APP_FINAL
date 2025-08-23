@@ -111,7 +111,7 @@ function checkPageAccess($page_name) {
     
     // Define page access rules
     $page_access = [
-        'admin' => ['dashboard.php', 'qr-scanner.php', 'students.php', 'reports.php', 'users.php', 'sections.php', 'sms-config.php', 'profile.php', 'settings.php', 'attendance.php'],
+        'admin' => ['dashboard.php', 'qr-scanner.php', 'students.php',  'teachers.php', 'reports.php', 'users.php', 'sections.php', 'sms-config.php', 'profile.php', 'settings.php', 'attendance.php'],
         'teacher' => ['dashboard.php', 'qr-scanner.php', 'attendance.php', 'qr-code.php', 'students.php', 'sections.php', 'reports.php', 'profile.php'],
         'student' => ['dashboard.php', 'attendance.php', 'profile.php'],
         'parent' => ['dashboard.php', 'attendance.php', 'profile.php']
@@ -163,6 +163,11 @@ function generateStudentQR($student_id) {
 
 // Include SMS functions
 require_once 'sms_functions.php';
+
+// Include QR helper functions
+if (file_exists(__DIR__ . '/qr_helpers.php')) {
+    require_once 'qr_helpers.php';
+}
 
 // SMS Notification function
 function sendSMSNotification($pdo, $phone_number, $message) {
