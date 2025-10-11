@@ -671,10 +671,7 @@ try {
                     <!-- Action Buttons -->
                     <div class="text-center mt-4">
                         <div class="d-flex flex-wrap justify-content-center gap-2">
-                            <button onclick="printStudentID()" class="btn btn-primary">
-                                <i class="fas fa-print me-2"></i>Print ID Card
-                            </button>
-                            <button onclick="downloadStudentID()" class="btn btn-outline-primary">
+                            <button onclick="downloadStudentID()" class="btn btn-primary">
                                 <i class="fas fa-download me-2"></i>Download ID Card
                             </button>
                             <button onclick="shareStudentID()" class="btn btn-outline-info">
@@ -1491,11 +1488,46 @@ function printStudentID() {
         qrHtml = `<img src="${qrImg.src}" style="width: 80px; height: 80px; border: 2px solid #007bff; border-radius: 8px;">`;
     }
     
+    // Get all student information from the PHP session
+    const studentName = '<?php echo strtoupper(htmlspecialchars($current_user['full_name'])); ?>';
+    const studentId = '<?php echo htmlspecialchars($current_user['username']); ?>';
+    
+    // Get LRN if available
+    let lrnHtml = '';
+    <?php if ($current_user['lrn']): ?>
+    const lrnValue = '<?php echo htmlspecialchars($current_user['lrn']); ?>';
+    lrnHtml = `
+        <div class="info-item">
+            <p class="info-label">LRN</p>
+            <p class="info-value">${lrnValue}</p>
+        </div>`;
+    <?php endif; ?>
+    
+    // Get Section and Grade information
+    let sectionGradeHtml = '';
+    <?php if (isset($section_info) && $section_info): ?>
+    const sectionName = '<?php echo htmlspecialchars($section_info['section_name']); ?>';
+    const gradeLevel = '<?php echo htmlspecialchars($section_info['grade_level']); ?>';
+    sectionGradeHtml = `
+        <div class="info-item">
+            <p class="info-label">SECTION</p>
+            <p class="info-value">${sectionName}</p>
+        </div>
+        <div class="info-item">
+            <p class="info-label">GRADE</p>
+            <p class="info-value">${gradeLevel}</p>
+        </div>`;
+    <?php endif; ?>
+    
+    const schoolYear = '<?php echo date('Y') . '-' . (date('Y') + 1); ?>';
+    const validUntil = '<?php echo date('M Y', strtotime('+1 year')); ?>';
+    const emergencyPhone = '<?php echo $current_user['phone'] ?? 'N/A'; ?>';
+    
     const idCardHtml = `
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Student ID Card - <?php echo htmlspecialchars($current_user['full_name']); ?></title>
+            <title>Student ID Card - ${studentName}</title>
             <style>
                 @page {
                     size: A4;
@@ -1649,31 +1681,17 @@ function printStudentID() {
                     <div class="info-section">
                         <div class="info-item">
                             <p class="info-label">STUDENT NAME</p>
-                            <p class="info-value student-name"><?php echo strtoupper(htmlspecialchars($current_user['full_name'])); ?></p>
+                            <p class="info-value student-name">${studentName}</p>
                         </div>
                         <div class="info-item">
                             <p class="info-label">STUDENT ID</p>
-                            <p class="info-value"><?php echo htmlspecialchars($current_user['username']); ?></p>
+                            <p class="info-value">${studentId}</p>
                         </div>
-                        <?php if ($current_user['lrn']): ?>
-                        <div class="info-item">
-                            <p class="info-label">LRN</p>
-                            <p class="info-value"><?php echo htmlspecialchars($current_user['lrn']); ?></p>
-                        </div>
-                        <?php endif; ?>
-                        <?php if (isset($section_info) && $section_info): ?>
-                        <div class="info-item">
-                            <p class="info-label">SECTION</p>
-                            <p class="info-value"><?php echo htmlspecialchars($section_info['section_name']); ?></p>
-                        </div>
-                        <div class="info-item">
-                            <p class="info-label">GRADE</p>
-                            <p class="info-value"><?php echo htmlspecialchars($section_info['grade_level']); ?></p>
-                        </div>
-                        <?php endif; ?>
+                        ${lrnHtml}
+                        ${sectionGradeHtml}
                         <div class="info-item">
                             <p class="info-label">SCHOOL YEAR</p>
-                            <p class="info-value"><?php echo date('Y') . '-' . (date('Y') + 1); ?></p>
+                            <p class="info-value">${schoolYear}</p>
                         </div>
                     </div>
                     
@@ -1684,8 +1702,8 @@ function printStudentID() {
                 </div>
                 
                 <div class="card-footer-print">
-                    <p class="footer-text">Valid Until: <?php echo date('M Y', strtotime('+1 year')); ?></p>
-                    <p class="footer-text">Emergency: <?php echo $current_user['phone'] ?? 'N/A'; ?></p>
+                    <p class="footer-text">Valid Until: ${validUntil}</p>
+                    <p class="footer-text">Emergency: ${emergencyPhone}</p>
                 </div>
             </div>
         </body>

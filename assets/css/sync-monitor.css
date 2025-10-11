@@ -1,0 +1,381 @@
+/**
+ * KES-SMART Sync Monitor Styles
+ * Visual feedback for offline data synchronization
+ */
+
+/* Sync Status Badge */
+.sync-status-badge {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 9999;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.sync-status-badge.has-pending {
+  display: flex;
+}
+
+.sync-status-badge:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.sync-status-badge.syncing {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.sync-status-badge.syncing .sync-icon {
+  animation: spin 1s linear infinite;
+}
+
+.sync-badge-content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.sync-status-badge .sync-icon {
+  color: white;
+  font-size: 20px;
+}
+
+.sync-status-badge .sync-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #ff4757;
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Sync Badge Tooltip */
+.sync-badge-tooltip {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 12px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  min-width: 220px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px);
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+.sync-status-badge.show-tooltip .sync-badge-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: all;
+}
+
+.sync-badge-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  right: 20px;
+  border: 8px solid transparent;
+  border-top-color: white;
+}
+
+.tooltip-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 12px;
+}
+
+.tooltip-content {
+  margin-bottom: 12px;
+}
+
+.sync-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  color: #555;
+  font-size: 13px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.sync-stat:last-child {
+  border-bottom: none;
+}
+
+.sync-stat strong {
+  color: #667eea;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.btn-sync-now {
+  width: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn-sync-now:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-sync-now:active {
+  transform: translateY(0);
+}
+
+/* Sync Toast Notification */
+.sync-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  max-width: 400px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(400px);
+  transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.sync-toast.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+}
+
+.sync-toast-content {
+  display: flex;
+  align-items: flex-start;
+  padding: 16px;
+  gap: 12px;
+}
+
+.sync-toast-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.sync-toast-info .sync-toast-icon {
+  background: #e3f2fd;
+  color: #2196f3;
+}
+
+.sync-toast-success .sync-toast-icon {
+  background: #e8f5e9;
+  color: #4caf50;
+}
+
+.sync-toast-error .sync-toast-icon {
+  background: #ffebee;
+  color: #f44336;
+}
+
+.sync-toast-warning .sync-toast-icon {
+  background: #fff3e0;
+  color: #ff9800;
+}
+
+.sync-toast-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.sync-toast-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 4px;
+}
+
+.sync-toast-message {
+  font-size: 13px;
+  color: #666;
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+.sync-toast-close {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: #999;
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.sync-toast-close:hover {
+  background: #f0f0f0;
+  color: #666;
+}
+
+/* Sync Progress Bar */
+.sync-toast-progress {
+  margin-top: 12px;
+  display: none;
+}
+
+.sync-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: #e0e0e0;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.sync-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+.sync-progress-text {
+  font-size: 11px;
+  color: #999;
+  text-align: right;
+}
+
+/* Animations */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.sync-status-badge.syncing {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .sync-status-badge {
+    bottom: 80px;
+    right: 16px;
+    width: 48px;
+    height: 48px;
+  }
+  
+  .sync-status-badge .sync-icon {
+    font-size: 18px;
+  }
+  
+  .sync-badge-tooltip {
+    right: -8px;
+    min-width: 200px;
+  }
+  
+  .sync-toast {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    max-width: none;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .sync-badge-tooltip {
+    background: #2d3436;
+    color: #dfe6e9;
+  }
+  
+  .sync-badge-tooltip::after {
+    border-top-color: #2d3436;
+  }
+  
+  .tooltip-header {
+    color: #dfe6e9;
+  }
+  
+  .sync-stat {
+    color: #b2bec3;
+    border-bottom-color: #636e72;
+  }
+  
+  .sync-toast {
+    background: #2d3436;
+  }
+  
+  .sync-toast-title {
+    color: #dfe6e9;
+  }
+  
+  .sync-toast-message {
+    color: #b2bec3;
+  }
+  
+  .sync-toast-close {
+    color: #b2bec3;
+  }
+  
+  .sync-toast-close:hover {
+    background: #636e72;
+    color: #dfe6e9;
+  }
+}

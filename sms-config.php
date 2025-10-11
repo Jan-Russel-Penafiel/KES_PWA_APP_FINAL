@@ -215,14 +215,9 @@ function sendTestSMS($phone, $message, $config, $pdo) {
                 <p class="text-muted mb-0">Configure SMS settings and manage message templates</p>
             </div>
             <div class="text-end">
-                <div class="btn-group">
-                    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#testSmsModal">
-                        <i class="fas fa-paper-plane me-2"></i>Test SMS
-                    </button>
-                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#templateModal">
-                        <i class="fas fa-plus me-2"></i>Add Template
-                    </button>
-                </div>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#templateModal">
+                    <i class="fas fa-plus me-2"></i>Add Template
+                </button>
                 <div class="small text-muted mt-1">
                     Status: 
                     <span class="badge bg-<?php echo $sms_config['status'] == 'active' ? 'success' : 'danger'; ?>">
@@ -317,7 +312,7 @@ function sendTestSMS($phone, $message, $config, $pdo) {
                             <input type="hidden" name="action" value="update_sms_config">
                             
                             <div class="row g-3">
-                                <div class="col-12 col-lg-8">
+                                <div class="col-12">
                                     <div class="mb-3">
                                         <label for="provider_name" class="form-label">Provider Name</label>
                                         <input type="text" class="form-control" id="provider_name" name="provider_name" 
@@ -368,34 +363,6 @@ function sendTestSMS($phone, $message, $config, $pdo) {
                                         <button type="submit" class="btn btn-primary">
                                             <i class="fas fa-save me-2"></i>Save Configuration
                                         </button>
-                                    </div>
-                                </div>
-                                
-                                <div class="col-12 col-lg-4">
-                                    <div class="card bg-light h-100">
-                                        <div class="card-body">
-                                            <h6 class="card-title">
-                                                <i class="fas fa-info-circle me-2"></i>Configuration Help
-                                            </h6>
-                                            
-                                            <div class="mb-3">
-                                                <strong>Popular Philippines SMS Providers:</strong>
-                                                <ul class="list-unstyled mt-2 small">
-                                                    <li><i class="fas fa-check text-success me-1"></i> PhilSMS</li>
-                                                    <li><i class="fas fa-check text-success me-1"></i> M360 SMS</li>
-                                                    <li><i class="fas fa-check text-success me-1"></i> Chikka SMS</li>
-                                                    <li><i class="fas fa-check text-success me-1"></i> iTexMo</li>
-                                                </ul>
-                                            </div>
-                                            
-                                            <div class="alert alert-warning small mb-0">
-                                                <i class="fas fa-exclamation-triangle me-1"></i>
-                                                <strong>Troubleshooting Tips:</strong><br>
-                                                1. Verify API key format<br>
-                                                2. Check endpoint URL<br>
-                                                3. Use Debug Tool to test
-                                            </div>
-                                        </div>
                                     </div>
                                 </div>
                             </div>

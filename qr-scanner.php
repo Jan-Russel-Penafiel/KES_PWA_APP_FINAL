@@ -667,16 +667,6 @@ try {
                 </div>
             </div>
         </div>
-        
-        <!-- Debug QR Test (for development) -->
-        <script>
-        function testQRCode() {
-            const testQR = prompt('Enter QR code content to test:', 'KES-SMART-STUDENT-student-2025');
-            if (testQR) {
-                handleScanResult(testQR);
-            }
-        }
-        </script>
                 
         <!-- Manual LRN Input -->
         <div class="card border-0 shadow-sm">

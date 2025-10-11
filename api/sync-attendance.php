@@ -40,11 +40,32 @@ if (!in_array($user_role, ['teacher', 'admin'])) {
 $json_data = file_get_contents('php://input');
 $data = json_decode($json_data, true);
 
+// Log sync attempt
+error_log("Sync attendance request from user: {$current_user['username']} at " . date('Y-m-d H:i:s'));
+
+// Check JSON parsing errors
+if (json_last_error() !== JSON_ERROR_NONE) {
+    echo json_encode([
+        'success' => false,
+        'message' => 'Invalid JSON data: ' . json_last_error_msg()
+    ]);
+    exit;
+}
+
 // Check if we have offline data
 if (!isset($data['offlineData']) || !is_array($data['offlineData']) || empty($data['offlineData'])) {
     echo json_encode([
         'success' => false,
         'message' => 'No offline attendance data provided'
+    ]);
+    exit;
+}
+
+// Validate batch size
+if (count($data['offlineData']) > 100) {
+    echo json_encode([
+        'success' => false,
+        'message' => 'Batch size too large. Maximum 100 records per request.'
     ]);
     exit;
 }
@@ -215,6 +236,9 @@ foreach ($data['offlineData'] as $record) {
     }
 }
 
+// Log sync completion
+error_log("Sync completed: {$success_count} success, {$error_count} errors");
+
 // Return response
 echo json_encode([
     'success' => $success_count > 0,
@@ -222,6 +246,8 @@ echo json_encode([
     'total' => count($data['offlineData']),
     'success_count' => $success_count,
     'error_count' => $error_count,
-    'results' => $results
+    'results' => $results,
+    'timestamp' => date('Y-m-d H:i:s'),
+    'synced_by' => $current_user['username']
 ]);
 exit; 

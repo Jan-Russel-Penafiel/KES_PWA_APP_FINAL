@@ -1,10 +1,10 @@
-const CACHE_NAME = 'kes-smart-v1.0.3';
-const VERSION = '1.0.3'; // Used for auto-updates
-const STATIC_CACHE = 'kes-smart-static-v1';
-const DYNAMIC_CACHE = 'kes-smart-dynamic-v1';
-const API_CACHE = 'kes-smart-api-v1';
-const OFFLINE_FALLBACKS = 'kes-smart-offline-v1';
-const AUTH_CACHE = 'kes-smart-auth-v1';
+const CACHE_NAME = 'kes-smart-v1.0.4';
+const VERSION = '1.0.4'; // Used for auto-updates
+const STATIC_CACHE = 'kes-smart-static-v2';
+const DYNAMIC_CACHE = 'kes-smart-dynamic-v2';
+const API_CACHE = 'kes-smart-api-v2';
+const OFFLINE_FALLBACKS = 'kes-smart-offline-v2';
+const AUTH_CACHE = 'kes-smart-auth-v2';
 
 // Assets to cache immediately on service worker install
 const urlsToCache = [
@@ -511,96 +511,228 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Background sync events
+// Background sync events with improved error handling
 self.addEventListener('sync', (event) => {
+  console.log('Background sync event triggered:', event.tag);
+  
   if (event.tag === 'sync-attendance') {
-    event.waitUntil(syncAttendanceData());
+    event.waitUntil(
+      syncAttendanceData()
+        .then(result => {
+          console.log('Attendance sync completed:', result);
+          notifyClients({ type: 'sync-success', data: result });
+        })
+        .catch(error => {
+          console.error('Attendance sync failed:', error);
+          notifyClients({ type: 'sync-failed', error: error.message });
+          // Re-throw to trigger retry
+          throw error;
+        })
+    );
   }
   
   if (event.tag === 'sync-forms') {
-    event.waitUntil(syncFormData());
+    event.waitUntil(
+      syncFormData()
+        .then(result => {
+          console.log('Forms sync completed:', result);
+          notifyClients({ type: 'sync-success', data: result });
+        })
+        .catch(error => {
+          console.error('Forms sync failed:', error);
+          notifyClients({ type: 'sync-failed', error: error.message });
+          // Re-throw to trigger retry
+          throw error;
+        })
+    );
+  }
+  
+  // Generic sync-all tag
+  if (event.tag === 'sync-all') {
+    event.waitUntil(
+      doBackgroundSync()
+        .then(result => {
+          console.log('All data synced:', result);
+          notifyClients({ type: 'sync-success', data: result });
+        })
+        .catch(error => {
+          console.error('Sync all failed:', error);
+          notifyClients({ type: 'sync-failed', error: error.message });
+          throw error;
+        })
+    );
   }
 });
 
 // Function to perform background sync for offline data
 function doBackgroundSync() {
-  return Promise.all([
+  return Promise.allSettled([
     syncAttendanceData(),
     syncFormData()
-  ]);
+  ]).then(results => {
+    const summary = {
+      attendance: results[0].status === 'fulfilled' ? results[0].value : { error: results[0].reason },
+      forms: results[1].status === 'fulfilled' ? results[1].value : { error: results[1].reason }
+    };
+    return summary;
+  });
 }
 
-// Function to sync offline attendance records
+// Notify all clients about sync events
+function notifyClients(message) {
+  self.clients.matchAll().then(clients => {
+    clients.forEach(client => {
+      client.postMessage(message);
+    });
+  });
+}
+
+// Function to sync offline attendance records with improved error handling
 function syncAttendanceData() {
   return getDataFromIndexedDB('attendance_records')
     .then(offlineRecords => {
       if (!offlineRecords || offlineRecords.length === 0) {
-        return Promise.resolve('No offline attendance records to sync');
+        console.log('No offline attendance records to sync');
+        return { success: true, synced: 0, failed: 0, message: 'No records to sync' };
       }
       
-      return Promise.all(offlineRecords.map(record => {
-        return fetch('/smart/api/sync-attendance.php', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(record)
-        })
-        .then(response => {
-          if (!response.ok) {
-            throw new Error('Failed to sync attendance record');
-          }
-          return response.json();
-        })
-        .then(data => {
-          if (data.success) {
-            // Remove successfully synced record from IndexedDB
-            return removeItemsFromIndexedDB('attendance_records', [record.id]);
-          }
-          throw new Error('Failed to sync attendance record: ' + (data.message || 'Unknown error'));
-        })
-        .catch(error => {
-          console.error('Error syncing attendance record:', error);
-          return Promise.resolve(); // Continue with next record even if one fails
+      console.log(`Found ${offlineRecords.length} attendance records to sync`);
+      
+      // Batch records for more efficient sync
+      const batchSize = 10;
+      const batches = [];
+      
+      for (let i = 0; i < offlineRecords.length; i += batchSize) {
+        batches.push(offlineRecords.slice(i, i + batchSize));
+      }
+      
+      let syncedCount = 0;
+      let failedCount = 0;
+      
+      // Process batches sequentially
+      return batches.reduce((promise, batch) => {
+        return promise.then(() => {
+          // Prepare batch data
+          const batchData = batch.map(record => ({
+            student_id: record.student_id,
+            action: record.action || 'scan',
+            status: record.status,
+            timestamp: record.date ? new Date(record.date).toISOString() : new Date(record.timestamp).toISOString(),
+            location: record.location || 'Offline Sync',
+            notes: record.notes || 'Synced from offline storage'
+          }));
+          
+          return fetch('/smart/api/sync-attendance.php', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ offlineData: batchData })
+          })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+          })
+          .then(data => {
+            if (data.success) {
+              syncedCount += data.success_count || batch.length;
+              failedCount += data.error_count || 0;
+              
+              // Remove successfully synced records
+              const idsToRemove = batch.map(r => r.id);
+              return removeItemsFromIndexedDB('attendance_records', idsToRemove);
+            } else {
+              throw new Error(data.message || 'Sync failed');
+            }
+          })
+          .catch(error => {
+            console.error('Error syncing attendance batch:', error);
+            failedCount += batch.length;
+            // Don't remove records on failure, they'll be retried
+            return Promise.resolve();
+          });
         });
-      }));
+      }, Promise.resolve())
+      .then(() => {
+        const result = {
+          success: syncedCount > 0,
+          synced: syncedCount,
+          failed: failedCount,
+          total: offlineRecords.length,
+          message: `Synced ${syncedCount} records, ${failedCount} failed`
+        };
+        console.log('Attendance sync result:', result);
+        return result;
+      });
+    })
+    .catch(error => {
+      console.error('Error in syncAttendanceData:', error);
+      return { success: false, error: error.message };
     });
 }
 
-// Function to sync offline form submissions
+// Function to sync offline form submissions with improved error handling
 function syncFormData() {
   return getDataFromIndexedDB('form_submissions')
     .then(offlineForms => {
       if (!offlineForms || offlineForms.length === 0) {
-        return Promise.resolve('No offline forms to sync');
+        console.log('No offline forms to sync');
+        return { success: true, synced: 0, failed: 0, message: 'No forms to sync' };
       }
       
-      return Promise.all(offlineForms.map(form => {
-        return fetch(`/smart/api/sync-${form.form_type}.php`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(form.data)
-        })
-        .then(response => {
-          if (!response.ok) {
-            throw new Error(`Failed to sync ${form.form_type} form`);
-          }
-          return response.json();
-        })
-        .then(data => {
-          if (data.success) {
-            // Remove successfully synced form from IndexedDB
-            return removeItemsFromIndexedDB('form_submissions', [form.id]);
-          }
-          throw new Error(`Failed to sync ${form.form_type} form: ` + (data.message || 'Unknown error'));
-        })
-        .catch(error => {
-          console.error(`Error syncing ${form.form_type} form:`, error);
-          return Promise.resolve(); // Continue with next form even if one fails
+      console.log(`Found ${offlineForms.length} forms to sync`);
+      
+      let syncedCount = 0;
+      let failedCount = 0;
+      
+      // Process forms sequentially
+      return offlineForms.reduce((promise, form) => {
+        return promise.then(() => {
+          return fetch(`/smart/api/sync-${form.form_type}.php`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(form.data)
+          })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+          })
+          .then(data => {
+            if (data.success) {
+              syncedCount++;
+              return removeItemsFromIndexedDB('form_submissions', [form.id]);
+            } else {
+              throw new Error(data.message || 'Sync failed');
+            }
+          })
+          .catch(error => {
+            console.error(`Error syncing ${form.form_type} form:`, error);
+            failedCount++;
+            return Promise.resolve(); // Continue with next form
+          });
         });
-      }));
+      }, Promise.resolve())
+      .then(() => {
+        const result = {
+          success: syncedCount > 0,
+          synced: syncedCount,
+          failed: failedCount,
+          total: offlineForms.length,
+          message: `Synced ${syncedCount} forms, ${failedCount} failed`
+        };
+        console.log('Forms sync result:', result);
+        return result;
+      });
+    })
+    .catch(error => {
+      console.error('Error in syncFormData:', error);
+      return { success: false, error: error.message };
     });
 }
 
@@ -719,7 +851,13 @@ function removeItemsFromIndexedDB(storeName, ids) {
 
 // Listen for messages from clients
 self.addEventListener('message', (event) => {
-  if (event.data === 'skipWaiting') {
+  if (event.data === 'skipWaiting' || event.data === 'SKIP_WAITING') {
+    console.log('Received skipWaiting message, activating new service worker...');
+    self.skipWaiting();
+  }
+  
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    console.log('Received SKIP_WAITING message, activating new service worker...');
     self.skipWaiting();
   }
 });
