@@ -1,10 +1,10 @@
 const CACHE_NAME = 'kes-smart-v1.0.4';
 const VERSION = '1.0.4'; // Used for auto-updates
-const STATIC_CACHE = 'kes-smart-static-v2';
-const DYNAMIC_CACHE = 'kes-smart-dynamic-v2';
-const API_CACHE = 'kes-smart-api-v2';
-const OFFLINE_FALLBACKS = 'kes-smart-offline-v2';
-const AUTH_CACHE = 'kes-smart-auth-v2';
+const STATIC_CACHE = 'kes-smart-static-v1';
+const DYNAMIC_CACHE = 'kes-smart-dynamic-v1';
+const API_CACHE = 'kes-smart-api-v1';
+const OFFLINE_FALLBACKS = 'kes-smart-offline-v1';
+const AUTH_CACHE = 'kes-smart-auth-v1';
 
 // Assets to cache immediately on service worker install
 const urlsToCache = [
@@ -71,6 +71,8 @@ const neverFallbackUrls = [
 self.addEventListener('install', (event) => {
   // Skip waiting forces the waiting service worker to become the active service worker
   self.skipWaiting();
+  console.log('[SW] Installing new version:', VERSION);
+  
   event.waitUntil(
     caches.open(STATIC_CACHE)
       .then((cache) => {
@@ -116,6 +118,18 @@ self.addEventListener('install', (event) => {
             });
         });
       })
+      .then(() => {
+        console.log('[SW] New version installed successfully:', VERSION);
+        // Notify clients that installation is complete
+        return self.clients.matchAll().then(clients => {
+          clients.forEach(client => {
+            client.postMessage({
+              type: 'SW_INSTALLED',
+              version: VERSION
+            });
+          });
+        });
+      })
   );
 });
 
@@ -133,6 +147,19 @@ const checkForUpdates = async () => {
         console.log(`New version available: ${data.version}, current: ${VERSION}`);
         // This will trigger the browser to download and install the new service worker
         self.registration.update();
+        
+        // Automatically skip waiting and take control
+        self.skipWaiting();
+        
+        // Notify all clients about the update
+        const clients = await self.clients.matchAll();
+        clients.forEach(client => {
+          client.postMessage({
+            type: 'SW_UPDATE_AVAILABLE',
+            version: data.version,
+            autoUpdated: true
+          });
+        });
       }
     }
   } catch (error) {
@@ -188,6 +215,16 @@ self.addEventListener('fetch', (event) => {
   // Check for updates on navigation requests (once per page load)
   if (event.request.mode === 'navigate') {
     event.waitUntil(checkForUpdates());
+  }
+  
+  // Force update check on first request after activation
+  if (event.request.mode === 'navigate' && !self.updateCheckPerformed) {
+    self.updateCheckPerformed = true;
+    event.waitUntil(
+      checkForUpdates().then(() => {
+        console.log('[SW] Initial update check completed');
+      })
+    );
   }
   
   const requestUrl = new URL(event.request.url);
@@ -485,6 +522,8 @@ function getParamsFromURL(url) {
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
+  console.log('[SW] Activating new version:', VERSION);
+  
   const expectedCacheNames = [
     STATIC_CACHE,
     DYNAMIC_CACHE,
@@ -507,232 +546,111 @@ self.addEventListener('activate', (event) => {
       console.log(`${CACHE_NAME} now ready to handle fetches!`);
       // Tell the active service worker to take control of the page immediately
       return self.clients.claim();
+    }).then(() => {
+      // Notify all clients that the new version is active
+      return self.clients.matchAll().then(clients => {
+        clients.forEach(client => {
+          client.postMessage({
+            type: 'SW_ACTIVATED',
+            version: VERSION,
+            autoUpdated: true
+          });
+        });
+      });
     })
   );
 });
 
-// Background sync events with improved error handling
+// Background sync events
 self.addEventListener('sync', (event) => {
-  console.log('Background sync event triggered:', event.tag);
-  
   if (event.tag === 'sync-attendance') {
-    event.waitUntil(
-      syncAttendanceData()
-        .then(result => {
-          console.log('Attendance sync completed:', result);
-          notifyClients({ type: 'sync-success', data: result });
-        })
-        .catch(error => {
-          console.error('Attendance sync failed:', error);
-          notifyClients({ type: 'sync-failed', error: error.message });
-          // Re-throw to trigger retry
-          throw error;
-        })
-    );
+    event.waitUntil(syncAttendanceData());
   }
   
   if (event.tag === 'sync-forms') {
-    event.waitUntil(
-      syncFormData()
-        .then(result => {
-          console.log('Forms sync completed:', result);
-          notifyClients({ type: 'sync-success', data: result });
-        })
-        .catch(error => {
-          console.error('Forms sync failed:', error);
-          notifyClients({ type: 'sync-failed', error: error.message });
-          // Re-throw to trigger retry
-          throw error;
-        })
-    );
-  }
-  
-  // Generic sync-all tag
-  if (event.tag === 'sync-all') {
-    event.waitUntil(
-      doBackgroundSync()
-        .then(result => {
-          console.log('All data synced:', result);
-          notifyClients({ type: 'sync-success', data: result });
-        })
-        .catch(error => {
-          console.error('Sync all failed:', error);
-          notifyClients({ type: 'sync-failed', error: error.message });
-          throw error;
-        })
-    );
+    event.waitUntil(syncFormData());
   }
 });
 
 // Function to perform background sync for offline data
 function doBackgroundSync() {
-  return Promise.allSettled([
+  return Promise.all([
     syncAttendanceData(),
     syncFormData()
-  ]).then(results => {
-    const summary = {
-      attendance: results[0].status === 'fulfilled' ? results[0].value : { error: results[0].reason },
-      forms: results[1].status === 'fulfilled' ? results[1].value : { error: results[1].reason }
-    };
-    return summary;
-  });
+  ]);
 }
 
-// Notify all clients about sync events
-function notifyClients(message) {
-  self.clients.matchAll().then(clients => {
-    clients.forEach(client => {
-      client.postMessage(message);
-    });
-  });
-}
-
-// Function to sync offline attendance records with improved error handling
+// Function to sync offline attendance records
 function syncAttendanceData() {
   return getDataFromIndexedDB('attendance_records')
     .then(offlineRecords => {
       if (!offlineRecords || offlineRecords.length === 0) {
-        console.log('No offline attendance records to sync');
-        return { success: true, synced: 0, failed: 0, message: 'No records to sync' };
+        return Promise.resolve('No offline attendance records to sync');
       }
       
-      console.log(`Found ${offlineRecords.length} attendance records to sync`);
-      
-      // Batch records for more efficient sync
-      const batchSize = 10;
-      const batches = [];
-      
-      for (let i = 0; i < offlineRecords.length; i += batchSize) {
-        batches.push(offlineRecords.slice(i, i + batchSize));
-      }
-      
-      let syncedCount = 0;
-      let failedCount = 0;
-      
-      // Process batches sequentially
-      return batches.reduce((promise, batch) => {
-        return promise.then(() => {
-          // Prepare batch data
-          const batchData = batch.map(record => ({
-            student_id: record.student_id,
-            action: record.action || 'scan',
-            status: record.status,
-            timestamp: record.date ? new Date(record.date).toISOString() : new Date(record.timestamp).toISOString(),
-            location: record.location || 'Offline Sync',
-            notes: record.notes || 'Synced from offline storage'
-          }));
-          
-          return fetch('/smart/api/sync-attendance.php', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ offlineData: batchData })
-          })
-          .then(response => {
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            return response.json();
-          })
-          .then(data => {
-            if (data.success) {
-              syncedCount += data.success_count || batch.length;
-              failedCount += data.error_count || 0;
-              
-              // Remove successfully synced records
-              const idsToRemove = batch.map(r => r.id);
-              return removeItemsFromIndexedDB('attendance_records', idsToRemove);
-            } else {
-              throw new Error(data.message || 'Sync failed');
-            }
-          })
-          .catch(error => {
-            console.error('Error syncing attendance batch:', error);
-            failedCount += batch.length;
-            // Don't remove records on failure, they'll be retried
-            return Promise.resolve();
-          });
+      return Promise.all(offlineRecords.map(record => {
+        return fetch('/smart/api/sync-attendance.php', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(record)
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Failed to sync attendance record');
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (data.success) {
+            // Remove successfully synced record from IndexedDB
+            return removeItemsFromIndexedDB('attendance_records', [record.id]);
+          }
+          throw new Error('Failed to sync attendance record: ' + (data.message || 'Unknown error'));
+        })
+        .catch(error => {
+          console.error('Error syncing attendance record:', error);
+          return Promise.resolve(); // Continue with next record even if one fails
         });
-      }, Promise.resolve())
-      .then(() => {
-        const result = {
-          success: syncedCount > 0,
-          synced: syncedCount,
-          failed: failedCount,
-          total: offlineRecords.length,
-          message: `Synced ${syncedCount} records, ${failedCount} failed`
-        };
-        console.log('Attendance sync result:', result);
-        return result;
-      });
-    })
-    .catch(error => {
-      console.error('Error in syncAttendanceData:', error);
-      return { success: false, error: error.message };
+      }));
     });
 }
 
-// Function to sync offline form submissions with improved error handling
+// Function to sync offline form submissions
 function syncFormData() {
   return getDataFromIndexedDB('form_submissions')
     .then(offlineForms => {
       if (!offlineForms || offlineForms.length === 0) {
-        console.log('No offline forms to sync');
-        return { success: true, synced: 0, failed: 0, message: 'No forms to sync' };
+        return Promise.resolve('No offline forms to sync');
       }
       
-      console.log(`Found ${offlineForms.length} forms to sync`);
-      
-      let syncedCount = 0;
-      let failedCount = 0;
-      
-      // Process forms sequentially
-      return offlineForms.reduce((promise, form) => {
-        return promise.then(() => {
-          return fetch(`/smart/api/sync-${form.form_type}.php`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(form.data)
-          })
-          .then(response => {
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            return response.json();
-          })
-          .then(data => {
-            if (data.success) {
-              syncedCount++;
-              return removeItemsFromIndexedDB('form_submissions', [form.id]);
-            } else {
-              throw new Error(data.message || 'Sync failed');
-            }
-          })
-          .catch(error => {
-            console.error(`Error syncing ${form.form_type} form:`, error);
-            failedCount++;
-            return Promise.resolve(); // Continue with next form
-          });
+      return Promise.all(offlineForms.map(form => {
+        return fetch(`/smart/api/sync-${form.form_type}.php`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(form.data)
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Failed to sync ${form.form_type} form`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (data.success) {
+            // Remove successfully synced form from IndexedDB
+            return removeItemsFromIndexedDB('form_submissions', [form.id]);
+          }
+          throw new Error(`Failed to sync ${form.form_type} form: ` + (data.message || 'Unknown error'));
+        })
+        .catch(error => {
+          console.error(`Error syncing ${form.form_type} form:`, error);
+          return Promise.resolve(); // Continue with next form even if one fails
         });
-      }, Promise.resolve())
-      .then(() => {
-        const result = {
-          success: syncedCount > 0,
-          synced: syncedCount,
-          failed: failedCount,
-          total: offlineForms.length,
-          message: `Synced ${syncedCount} forms, ${failedCount} failed`
-        };
-        console.log('Forms sync result:', result);
-        return result;
-      });
-    })
-    .catch(error => {
-      console.error('Error in syncFormData:', error);
-      return { success: false, error: error.message };
+      }));
     });
 }
 
@@ -851,13 +769,276 @@ function removeItemsFromIndexedDB(storeName, ids) {
 
 // Listen for messages from clients
 self.addEventListener('message', (event) => {
-  if (event.data === 'skipWaiting' || event.data === 'SKIP_WAITING') {
-    console.log('Received skipWaiting message, activating new service worker...');
+  if (event.data === 'skipWaiting') {
     self.skipWaiting();
   }
   
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    console.log('Received SKIP_WAITING message, activating new service worker...');
-    self.skipWaiting();
+  // Handle auto-update requests
+  if (event.data && event.data.type === 'CHECK_FOR_UPDATES') {
+    event.waitUntil(checkForUpdates());
+  }
+  
+  // Handle cache management commands
+  if (event.data && event.data.type === 'CACHE_CLEANUP') {
+    console.log('[SW] Manual cache cleanup requested');
+    event.waitUntil(
+      performAutomaticCacheCleanup()
+        .then(result => {
+          // Notify client of completion
+          if (event.ports && event.ports[0]) {
+            event.ports[0].postMessage({
+              type: 'CACHE_CLEANUP_COMPLETE',
+              result: result
+            });
+          }
+        })
+        .catch(error => {
+          if (event.ports && event.ports[0]) {
+            event.ports[0].postMessage({
+              type: 'CACHE_CLEANUP_ERROR',
+              error: error.message
+            });
+          }
+        })
+    );
+  }
+  
+  if (event.data && event.data.type === 'CACHE_HEALTH_CHECK') {
+    console.log('[SW] Cache health check requested');
+    event.waitUntil(
+      performCacheHealthCheck()
+        .then(result => {
+          if (event.ports && event.ports[0]) {
+            event.ports[0].postMessage({
+              type: 'CACHE_HEALTH_RESULT',
+              result: result
+            });
+          }
+        })
+        .catch(error => {
+          if (event.ports && event.ports[0]) {
+            event.ports[0].postMessage({
+              type: 'CACHE_HEALTH_ERROR',
+              error: error.message
+            });
+          }
+        })
+    );
   }
 });
+
+// Cache management integration
+let cacheCleanupPromise = null;
+
+// Automatic cache cleanup check
+async function performCacheHealthCheck() {
+  try {
+    // Check cache sizes
+    let totalCacheSize = 0;
+    for (const cacheName of [STATIC_CACHE, DYNAMIC_CACHE, API_CACHE, OFFLINE_FALLBACKS, AUTH_CACHE]) {
+      try {
+        const cache = await caches.open(cacheName);
+        const keys = await cache.keys();
+        
+        for (const request of keys) {
+          try {
+            const response = await cache.match(request);
+            if (response) {
+              const blob = await response.blob();
+              totalCacheSize += blob.size;
+            }
+          } catch (e) {
+            // Remove corrupted cache entries
+            await cache.delete(request);
+          }
+        }
+      } catch (e) {
+        console.warn('[SW] Error checking cache:', cacheName, e);
+      }
+    }
+    
+    // If cache is too large (>100MB), perform cleanup
+    const MAX_CACHE_SIZE = 100 * 1024 * 1024; // 100MB
+    if (totalCacheSize > MAX_CACHE_SIZE) {
+      console.warn('[SW] Cache size exceeded limit, performing cleanup');
+      await performAutomaticCacheCleanup();
+    }
+    
+    return { totalSize: totalCacheSize, cleaned: totalCacheSize > MAX_CACHE_SIZE };
+  } catch (error) {
+    console.error('[SW] Cache health check failed:', error);
+    return { error: error.message };
+  }
+}
+
+// Automatic cache cleanup
+async function performAutomaticCacheCleanup() {
+  if (cacheCleanupPromise) {
+    console.log('[SW] Cache cleanup already in progress');
+    return cacheCleanupPromise;
+  }
+  
+  cacheCleanupPromise = (async () => {
+    try {
+      console.log('[SW] Starting automatic cache cleanup');
+      let totalCleaned = 0;
+      
+      // Clean old cache entries
+      const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+      const cutoffTime = Date.now() - maxAge;
+      
+      for (const cacheName of [DYNAMIC_CACHE, API_CACHE]) {
+        try {
+          const cache = await caches.open(cacheName);
+          const requests = await cache.keys();
+          
+          for (const request of requests) {
+            try {
+              const response = await cache.match(request);
+              if (response) {
+                const dateHeader = response.headers.get('date');
+                if (dateHeader && new Date(dateHeader).getTime() < cutoffTime) {
+                  await cache.delete(request);
+                  totalCleaned++;
+                }
+              }
+            } catch (e) {
+              // Remove corrupted entries
+              await cache.delete(request);
+              totalCleaned++;
+            }
+          }
+        } catch (e) {
+          console.warn('[SW] Error cleaning cache:', cacheName, e);
+        }
+      }
+      
+      // Clean IndexedDB if available
+      try {
+        await cleanOldIndexedDBRecords();
+      } catch (e) {
+        console.warn('[SW] Error cleaning IndexedDB:', e);
+      }
+      
+      console.log(`[SW] Automatic cleanup completed, removed ${totalCleaned} entries`);
+      return { cleaned: totalCleaned };
+      
+    } catch (error) {
+      console.error('[SW] Automatic cache cleanup failed:', error);
+      throw error;
+    } finally {
+      cacheCleanupPromise = null;
+    }
+  })();
+  
+  return cacheCleanupPromise;
+}
+
+// Clean old IndexedDB records
+async function cleanOldIndexedDBRecords() {
+  return new Promise((resolve) => {
+    try {
+      const request = indexedDB.open('kes-smart-offline-data', 1);
+      
+      request.onsuccess = async (event) => {
+        const db = event.target.result;
+        const storeNames = ['login_attempts', 'attendance_records', 'form_submissions', 'sync_queue'];
+        let totalCleaned = 0;
+        
+        for (const storeName of storeNames) {
+          if (db.objectStoreNames.contains(storeName)) {
+            try {
+              const cleaned = await cleanStoreOldRecords(db, storeName);
+              totalCleaned += cleaned;
+            } catch (e) {
+              console.warn('[SW] Error cleaning store:', storeName, e);
+            }
+          }
+        }
+        
+        db.close();
+        console.log(`[SW] Cleaned ${totalCleaned} old IndexedDB records`);
+        resolve(totalCleaned);
+      };
+      
+      request.onerror = () => resolve(0);
+    } catch (e) {
+      resolve(0);
+    }
+  });
+}
+
+// Clean old records from a specific store
+function cleanStoreOldRecords(db, storeName) {
+  return new Promise((resolve) => {
+    try {
+      const maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+      const syncedMaxAge = 7 * 24 * 60 * 60 * 1000; // 7 days for synced
+      const cutoffTime = Date.now() - maxAge;
+      const syncedCutoffTime = Date.now() - syncedMaxAge;
+      let cleaned = 0;
+      
+      const transaction = db.transaction([storeName], 'readwrite');
+      const store = transaction.objectStore(storeName);
+      const request = store.openCursor();
+      
+      request.onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (cursor) {
+          const record = cursor.value;
+          let shouldDelete = false;
+          
+          // Delete synced records older than syncedMaxAge
+          if (record.synced && record.timestamp < syncedCutoffTime) {
+            shouldDelete = true;
+          }
+          // Delete unsynced records older than maxAge
+          else if (!record.synced && record.timestamp < cutoffTime) {
+            shouldDelete = true;
+          }
+          
+          if (shouldDelete) {
+            cursor.delete();
+            cleaned++;
+          }
+          
+          cursor.continue();
+        } else {
+          resolve(cleaned);
+        }
+      };
+      
+      request.onerror = () => resolve(cleaned);
+    } catch (e) {
+      resolve(0);
+    }
+  });
+}
+
+// Periodic cache health check (every 30 minutes)
+setInterval(() => {
+  performCacheHealthCheck().catch(error => {
+    console.error('[SW] Periodic cache health check failed:', error);
+  });
+}, 30 * 60 * 1000);
+
+// Automatic update checking (every 5 minutes)
+setInterval(() => {
+  checkForUpdates().catch(error => {
+    console.error('[SW] Periodic update check failed:', error);
+  });
+}, 5 * 60 * 1000);
+
+// Initial cache health check after 5 minutes
+setTimeout(() => {
+  performCacheHealthCheck().catch(error => {
+    console.error('[SW] Initial cache health check failed:', error);
+  });
+}, 5 * 60 * 1000);
+
+// Initial update check after 2 minutes
+setTimeout(() => {
+  checkForUpdates().catch(error => {
+    console.error('[SW] Initial update check failed:', error);
+  });
+}, 2 * 60 * 1000);

@@ -412,17 +412,101 @@ if (!in_array($current_page, $public_pages)) {
     </style>
     
     <script>
-    // Register service worker for PWA
+    // Register service worker for PWA with automatic updates
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('sw.js')
                 .then(registration => {
                     console.log('Service Worker registered with scope:', registration.scope);
+                    
+                    // Listen for updates
+                    registration.addEventListener('updatefound', () => {
+                        console.log('New service worker found, installing...');
+                        const newWorker = registration.installing;
+                        
+                        if (newWorker) {
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed') {
+                                    if (navigator.serviceWorker.controller) {
+                                        console.log('New service worker installed, will activate automatically');
+                                        // The new service worker will automatically take control
+                                    } else {
+                                        console.log('Service worker installed for the first time');
+                                    }
+                                }
+                            });
+                        }
+                    });
+                    
+                    // Check for updates periodically (every 10 minutes)
+                    setInterval(() => {
+                        registration.update();
+                    }, 10 * 60 * 1000);
+                    
+                    // Manual update check on visibility change (when user returns to tab)
+                    document.addEventListener('visibilitychange', () => {
+                        if (!document.hidden) {
+                            registration.update();
+                        }
+                    });
                 })
                 .catch(error => {
                     console.error('Service Worker registration failed:', error);
                 });
+                
+            // Listen for service worker messages
+            navigator.serviceWorker.addEventListener('message', event => {
+                const { type, version, autoUpdated } = event.data;
+                
+                switch (type) {
+                    case 'SW_UPDATE_AVAILABLE':
+                        console.log(`Update available: ${version}`);
+                        if (autoUpdated) {
+                            showUpdateNotification('App is updating automatically...', 'info');
+                        }
+                        break;
+                        
+                    case 'SW_ACTIVATED':
+                        console.log(`New version activated: ${version}`);
+                        if (autoUpdated) {
+                            showUpdateNotification('App updated successfully! New features are now available.', 'success');
+                            // Optionally reload the page after a short delay
+                            setTimeout(() => {
+                                if (confirm('App has been updated. Reload to see new features?')) {
+                                    window.location.reload();
+                                }
+                            }, 2000);
+                        }
+                        break;
+                        
+                    case 'SW_INSTALLED':
+                        console.log(`Service worker installed: ${version}`);
+                        break;
+                }
+            });
         });
+    }
+    
+    // Function to show update notifications
+    function showUpdateNotification(message, type = 'info') {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type === 'success' ? 'success' : 'info'} alert-dismissible fade show position-fixed`;
+        notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 350px;';
+        notification.innerHTML = `
+            <i class="fas fa-${type === 'success' ? 'check-circle' : 'info-circle'} me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (notification && notification.parentNode) {
+                notification.remove();
+            }
+        }, 5000);
     }
     
     // Online/Offline detection
@@ -483,6 +567,8 @@ if (!in_array($current_page, $public_pages)) {
     <!-- Offline Support Scripts -->
     <script src="assets/js/sw-updater.js"></script>
     <script src="assets/js/offline-forms.js"></script>
+    <script src="assets/js/cache-manager.js"></script>
+    <script src="assets/js/cache-clear.js"></script>
     
     <?php if (isset($additional_head)) echo $additional_head; ?>
 </head>
@@ -519,6 +605,7 @@ if (!in_array($current_page, $public_pages)) {
                         <li><a class="dropdown-item" href="sms-config.php"><i class="fas fa-sms me-2"></i>SMS Config</a></li>
                         <li><a class="dropdown-item" href="users.php"><i class="fas fa-users me-2"></i>Users</a></li>
                         <li><a class="dropdown-item" href="sections.php"><i class="fas fa-layer-group me-2"></i>Sections & Subjects</a></li>
+                        <li><a class="dropdown-item" href="cache-management.php"><i class="fas fa-database me-2"></i>Cache Management</a></li>
                     <?php endif; ?>
                     <?php if (hasRole('teacher')): ?>
                         <li><a class="dropdown-item" href="sections.php"><i class="fas fa-layer-group me-2"></i>Sections & Subjects</a></li>

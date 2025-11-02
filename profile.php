@@ -283,7 +283,13 @@ $preferences = $_SESSION['user_preferences'] ?? [
                 <div class="tab-content" id="profileTabsContent">
                     <!-- Personal Information Tab -->
                     <div class="tab-pane fade show active" id="info" role="tabpanel">
-                        <form method="POST" action="">
+                        <!-- Offline Mode Message -->
+                        <div class="offline-message alert alert-warning" style="display: none;">
+                            <i class="fas fa-wifi-slash me-2"></i>
+                            <strong>Offline Mode:</strong> You can view your profile information, but editing is disabled while offline.
+                        </div>
+                        
+                        <form method="POST" action="" class="online-only">
                             <input type="hidden" name="action" value="update_profile">
                             
                             <div class="row g-3">
@@ -345,9 +351,15 @@ $preferences = $_SESSION['user_preferences'] ?? [
 
                     <!-- Security Tab -->
                     <div class="tab-pane fade" id="security" role="tabpanel">
+                        <!-- Offline Mode Message -->
+                        <div class="offline-message alert alert-warning" style="display: none;">
+                            <i class="fas fa-wifi-slash me-2"></i>
+                            <strong>Offline Mode:</strong> Password changes are not available while offline.
+                        </div>
+                        
                         <div class="row g-3">
                             <div class="col-12 col-lg-8">
-                                <form method="POST" action="">
+                                <form method="POST" action="" class="online-only">
                                     <input type="hidden" name="action" value="change_password">
                                     
                                     <div class="alert alert-info">
@@ -411,7 +423,13 @@ $preferences = $_SESSION['user_preferences'] ?? [
 
                     <!-- Preferences Tab -->
                     <div class="tab-pane fade" id="preferences" role="tabpanel">
-                        <form method="POST" action="">
+                        <!-- Offline Mode Message -->
+                        <div class="offline-message alert alert-warning" style="display: none;">
+                            <i class="fas fa-wifi-slash me-2"></i>
+                            <strong>Offline Mode:</strong> Preference changes are not available while offline.
+                        </div>
+                        
+                        <form method="POST" action="" class="online-only">
                             <input type="hidden" name="action" value="update_preferences">
                             
                             <div class="row g-3">
@@ -830,6 +848,9 @@ function handleOnlineStatusChange() {
 
 // Show offline mode UI
 function showOfflineMode() {
+    // Apply offline mode class to body for consistent styling
+    document.body.classList.add('offline-mode');
+    
     // Show offline indicator if not already present
     if (!document.getElementById('offline-mode-indicator')) {
         const indicator = document.createElement('div');
@@ -850,6 +871,19 @@ function showOfflineMode() {
     const formElements = document.querySelectorAll('form input, form select, form textarea, form button');
     formElements.forEach(el => {
         el.disabled = true;
+    });
+    
+    // Apply offline styling to online-only elements (consistent with other pages)
+    const onlineOnlyElements = document.querySelectorAll('.online-only');
+    onlineOnlyElements.forEach(element => {
+        element.style.opacity = '0.5';
+        element.style.pointerEvents = 'none';
+    });
+    
+    // Show offline messages (consistent with other pages)
+    const offlineMessages = document.querySelectorAll('.offline-message');
+    offlineMessages.forEach(element => {
+        element.style.display = 'block';
     });
     
     // Add offline badge to tab navigation
@@ -874,10 +908,19 @@ function showOfflineMode() {
             form.appendChild(message);
         }
     });
+    
+    // Ensure footer navigation has offline styling
+    const bottomNav = document.querySelector('.bottom-nav');
+    if (bottomNav) {
+        bottomNav.classList.add('offline-nav');
+    }
 }
 
 // Hide offline mode UI
 function hideOfflineMode() {
+    // Remove offline mode class from body
+    document.body.classList.remove('offline-mode');
+    
     // Hide offline indicator
     const offlineIndicator = document.getElementById('offline-mode-indicator');
     if (offlineIndicator) {
@@ -890,6 +933,19 @@ function hideOfflineMode() {
         el.disabled = false;
     });
     
+    // Remove offline styling from online-only elements
+    const onlineOnlyElements = document.querySelectorAll('.online-only');
+    onlineOnlyElements.forEach(element => {
+        element.style.opacity = '';
+        element.style.pointerEvents = '';
+    });
+    
+    // Hide offline messages
+    const offlineMessages = document.querySelectorAll('.offline-message');
+    offlineMessages.forEach(element => {
+        element.style.display = 'none';
+    });
+    
     // Remove offline badges
     const badges = document.querySelectorAll('.badge.bg-warning');
     badges.forEach(badge => {
@@ -898,11 +954,17 @@ function hideOfflineMode() {
         }
     });
     
-    // Remove offline messages
+    // Remove offline messages from forms
     const messages = document.querySelectorAll('.offline-message');
     messages.forEach(message => {
         message.remove();
     });
+    
+    // Remove offline styling from footer navigation
+    const bottomNav = document.querySelector('.bottom-nav');
+    if (bottomNav) {
+        bottomNav.classList.remove('offline-nav');
+    }
 }
 
 // Store profile data in localStorage for offline use
