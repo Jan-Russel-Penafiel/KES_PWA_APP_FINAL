@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once 'qr_helpers.php';
 
 // Check if user is logged in and has permission
 requireRole(['admin', 'teacher']);
@@ -297,22 +298,49 @@ function generateReport($type, $format) {
             
         case 'student_info':
             $student_id = $_GET['student_id'] ?? '';
-            if (!$student_id) return;
             
-            $filename = 'student_info_' . $student_id . '_' . date('Y-m-d');
-            
-            $stmt = $pdo->prepare("
-                SELECT u.*, s.section_name, s.grade_level,
-                       GROUP_CONCAT(CONCAT(p.full_name, ' (', sp.relationship, ')') SEPARATOR ', ') as parents
-                FROM users u 
-                LEFT JOIN sections s ON u.section_id = s.id 
-                LEFT JOIN student_parents sp ON u.id = sp.student_id
-                LEFT JOIN users p ON sp.parent_id = p.id
-                WHERE u.id = ? AND u.role = 'student'
-                GROUP BY u.id
-            ");
-            $stmt->execute([$student_id]);
-            $data = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($student_id) {
+                // Get specific student
+                $filename = 'student_info_' . $student_id . '_' . date('Y-m-d');
+                
+                $stmt = $pdo->prepare("
+                    SELECT u.*, s.section_name, s.grade_level,
+                           GROUP_CONCAT(CONCAT(p.full_name, ' (', sp.relationship, ')') SEPARATOR ', ') as parents
+                    FROM users u 
+                    LEFT JOIN sections s ON u.section_id = s.id 
+                    LEFT JOIN student_parents sp ON u.id = sp.student_id
+                    LEFT JOIN users p ON sp.parent_id = p.id
+                    WHERE u.id = ? AND u.role = 'student'
+                    GROUP BY u.id
+                ");
+                $stmt->execute([$student_id]);
+                $data = $stmt->fetch(PDO::FETCH_ASSOC);
+            } else {
+                // Get all students with their information
+                $filename = 'all_students_info_' . date('Y-m-d');
+                
+                $query = "
+                    SELECT u.*, s.section_name, s.grade_level,
+                           GROUP_CONCAT(CONCAT(p.full_name, ' (', sp.relationship, ')') SEPARATOR ', ') as parents
+                    FROM users u 
+                    LEFT JOIN sections s ON u.section_id = s.id 
+                    LEFT JOIN student_parents sp ON u.id = sp.student_id
+                    LEFT JOIN users p ON sp.parent_id = p.id
+                    WHERE u.role = 'student' AND u.status = 'active'
+                ";
+                $params = [];
+                
+                if ($user_role == 'teacher') {
+                    $query .= " AND u.section_id IN (SELECT id FROM sections WHERE teacher_id = ?)";
+                    $params[] = $current_user['id'];
+                }
+                
+                $query .= " GROUP BY u.id ORDER BY s.grade_level, s.section_name, u.full_name";
+                
+                $stmt = $pdo->prepare($query);
+                $stmt->execute($params);
+                $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
             break;
             
         case 'attendance_records':
@@ -428,10 +456,11 @@ function generateReport($type, $format) {
             
         case 'student_qr':
             $student_id = $_GET['student_id'] ?? '';
-            $filename = 'student_qr_' . date('Y-m-d');
             
             if ($student_id) {
                 // Get specific student
+                $filename = 'student_qr_' . $student_id . '_' . date('Y-m-d');
+                
                 $query = "
                     SELECT u.id, u.full_name, u.username, u.lrn, u.qr_code, s.section_name, s.grade_level
                     FROM users u
@@ -443,6 +472,8 @@ function generateReport($type, $format) {
                 $data = $stmt->fetch(PDO::FETCH_ASSOC);
             } else {
                 // Get all students with QR codes
+                $filename = 'all_students_qr_' . date('Y-m-d');
+                
                 $query = "
                     SELECT u.id, u.full_name, u.username, u.lrn, u.qr_code, s.section_name, s.grade_level
                     FROM users u
@@ -646,12 +677,50 @@ function outputCSV($data, $filename) {
     $output = fopen('php://output', 'w');
     
     if (!empty($data)) {
-        // Write headers
-        fputcsv($output, array_keys($data[0]));
+        // Check if data is a nested structure (for complex reports)
+        if (isset($data['section']) || isset($data['student']) || isset($data['attendance'])) {
+            // Handle complex report structures
+            if (isset($data['attendance']) && is_array($data['attendance'])) {
+                // Use the attendance data as the main data for CSV
+                $csvData = $data['attendance'];
+            } elseif (isset($data['students']) && is_array($data['students'])) {
+                // Use the students data as the main data for CSV
+                $csvData = $data['students'];
+            } else {
+                // Flatten the complex structure
+                $csvData = [];
+                foreach ($data as $key => $value) {
+                    if (is_array($value) && !empty($value)) {
+                        $csvData = $value;
+                        break;
+                    }
+                }
+            }
+        } else {
+            $csvData = $data;
+        }
         
-        // Write data
-        foreach ($data as $row) {
-            fputcsv($output, $row);
+        if (!empty($csvData) && is_array($csvData)) {
+            // Write headers
+            fputcsv($output, array_keys($csvData[0]));
+            
+            // Write data
+            foreach ($csvData as $row) {
+                // Convert any arrays or objects to strings
+                $cleanRow = array();
+                foreach ($row as $value) {
+                    if (is_array($value)) {
+                        $cleanRow[] = implode(', ', $value);
+                    } elseif (is_object($value)) {
+                        $cleanRow[] = (string) $value;
+                    } elseif (is_null($value)) {
+                        $cleanRow[] = '';
+                    } else {
+                        $cleanRow[] = $value;
+                    }
+                }
+                fputcsv($output, $cleanRow);
+            }
         }
     }
     
@@ -721,28 +790,59 @@ function outputHTML($data, $filename, $type) {
             
         case 'student_info':
             if (!empty($data)) {
-                echo "<div class='student-card'>";
-                echo "<h2>" . htmlspecialchars($data['full_name']) . "</h2>";
-                
-                echo "<div class='student-info'>";
-                echo "<div><span class='student-label'>Username:</span> " . htmlspecialchars($data['username']) . "</div>";
-                echo "<div><span class='student-label'>LRN:</span> " . htmlspecialchars($data['lrn'] ?? 'Not set') . "</div>";
-                echo "<div><span class='student-label'>Email:</span> " . htmlspecialchars($data['email'] ?? 'Not set') . "</div>";
-                echo "<div><span class='student-label'>Phone:</span> " . htmlspecialchars($data['phone'] ?? 'Not set') . "</div>";
-                echo "<div><span class='student-label'>Section:</span> " . htmlspecialchars($data['section_name'] ?? 'Not assigned') . "</div>";
-                echo "<div><span class='student-label'>Grade Level:</span> " . htmlspecialchars($data['grade_level'] ?? 'Not assigned') . "</div>";
-                echo "<div><span class='student-label'>Status:</span> " . htmlspecialchars($data['status']) . "</div>";
-                echo "<div><span class='student-label'>Parents/Guardians:</span> " . htmlspecialchars($data['parents'] ?? 'None registered') . "</div>";
-                echo "</div>";
-                
-                if (!empty($data['qr_code'])) {
-                    echo "<div class='qr-code'>";
-                    echo "<h3>Student QR Code</h3>";
-                    echo "<img src='" . htmlspecialchars($data['qr_code']) . "' alt='QR Code' style='max-width:200px;'>";
+                // Check if data is a single student (associative array) or multiple students (indexed array)
+                if (isset($data['id'])) {
+                    // Single student
+                    echo "<div class='student-card'>";
+                    echo "<h2>" . htmlspecialchars($data['full_name']) . "</h2>";
+                    
+                    echo "<div class='student-info'>";
+                    echo "<div><span class='student-label'>Username:</span> " . htmlspecialchars($data['username']) . "</div>";
+                    echo "<div><span class='student-label'>LRN:</span> " . htmlspecialchars($data['lrn'] ?? 'Not set') . "</div>";
+                    echo "<div><span class='student-label'>Email:</span> " . htmlspecialchars($data['email'] ?? 'Not set') . "</div>";
+                    echo "<div><span class='student-label'>Phone:</span> " . htmlspecialchars($data['phone'] ?? 'Not set') . "</div>";
+                    echo "<div><span class='student-label'>Section:</span> " . htmlspecialchars($data['section_name'] ?? 'Not assigned') . "</div>";
+                    echo "<div><span class='student-label'>Grade Level:</span> " . htmlspecialchars($data['grade_level'] ?? 'Not assigned') . "</div>";
+                    echo "<div><span class='student-label'>Status:</span> " . htmlspecialchars($data['status']) . "</div>";
+                    echo "<div><span class='student-label'>Parents/Guardians:</span> " . htmlspecialchars($data['parents'] ?? 'None registered') . "</div>";
                     echo "</div>";
+                    
+                    if (!empty($data['qr_code'])) {
+                        echo "<div class='qr-code'>";
+                        echo "<h3>Student QR Code</h3>";
+                        echo "<img src='" . htmlspecialchars($data['qr_code']) . "' alt='QR Code' style='max-width:200px;'>";
+                        echo "</div>";
+                    }
+                    
+                    echo "</div>";
+                } else {
+                    // Multiple students
+                    echo "<h2>All Students Information</h2>";
+                    foreach ($data as $student) {
+                        echo "<div class='student-card'>";
+                        echo "<h3>" . htmlspecialchars($student['full_name']) . " (ID: " . htmlspecialchars($student['id']) . ")</h3>";
+                        
+                        echo "<div class='student-info'>";
+                        echo "<div><span class='student-label'>Username:</span> " . htmlspecialchars($student['username']) . "</div>";
+                        echo "<div><span class='student-label'>LRN:</span> " . htmlspecialchars($student['lrn'] ?? 'Not set') . "</div>";
+                        echo "<div><span class='student-label'>Email:</span> " . htmlspecialchars($student['email'] ?? 'Not set') . "</div>";
+                        echo "<div><span class='student-label'>Phone:</span> " . htmlspecialchars($student['phone'] ?? 'Not set') . "</div>";
+                        echo "<div><span class='student-label'>Section:</span> " . htmlspecialchars($student['section_name'] ?? 'Not assigned') . "</div>";
+                        echo "<div><span class='student-label'>Grade Level:</span> " . htmlspecialchars($student['grade_level'] ?? 'Not assigned') . "</div>";
+                        echo "<div><span class='student-label'>Status:</span> " . htmlspecialchars($student['status']) . "</div>";
+                        echo "<div><span class='student-label'>Parents/Guardians:</span> " . htmlspecialchars($student['parents'] ?? 'None registered') . "</div>";
+                        echo "</div>";
+                        
+                        if (!empty($student['qr_code'])) {
+                            echo "<div class='qr-code'>";
+                            echo "<h4>Student QR Code</h4>";
+                            echo "<img src='" . htmlspecialchars($student['qr_code']) . "' alt='QR Code' style='max-width:150px;'>";
+                            echo "</div>";
+                        }
+                        
+                        echo "</div>";
+                    }
                 }
-                
-                echo "</div>";
             } else {
                 echo "<p>No student data found.</p>";
             }
@@ -1143,9 +1243,466 @@ function outputHTML($data, $filename, $type) {
 }
 
 function outputPDF($data, $filename, $type) {
-    // For PDF generation, you would typically use a library like TCPDF or FPDF
-    // For now, we'll output HTML with print styles
-    outputHTML($data, $filename, $type);
+    // Include TCPDF library
+    require_once 'vendor/autoload.php';
+    
+    try {
+        // Create new PDF document
+        $pdf = new TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
+        
+        // Set document information
+        $pdf->SetCreator('KES Smart Attendance System');
+        $pdf->SetAuthor('KES');
+        $pdf->SetTitle(ucwords(str_replace('_', ' ', $type)));
+        $pdf->SetSubject('Report Generated on ' . date('Y-m-d H:i:s'));
+        
+        // Set default header and footer fonts
+        $pdf->setHeaderFont(Array(PDF_FONT_NAME_MAIN, '', PDF_FONT_SIZE_MAIN));
+        $pdf->setFooterFont(Array(PDF_FONT_NAME_DATA, '', PDF_FONT_SIZE_DATA));
+        
+        // Set default monospaced font
+        $pdf->SetDefaultMonospacedFont(PDF_FONT_MONOSPACED);
+        
+        // Set margins
+        $pdf->SetMargins(PDF_MARGIN_LEFT, PDF_MARGIN_TOP, PDF_MARGIN_RIGHT);
+        $pdf->SetHeaderMargin(PDF_MARGIN_HEADER);
+        $pdf->SetFooterMargin(PDF_MARGIN_FOOTER);
+        
+        // Set auto page breaks
+        $pdf->SetAutoPageBreak(TRUE, PDF_MARGIN_BOTTOM);
+        
+        // Set image scale factor
+        $pdf->setImageScale(PDF_IMAGE_SCALE_RATIO);
+        
+        // Enable external URLs for images
+        $pdf->SetAlpha(1);
+        
+        // Add a page
+        $pdf->AddPage();
+        
+        // Set font
+        $pdf->SetFont('helvetica', '', 10);
+        
+        // Generate PDF content
+        $html = generatePDFContent($data, $filename, $type);
+        
+        // Print text using writeHTML
+        $pdf->writeHTML($html, true, false, true, false, '');
+        
+        // Set headers for PDF download
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . $filename . '.pdf"');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        
+        // Close and output PDF document
+        $pdf->Output($filename . '.pdf', 'D'); // 'D' for download
+        
+    } catch (Exception $e) {
+        // Log error and provide fallback
+        error_log("PDF Generation Error: " . $e->getMessage());
+        
+        // Return a simple error PDF
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="error.pdf"');
+        
+        $error_pdf = new TCPDF();
+        $error_pdf->AddPage();
+        $error_pdf->SetFont('helvetica', '', 12);
+        $error_pdf->writeHTML('<h1>PDF Generation Error</h1><p>There was an error generating the PDF. Please try again or contact the administrator.</p><p>Error: ' . htmlspecialchars($e->getMessage()) . '</p>');
+        $error_pdf->Output('error.pdf', 'D');
+    }
+    
+    exit;
+}
+
+function generatePDFContent($data, $filename, $type) {
+    $html = '<h1 style="color: #2c3e50; text-align: center; border-bottom: 2px solid #3498db; padding-bottom: 10px;">' . 
+            ucwords(str_replace('_', ' ', $type)) . '</h1>';
+    $html .= '<p style="text-align: center; color: #7f8c8d; margin-bottom: 20px;"><strong>Generated on:</strong> ' . 
+             date('Y-m-d H:i:s') . '</p>';
+    
+    switch($type) {
+        case 'students_list':
+            if (!empty($data)) {
+                $html .= '<table border="1" cellpadding="5" cellspacing="0" style="width: 100%; border-collapse: collapse;">';
+                $html .= '<thead>';
+                $html .= '<tr style="background-color: #3498db; color: white;">';
+                $html .= '<th style="font-weight: bold; text-align: center;">ID</th>';
+                $html .= '<th style="font-weight: bold; text-align: center;">Name</th>';
+                $html .= '<th style="font-weight: bold; text-align: center;">Username</th>';
+                $html .= '<th style="font-weight: bold; text-align: center;">Email</th>';
+                $html .= '<th style="font-weight: bold; text-align: center;">Section</th>';
+                $html .= '<th style="font-weight: bold; text-align: center;">Grade Level</th>';
+                $html .= '<th style="font-weight: bold; text-align: center;">Status</th>';
+                $html .= '</tr>';
+                $html .= '</thead>';
+                $html .= '<tbody>';
+                
+                foreach ($data as $row) {
+                    $html .= '<tr>';
+                    $html .= '<td style="text-align: center;">' . htmlspecialchars($row['id']) . '</td>';
+                    $html .= '<td>' . htmlspecialchars($row['full_name']) . '</td>';
+                    $html .= '<td>' . htmlspecialchars($row['username']) . '</td>';
+                    $html .= '<td>' . htmlspecialchars($row['email'] ?? 'N/A') . '</td>';
+                    $html .= '<td>' . htmlspecialchars($row['section_name'] ?? 'N/A') . '</td>';
+                    $html .= '<td style="text-align: center;">' . htmlspecialchars($row['grade_level'] ?? 'N/A') . '</td>';
+                    $html .= '<td style="text-align: center;"><strong>' . htmlspecialchars($row['status']) . '</strong></td>';
+                    $html .= '</tr>';
+                }
+                $html .= '</tbody>';
+                $html .= '</table>';
+                
+                // Add summary
+                $total = count($data);
+                $html .= '<div style="margin-top: 20px; padding: 10px; background-color: #ecf0f1; border-radius: 5px;">';
+                $html .= '<h3 style="color: #2c3e50;">Summary</h3>';
+                $html .= '<p><strong>Total Students:</strong> ' . $total . '</p>';
+                $html .= '</div>';
+            } else {
+                $html .= '<p style="text-align: center; color: #e74c3c;">No students found.</p>';
+            }
+            break;
+            
+        case 'student_info':
+            if (!empty($data)) {
+                // Check if data is a single student (associative array) or multiple students (indexed array)
+                if (isset($data['id'])) {
+                    // Single student
+                    $html .= '<div style="border: 1px solid #bdc3c7; padding: 20px; border-radius: 5px; background-color: #f8f9fa;">';
+                    $html .= '<h2 style="color: #2c3e50; border-bottom: 1px solid #bdc3c7; padding-bottom: 10px;">Student Information</h2>';
+                    $html .= '<table style="width: 100%; margin-top: 15px;">';
+                    $html .= '<tr><td style="width: 30%; font-weight: bold;">Name:</td><td>' . htmlspecialchars($data['full_name']) . '</td></tr>';
+                    $html .= '<tr><td style="width: 30%; font-weight: bold;">Username:</td><td>' . htmlspecialchars($data['username']) . '</td></tr>';
+                    $html .= '<tr><td style="width: 30%; font-weight: bold;">Email:</td><td>' . htmlspecialchars($data['email'] ?? 'N/A') . '</td></tr>';
+                    $html .= '<tr><td style="width: 30%; font-weight: bold;">Section:</td><td>' . htmlspecialchars($data['section_name'] ?? 'N/A') . '</td></tr>';
+                    $html .= '<tr><td style="width: 30%; font-weight: bold;">Grade Level:</td><td>' . htmlspecialchars($data['grade_level'] ?? 'N/A') . '</td></tr>';
+                    $html .= '<tr><td style="width: 30%; font-weight: bold;">Status:</td><td><strong>' . htmlspecialchars($data['status']) . '</strong></td></tr>';
+                    if (!empty($data['parents'])) {
+                        $html .= '<tr><td style="width: 30%; font-weight: bold;">Parents/Guardians:</td><td>' . htmlspecialchars($data['parents']) . '</td></tr>';
+                    }
+                    $html .= '</table>';
+                    $html .= '</div>';
+                } else {
+                    // Multiple students
+                    $html .= '<h2 style="color: #2c3e50; margin-bottom: 20px;">All Students Information</h2>';
+                    $html .= '<table border="1" cellpadding="5" cellspacing="0" style="width: 100%; border-collapse: collapse;">';
+                    $html .= '<thead>';
+                    $html .= '<tr style="background-color: #3498db; color: white;">';
+                    $html .= '<th style="font-weight: bold; text-align: center;">ID</th>';
+                    $html .= '<th style="font-weight: bold; text-align: center;">Name</th>';
+                    $html .= '<th style="font-weight: bold; text-align: center;">Username</th>';
+                    $html .= '<th style="font-weight: bold; text-align: center;">Email</th>';
+                    $html .= '<th style="font-weight: bold; text-align: center;">Section</th>';
+                    $html .= '<th style="font-weight: bold; text-align: center;">Grade Level</th>';
+                    $html .= '<th style="font-weight: bold; text-align: center;">Status</th>';
+                    $html .= '<th style="font-weight: bold; text-align: center;">Parents</th>';
+                    $html .= '</tr>';
+                    $html .= '</thead>';
+                    $html .= '<tbody>';
+                    
+                    foreach ($data as $student) {
+                        $html .= '<tr>';
+                        $html .= '<td style="text-align: center;">' . htmlspecialchars($student['id']) . '</td>';
+                        $html .= '<td>' . htmlspecialchars($student['full_name']) . '</td>';
+                        $html .= '<td>' . htmlspecialchars($student['username']) . '</td>';
+                        $html .= '<td>' . htmlspecialchars($student['email'] ?? 'N/A') . '</td>';
+                        $html .= '<td>' . htmlspecialchars($student['section_name'] ?? 'N/A') . '</td>';
+                        $html .= '<td style="text-align: center;">' . htmlspecialchars($student['grade_level'] ?? 'N/A') . '</td>';
+                        $html .= '<td style="text-align: center;"><strong>' . htmlspecialchars($student['status']) . '</strong></td>';
+                        $html .= '<td>' . htmlspecialchars($student['parents'] ?? 'None') . '</td>';
+                        $html .= '</tr>';
+                    }
+                    $html .= '</tbody>';
+                    $html .= '</table>';
+                    
+                    // Add summary
+                    $total = count($data);
+                    $html .= '<div style="margin-top: 20px; padding: 10px; background-color: #ecf0f1; border-radius: 5px;">';
+                    $html .= '<h3 style="color: #2c3e50;">Summary</h3>';
+                    $html .= '<p><strong>Total Students:</strong> ' . $total . '</p>';
+                    $html .= '</div>';
+                }
+            } else {
+                $html .= '<p style="text-align: center; color: #e74c3c;">Student not found.</p>';
+            }
+            break;
+            
+        case 'attendance_records':
+            if (!empty($data)) {
+                $html .= '<table border="1" cellpadding="5" cellspacing="0" style="width: 100%; border-collapse: collapse;">';
+                $html .= '<thead>';
+                $html .= '<tr style="background-color: #3498db; color: white;">';
+                $html .= '<th style="font-weight: bold; text-align: center;">Date</th>';
+                $html .= '<th style="font-weight: bold; text-align: center;">Student</th>';
+                $html .= '<th style="font-weight: bold; text-align: center;">Section</th>';
+                $html .= '<th style="font-weight: bold; text-align: center;">Status</th>';
+                $html .= '<th style="font-weight: bold; text-align: center;">Time In</th>';
+                $html .= '<th style="font-weight: bold; text-align: center;">Time Out</th>';
+                $html .= '<th style="font-weight: bold; text-align: center;">Teacher</th>';
+                $html .= '</tr>';
+                $html .= '</thead>';
+                $html .= '<tbody>';
+                
+                $statusCounts = ['Present' => 0, 'Absent' => 0, 'Late' => 0];
+                
+                foreach ($data as $row) {
+                    $statusColor = '';
+                    switch(strtolower($row['status'])) {
+                        case 'present': $statusColor = 'color: #27ae60;'; $statusCounts['Present']++; break;
+                        case 'absent': $statusColor = 'color: #e74c3c;'; $statusCounts['Absent']++; break;
+                        case 'late': $statusColor = 'color: #f39c12;'; $statusCounts['Late']++; break;
+                    }
+                    
+                    $html .= '<tr>';
+                    $html .= '<td style="text-align: center;">' . htmlspecialchars($row['attendance_date']) . '</td>';
+                    $html .= '<td>' . htmlspecialchars($row['student_name']) . '</td>';
+                    $html .= '<td>' . htmlspecialchars($row['section_name']) . '</td>';
+                    $html .= '<td style="text-align: center; font-weight: bold; ' . $statusColor . '">' . htmlspecialchars($row['status']) . '</td>';
+                    $html .= '<td style="text-align: center;">' . htmlspecialchars($row['time_in'] ?? 'N/A') . '</td>';
+                    $html .= '<td style="text-align: center;">' . htmlspecialchars($row['time_out'] ?? 'N/A') . '</td>';
+                    $html .= '<td>' . htmlspecialchars($row['teacher_name']) . '</td>';
+                    $html .= '</tr>';
+                }
+                $html .= '</tbody>';
+                $html .= '</table>';
+                
+                // Add summary
+                $total = count($data);
+                $html .= '<div style="margin-top: 20px; padding: 15px; background-color: #ecf0f1; border-radius: 5px;">';
+                $html .= '<h3 style="color: #2c3e50;">Attendance Summary</h3>';
+                $html .= '<p><strong>Total Records:</strong> ' . $total . '</p>';
+                $html .= '<p><strong>Present:</strong> ' . $statusCounts['Present'] . ' | ';
+                $html .= '<strong>Absent:</strong> ' . $statusCounts['Absent'] . ' | ';
+                $html .= '<strong>Late:</strong> ' . $statusCounts['Late'] . '</p>';
+                if ($total > 0) {
+                    $attendanceRate = round(($statusCounts['Present'] / $total) * 100, 1);
+                    $html .= '<p><strong>Attendance Rate:</strong> ' . $attendanceRate . '%</p>';
+                }
+                $html .= '</div>';
+            } else {
+                $html .= '<p style="text-align: center; color: #e74c3c;">No attendance records found.</p>';
+            }
+            break;
+            
+        case 'students_per_section':
+            if (!empty($data)) {
+                if (isset($data['section'])) {
+                    // Single section
+                    $section = $data['section'];
+                    $students = $data['students'];
+                    
+                    $html .= '<div style="border: 1px solid #bdc3c7; padding: 20px; border-radius: 5px; margin-bottom: 20px; background-color: #f8f9fa;">';
+                    $html .= '<h2 style="color: #2c3e50;">' . htmlspecialchars($section['section_name']) . '</h2>';
+                    $html .= '<p><strong>Grade Level:</strong> ' . htmlspecialchars($section['grade_level']) . '</p>';
+                    $html .= '<p><strong>Teacher:</strong> ' . htmlspecialchars($section['teacher_name'] ?? 'N/A') . '</p>';
+                    $html .= '<p><strong>Total Students:</strong> ' . count($students) . '</p>';
+                    $html .= '</div>';
+                    
+                    if (!empty($students)) {
+                        $html .= '<table border="1" cellpadding="5" cellspacing="0" style="width: 100%; border-collapse: collapse;">';
+                        $html .= '<thead>';
+                        $html .= '<tr style="background-color: #3498db; color: white;">';
+                        $html .= '<th>Name</th><th>Username</th><th>LRN</th><th>Status</th>';
+                        $html .= '</tr>';
+                        $html .= '</thead>';
+                        $html .= '<tbody>';
+                        
+                        foreach ($students as $student) {
+                            $html .= '<tr>';
+                            $html .= '<td>' . htmlspecialchars($student['full_name']) . '</td>';
+                            $html .= '<td>' . htmlspecialchars($student['username']) . '</td>';
+                            $html .= '<td>' . htmlspecialchars($student['lrn'] ?? 'N/A') . '</td>';
+                            $html .= '<td style="text-align: center;"><strong>' . htmlspecialchars($student['status']) . '</strong></td>';
+                            $html .= '</tr>';
+                        }
+                        
+                        $html .= '</tbody>';
+                        $html .= '</table>';
+                    }
+                } else {
+                    // Multiple sections
+                    foreach ($data as $section) {
+                        $html .= '<div style="border: 1px solid #bdc3c7; padding: 15px; border-radius: 5px; margin-bottom: 15px; background-color: #f8f9fa;">';
+                        $html .= '<h3 style="color: #2c3e50;">' . htmlspecialchars($section['section_name']) . '</h3>';
+                        $html .= '<p><strong>Grade Level:</strong> ' . htmlspecialchars($section['grade_level']) . ' | ';
+                        $html .= '<strong>Students:</strong> ' . $section['student_count'] . '</p>';
+                        $html .= '</div>';
+                    }
+                }
+            } else {
+                $html .= '<p style="text-align: center; color: #e74c3c;">No sections found.</p>';
+            }
+            break;
+            
+        case 'student_qr':
+            if (!empty($data)) {
+                // Check if data is a single student (associative array) or multiple students (indexed array)
+                if (isset($data['id'])) {
+                    // Single student
+                    $html .= '<div style="border: 2px solid #3498db; padding: 30px; text-align: center; page-break-inside: avoid;">';
+                    
+                    // Header with student name
+                    $html .= '<div style="background-color: #3498db; color: white; padding: 15px; margin-bottom: 20px;">';
+                    $html .= '<h1 style="margin: 0; font-size: 24px;">KES-SMART</h1>';
+                    $html .= '<h2 style="margin: 5px 0 0 0; font-size: 20px;">' . htmlspecialchars($data['full_name']) . '</h2>';
+                    $html .= '</div>';
+                    
+                    // Student information
+                    $html .= '<div style="margin-bottom: 25px; text-align: left; background-color: #ffffff; padding: 20px; border: 1px solid #e9ecef;">';
+                    $html .= '<h3 style="color: #2c3e50; margin-bottom: 15px; text-align: center; font-size: 18px;">Student Information</h3>';
+                    $html .= '<table style="width: 100%; font-size: 14px;">';
+                    $html .= '<tr><td style="width: 35%; font-weight: bold; padding: 8px 0;">Student ID:</td><td style="padding: 8px 0;">' . htmlspecialchars($data['username']) . '</td></tr>';
+                    if (!empty($data['lrn'])) {
+                        $html .= '<tr><td style="width: 35%; font-weight: bold; padding: 8px 0;">LRN:</td><td style="padding: 8px 0;">' . htmlspecialchars($data['lrn']) . '</td></tr>';
+                    }
+                    if (!empty($data['section_name'])) {
+                        $html .= '<tr><td style="width: 35%; font-weight: bold; padding: 8px 0;">Section:</td><td style="padding: 8px 0;">' . htmlspecialchars($data['section_name']) . '</td></tr>';
+                    }
+                    if (!empty($data['grade_level'])) {
+                        $html .= '<tr><td style="width: 35%; font-weight: bold; padding: 8px 0;">Grade Level:</td><td style="padding: 8px 0;">' . htmlspecialchars($data['grade_level']) . '</td></tr>';
+                    }
+                    $html .= '</table>';
+                    $html .= '</div>';
+                    
+                    // QR Code section
+                    if (!empty($data['qr_code'])) {
+                        $qr_data_url = generateQRImageData($data['qr_code'], 300);
+                        $html .= '<div style="margin: 30px 0; padding: 25px; background-color: #ffffff; border: 2px solid #3498db; text-align: center;">';
+                        $html .= '<h3 style="color: #2c3e50; margin-bottom: 20px;">Attendance QR Code</h3>';
+                        
+                        // QR code container with proper sizing
+                        $html .= '<div style="border: 3px solid #007bff; padding: 10px; margin: 0 auto; width: 320px; height: 320px; text-align: center;">';
+                        $html .= '<img src="' . htmlspecialchars($qr_data_url) . '" alt="QR Code" width="300" height="300" style="display: block; margin: 0 auto;">';
+                        $html .= '</div>';
+                        
+                        $html .= '<p style="margin-top: 15px; font-size: 14px; color: #6c757d;">Show this QR code to your teacher for attendance scanning</p>';
+                        
+                        // Add QR data as text for reference
+                        $html .= '<div style="margin-top: 10px; padding: 10px; background-color: #f8f9fa; border: 1px solid #dee2e6;">';
+                        $html .= '<p style="margin: 0; font-size: 12px; color: #6c757d; font-family: monospace; word-break: break-all;">QR Data: ' . htmlspecialchars($data['qr_code']) . '</p>';
+                        $html .= '</div>';
+                        
+                        $html .= '</div>';
+                    } else {
+                        $html .= '<div style="margin: 30px 0; padding: 25px; background-color: #fff3cd; border: 2px solid #ffc107;">';
+                        $html .= '<h3 style="color: #856404; margin-bottom: 10px;">QR Code Not Available</h3>';
+                        $html .= '<p style="color: #856404; font-size: 14px; margin: 0;">Please contact your administrator to generate a QR code.</p>';
+                        $html .= '</div>';
+                    }
+                    
+                    // Footer with generation info
+                    $html .= '<div style="margin-top: 30px; padding: 15px; background-color: #e9ecef; font-size: 12px; color: #6c757d; text-align: center;">';
+                    $html .= '<p style="margin: 0;">Generated on: ' . date('F j, Y \a\t g:i A') . '</p>';
+                    $html .= '<p style="margin: 5px 0 0 0;">KES-SMART Attendance System</p>';
+                    $html .= '</div>';
+                    
+                    $html .= '</div>';
+                } else {
+                    // Multiple students
+                    $html .= '<div style="text-align: center; margin-bottom: 30px; padding: 20px; background-color: #3498db; color: white;">';
+                    $html .= '<h1 style="margin: 0 0 10px 0; font-size: 28px;">Student QR Codes</h1>';
+                    $html .= '<p style="margin: 0; font-size: 16px;">KES-SMART Attendance System</p>';
+                    $html .= '</div>';
+                    
+                    $student_count = 0;
+                    foreach ($data as $student) {
+                        $student_count++;
+                        
+                        // Add page break after every 2 students
+                        if ($student_count > 1 && ($student_count - 1) % 2 === 0) {
+                            $html .= '<div style="page-break-before: always;"></div>';
+                        }
+                        
+                        $html .= '<div style="border: 2px solid #3498db; padding: 20px; margin-bottom: 30px; page-break-inside: avoid;">';
+                        
+                        // Student header
+                        $html .= '<div style="background-color: #3498db; color: white; padding: 10px; margin-bottom: 15px; text-align: center;">';
+                        $html .= '<h3 style="margin: 0; font-size: 18px;">' . htmlspecialchars($student['full_name']) . '</h3>';
+                        $html .= '</div>';
+                        
+                        // Content layout - simple table
+                        $html .= '<table style="width: 100%; border-collapse: collapse;">';
+                        $html .= '<tr>';
+                        
+                        // Student information column
+                        $html .= '<td style="width: 50%; vertical-align: top; padding-right: 10px;">';
+                        $html .= '<div style="background-color: #ffffff; padding: 15px; border: 1px solid #e9ecef;">';
+                        $html .= '<h4 style="color: #3498db; margin-bottom: 10px; font-size: 14px;">Student Details</h4>';
+                        $html .= '<p style="margin: 5px 0; font-size: 12px;"><strong>ID:</strong> ' . htmlspecialchars($student['username']) . '</p>';
+                        if (!empty($student['lrn'])) {
+                            $html .= '<p style="margin: 5px 0; font-size: 12px;"><strong>LRN:</strong> ' . htmlspecialchars($student['lrn']) . '</p>';
+                        }
+                        if (!empty($student['section_name'])) {
+                            $html .= '<p style="margin: 5px 0; font-size: 12px;"><strong>Section:</strong> ' . htmlspecialchars($student['section_name']) . '</p>';
+                        }
+                        if (!empty($student['grade_level'])) {
+                            $html .= '<p style="margin: 5px 0; font-size: 12px;"><strong>Grade:</strong> ' . htmlspecialchars($student['grade_level']) . '</p>';
+                        }
+                        $html .= '</div>';
+                        $html .= '</td>';
+                        
+                        // QR Code column
+                        $html .= '<td style="width: 50%; vertical-align: top; text-align: center;">';
+                        $html .= '<div style="background-color: #ffffff; padding: 15px; border: 1px solid #e9ecef;">';
+                        if (!empty($student['qr_code'])) {
+                            $qr_data_url = generateQRImageData($student['qr_code'], 150);
+                            $html .= '<h4 style="color: #3498db; margin-bottom: 10px; font-size: 14px;">QR Code</h4>';
+                            $html .= '<div style="border: 2px solid #007bff; padding: 5px; text-align: center; min-height: 160px;">';
+                            
+                            // Display the locally generated QR code
+                            $html .= '<img src="' . htmlspecialchars($qr_data_url) . '" alt="QR Code" width="150" height="150" style="display: block; margin: 0 auto;">';
+                            
+                            // Add QR data as text fallback
+                            $html .= '<div style="margin-top: 5px; font-size: 8px; color: #666; word-break: break-all; font-family: monospace;">';
+                            $html .= 'QR: ' . htmlspecialchars(substr($student['qr_code'], 0, 30)) . (strlen($student['qr_code']) > 30 ? '...' : '');
+                            $html .= '</div>';
+                            
+                            $html .= '</div>';
+                            $html .= '<p style="margin: 8px 0 0 0; font-size: 10px; color: #6c757d; text-align: center;">Scan for attendance</p>';
+                        } else {
+                            $html .= '<h4 style="color: #856404; margin-bottom: 8px; font-size: 14px;">QR Code</h4>';
+                            $html .= '<p style="color: #856404; font-size: 12px; margin: 0;">Not Available</p>';
+                        }
+                        $html .= '</div>';
+                        $html .= '</td>';
+                        
+                        $html .= '</tr>';
+                        $html .= '</table>';
+                        
+                        $html .= '</div>';
+                    }
+                    
+                    // Summary section
+                    $total_students = count($data);
+                    $students_with_qr = count(array_filter($data, function($s) { return !empty($s['qr_code']); }));
+                    
+                    $html .= '<div style="margin-top: 30px; padding: 20px; background-color: #e7f3ff; border: 2px solid #3498db; page-break-inside: avoid;">';
+                    $html .= '<h3 style="color: #2c3e50; margin-bottom: 15px; text-align: center;">Summary Report</h3>';
+                    $html .= '<div style="text-align: center; font-size: 14px;">';
+                    $html .= '<p style="margin: 8px 0;"><strong>Total Students:</strong> ' . $total_students . '</p>';
+                    $html .= '<p style="margin: 8px 0;"><strong>Students with QR Codes:</strong> ' . $students_with_qr . '</p>';
+                    if ($students_with_qr < $total_students) {
+                        $html .= '<p style="margin: 8px 0;"><strong>Students without QR Codes:</strong> ' . ($total_students - $students_with_qr) . '</p>';
+                    }
+                    $html .= '<p style="margin: 15px 0 0 0; font-size: 12px; color: #6c757d;">Generated: ' . date('F j, Y \a\t g:i A') . '</p>';
+                    $html .= '</div>';
+                    $html .= '</div>';
+                }
+            } else {
+                $html .= '<div style="text-align: center; padding: 30px; background-color: #f8d7da; border: 2px solid #dc3545;">';
+                $html .= '<h3 style="color: #721c24; margin-bottom: 10px;">No Data Available</h3>';
+                $html .= '<p style="color: #721c24; font-size: 14px; margin: 0;">No student data found for QR code generation.</p>';
+                $html .= '</div>';
+            }
+            break;
+            
+        default:
+            $html .= '<p style="text-align: center; color: #e74c3c;">PDF generation not implemented for this report type yet.</p>';
+    }
+    
+    return $html;
 }
 ?>
 
@@ -1386,8 +1943,8 @@ function outputPDF($data, $filename, $type) {
                                     <a href="?generate=1&type=students_list&format=html" class="btn btn-sm btn-outline-primary" target="_blank">
                                         <i class="fas fa-eye me-1"></i>View
                                     </a>
-                                    <a href="?generate=1&type=students_list&format=csv" class="btn btn-sm btn-primary">
-                                        <i class="fas fa-download me-1"></i>Download CSV
+                                    <a href="?generate=1&type=students_list&format=pdf" class="btn btn-sm btn-primary">
+                                        <i class="fas fa-file-pdf me-1"></i>Download PDF
                                     </a>
                                 </div>
                             </div>
@@ -1404,8 +1961,8 @@ function outputPDF($data, $filename, $type) {
                                     <a href="?generate=1&type=attendance_records&format=html&date_from=<?php echo date('Y-m-01'); ?>&date_to=<?php echo date('Y-m-t'); ?>" class="btn btn-sm btn-outline-success" target="_blank">
                                         <i class="fas fa-eye me-1"></i>View
                                     </a>
-                                    <a href="?generate=1&type=attendance_records&format=csv&date_from=<?php echo date('Y-m-01'); ?>&date_to=<?php echo date('Y-m-t'); ?>" class="btn btn-sm btn-success">
-                                        <i class="fas fa-download me-1"></i>Download CSV
+                                    <a href="?generate=1&type=attendance_records&format=pdf&date_from=<?php echo date('Y-m-01'); ?>&date_to=<?php echo date('Y-m-t'); ?>" class="btn btn-sm btn-success">
+                                        <i class="fas fa-file-pdf me-1"></i>Download PDF
                                     </a>
                                 </div>
                             </div>
@@ -1422,8 +1979,8 @@ function outputPDF($data, $filename, $type) {
                                     <a href="?generate=1&type=attendance_records&format=html&date_from=<?php echo date('Y-m-d'); ?>&date_to=<?php echo date('Y-m-d'); ?>" class="btn btn-sm btn-outline-info" target="_blank">
                                         <i class="fas fa-eye me-1"></i>View
                                     </a>
-                                    <a href="?generate=1&type=attendance_records&format=csv&date_from=<?php echo date('Y-m-d'); ?>&date_to=<?php echo date('Y-m-d'); ?>" class="btn btn-sm btn-info">
-                                        <i class="fas fa-download me-1"></i>Download CSV
+                                    <a href="?generate=1&type=attendance_records&format=pdf&date_from=<?php echo date('Y-m-d'); ?>&date_to=<?php echo date('Y-m-d'); ?>" class="btn btn-sm btn-info">
+                                        <i class="fas fa-file-pdf me-1"></i>Download PDF
                                     </a>
                                 </div>
                             </div>
@@ -3045,7 +3602,7 @@ function outputPDF($data, $filename, $type) {
                     
                     <!-- Student selection -->
                     <div class="mb-3" id="studentSelection" style="display: none;">
-                        <label for="studentId" class="form-label">Student</label>
+                        <label for="studentId" class="form-label">Student <small class="text-muted">(Optional)</small></label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="fas fa-user-graduate"></i></span>
                             <select class="form-select select2" id="studentId" name="student_id">
@@ -3057,6 +3614,7 @@ function outputPDF($data, $filename, $type) {
                                 <?php endforeach; ?>
                             </select>
                         </div>
+                        <div class="form-text">Leave empty to generate report for all students</div>
                     </div>
                     
                     <!-- Section selection -->
@@ -3189,8 +3747,8 @@ function showReportModal(type) {
         case 'student_info':
         case 'student_qr':
             studentSelection.style.display = 'block';
-            // Make student selection required
-            document.getElementById('studentId').required = true;
+            // Make student selection optional (can generate for all students)
+            document.getElementById('studentId').required = false;
             break;
         case 'attendance_records':
         case 'attendance_summary':
@@ -3218,12 +3776,9 @@ function generateReport() {
     const form = document.getElementById('reportForm');
     const formData = new FormData(form);
     
-    // Validate required fields
+    // Validate required fields - student selection is now optional for most reports
     const reportType = formData.get('type');
-    if ((reportType === 'student_info' || reportType === 'student_qr') && !formData.get('student_id')) {
-        alert('Please select a student for this report.');
-        return;
-    }
+    // Removed validation as all reports can now work with all students when no specific student is selected
     
     // Build URL
     const params = new URLSearchParams(formData);
@@ -3231,10 +3786,17 @@ function generateReport() {
     
     const url = 'reports.php?' + params.toString();
     
-    // Open in new tab for HTML, download for others
-    if (formData.get('format') === 'html') {
+    // Show loading indicator for PDF/CSV downloads on mobile
+    if (formData.get('format') !== 'html' || isMobileDevice()) {
+        showDownloadFeedback(formData.get('format'));
+    }
+    
+    // Handle different formats based on device type
+    if (formData.get('format') === 'html' && !isMobileDevice()) {
+        // Desktop HTML - open in new tab
         window.open(url, '_blank');
     } else {
+        // Mobile devices or download formats (CSV, PDF) - force download
         window.location.href = url;
     }
     
@@ -3250,6 +3812,53 @@ document.getElementById('reportModal').addEventListener('shown.bs.modal', functi
         dropdownParent: $('#reportModal')
     });
 });
+
+// Function to detect mobile devices
+function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+// Function to show download feedback
+function showDownloadFeedback(format) {
+    const formatName = format.toUpperCase();
+    
+    // Create a temporary toast notification
+    const toast = document.createElement('div');
+    toast.className = 'toast align-items-center text-white bg-primary border-0';
+    toast.style.position = 'fixed';
+    toast.style.top = '20px';
+    toast.style.right = '20px';
+    toast.style.zIndex = '9999';
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-download me-2"></i>
+                Preparing ${formatName} download...
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Initialize and show the toast
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        bsToast.hide();
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 500);
+    }, 3000);
+}
 
 // Quick date range buttons
 function setQuickRange(range) {
@@ -3744,8 +4353,16 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const url = 'reports.php?' + queryParams.toString();
         
-        // Open PDF in new tab
-        window.open(url, '_blank');
+        // Show feedback for PDF download
+        showDownloadFeedback('pdf');
+        
+        // For mobile devices or PDF format, use location.href for automatic download
+        if (isMobileDevice() || format === 'pdf') {
+            window.location.href = url;
+        } else {
+            // For desktop HTML, use new tab
+            window.open(url, '_blank');
+        }
     }
 });
 </script>

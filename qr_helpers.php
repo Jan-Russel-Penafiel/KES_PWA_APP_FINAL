@@ -268,6 +268,35 @@ function generateQRImageURL($qr_data, $size = 250) {
 }
 
 /**
+ * Generate QR code as base64 data URL for PDF embedding
+ * @param string $qr_data QR code data
+ * @param int $size Image size in pixels
+ * @return string Base64 data URL
+ */
+function generateQRImageData($qr_data, $size = 250) {
+    try {
+        require_once 'vendor/autoload.php';
+        
+        // Create QR code using Endroid library
+        $qrCode = new \Endroid\QrCode\QrCode($qr_data);
+        $qrCode->setSize($size);
+        $qrCode->setMargin(10);
+        
+        // Generate PNG
+        $writer = new \Endroid\QrCode\Writer\PngWriter();
+        $result = $writer->write($qrCode);
+        
+        // Convert to base64 data URL
+        $base64 = base64_encode($result->getString());
+        return 'data:image/png;base64,' . $base64;
+        
+    } catch (Exception $e) {
+        // Fallback to external URL if local generation fails
+        return generateQRImageURL($qr_data, $size);
+    }
+}
+
+/**
  * Get QR scanner statistics for teacher dashboard
  * @param PDO $pdo Database connection
  * @param int $teacher_id Teacher ID

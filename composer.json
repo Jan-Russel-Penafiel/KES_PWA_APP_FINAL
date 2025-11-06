@@ -1,6 +1,7 @@
 {
     "require": {
-        "endroid/qr-code": "^5.0"
+        "endroid/qr-code": "^5.0",
+        "tecnickcom/tcpdf": "^6.10"
     },
     "autoload": {
         "psr-4": {
