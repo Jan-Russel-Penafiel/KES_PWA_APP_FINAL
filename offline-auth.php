@@ -154,7 +154,7 @@ if (file_exists('config.php')) {
                     parsedUserData = userData;
                 }
                 
-                // Store session data in localStorage
+                // Store session data in localStorage with timestamp
                 const sessionData = {
                     user_id: parsedUserData.id,
                     username: parsedUserData.username,
@@ -162,11 +162,15 @@ if (file_exists('config.php')) {
                     role: parsedUserData.role,
                     section_id: parsedUserData.section_id,
                     offline_mode: true,
-                    offline_login: true
+                    offline_login: true,
+                    timestamp: Date.now() // Add timestamp for session validation
                 };
                 
                 // Store the session for offline use
                 localStorage.setItem('kes_smart_session', JSON.stringify(sessionData));
+                
+                // Set cookie to indicate offline login
+                document.cookie = "kes_smart_offline_logged_in=1; path=/; max-age=604800"; // 7 days
                 
                 // Show success message briefly before redirecting
                 document.getElementById('processing-card').innerHTML = `
@@ -174,7 +178,7 @@ if (file_exists('config.php')) {
                         <i class="fas fa-check-circle fa-4x"></i>
                     </div>
                     <h2 class="h4 mb-3">Login Successful</h2>
-                    <p class="mb-4">Logged in as ${parsedUserData.full_name}</p>
+                    <p class="mb-4">Logged in as ${parsedUserData.full_name} (${parsedUserData.role})</p>
                     <div class="spinner-border spinner-border-sm text-primary" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>

@@ -3,16 +3,50 @@
  * Handles storing and syncing form submissions when offline
  */
 
-// IndexedDB configuration
+// IndexedDB configuration - Updated to use enhanced cache manager
 const DB_NAME = 'kes-smart-offline-data';
-const DB_VERSION = 1;
+const DB_VERSION = 3; // Incremented to fix version conflicts
 const STORE_NAMES = {
   LOGIN: 'login_attempts',
   ATTENDANCE: 'attendance_records',
-  FORMS: 'form_submissions'
+  FORMS: 'form_submissions',
+  CACHE: 'cache_data'
 };
 
 let db;
+
+// Force delete and recreate database if needed
+function resetOfflineDB() {
+  return new Promise((resolve, reject) => {
+    console.log('🔄 Resetting offline database...');
+    
+    // Close existing connection if any
+    if (db) {
+      db.close();
+      db = null;
+    }
+    
+    // Delete the database
+    const deleteRequest = indexedDB.deleteDatabase(DB_NAME);
+    
+    deleteRequest.onsuccess = () => {
+      console.log('✅ Old database deleted, creating new one...');
+      initOfflineDB().then(resolve).catch(reject);
+    };
+    
+    deleteRequest.onerror = (event) => {
+      console.error('❌ Failed to delete database:', event.target.error);
+      // Try to initialize anyway
+      initOfflineDB().then(resolve).catch(reject);
+    };
+    
+    deleteRequest.onblocked = () => {
+      console.warn('⚠ Database deletion blocked. Please close all other tabs.');
+      // Try to initialize anyway
+      initOfflineDB().then(resolve).catch(reject);
+    };
+  });
+}
 
 // Initialize IndexedDB
 function initOfflineDB() {
@@ -22,39 +56,68 @@ function initOfflineDB() {
     
     // Handle errors
     request.onerror = (event) => {
-      console.error('IndexedDB error:', event.target.error);
+      console.error('❌ IndexedDB error:', event.target.error);
       reject('Failed to initialize offline storage');
     };
     
     // Handle success
     request.onsuccess = (event) => {
       db = event.target.result;
-      console.log('Offline storage initialized successfully');
+      
+      // Verify the attendance store exists and has the synced index
+      if (!db.objectStoreNames.contains(STORE_NAMES.ATTENDANCE)) {
+        console.error('❌ ATTENDANCE store not found! Database version:', db.version);
+        console.log('🔄 Attempting to reset database...');
+        db.close();
+        db = null;
+        // Reset and try again
+        resetOfflineDB().then(resolve).catch(reject);
+        return;
+      }
+      
+      console.log('✅ Offline storage initialized successfully (v' + db.version + ')');
+      console.log('📦 Object stores:', Array.from(db.objectStoreNames));
       resolve(db);
     };
     
     // Create object stores when the database is first created or version is updated
     request.onupgradeneeded = (event) => {
+      console.log('🔄 Database upgrade needed from version', event.oldVersion, 'to', event.newVersion);
       const db = event.target.result;
+      const transaction = event.target.transaction;
       
       // Create object stores if they don't exist
       if (!db.objectStoreNames.contains(STORE_NAMES.LOGIN)) {
+        console.log('📦 Creating LOGIN store...');
         const loginStore = db.createObjectStore(STORE_NAMES.LOGIN, { keyPath: 'id', autoIncrement: true });
         loginStore.createIndex('username', 'username', { unique: false });
         loginStore.createIndex('timestamp', 'timestamp', { unique: false });
       }
       
       if (!db.objectStoreNames.contains(STORE_NAMES.ATTENDANCE)) {
+        console.log('📦 Creating ATTENDANCE store...');
         const attendanceStore = db.createObjectStore(STORE_NAMES.ATTENDANCE, { keyPath: 'id', autoIncrement: true });
         attendanceStore.createIndex('student_id', 'student_id', { unique: false });
         attendanceStore.createIndex('timestamp', 'timestamp', { unique: false });
+        attendanceStore.createIndex('synced', 'synced', { unique: false });
+      } else {
+        console.log('📦 Updating ATTENDANCE store...');
+        // Update existing attendance store to add synced index if it doesn't exist
+        const attendanceStore = transaction.objectStore(STORE_NAMES.ATTENDANCE);
+        if (!attendanceStore.indexNames.contains('synced')) {
+          attendanceStore.createIndex('synced', 'synced', { unique: false });
+          console.log('✅ Added synced index to attendance store');
+        }
       }
       
       if (!db.objectStoreNames.contains(STORE_NAMES.FORMS)) {
+        console.log('📦 Creating FORMS store...');
         const formsStore = db.createObjectStore(STORE_NAMES.FORMS, { keyPath: 'id', autoIncrement: true });
         formsStore.createIndex('form_type', 'form_type', { unique: false });
         formsStore.createIndex('timestamp', 'timestamp', { unique: false });
       }
+      
+      console.log('✅ Database upgrade completed');
     };
   });
 }

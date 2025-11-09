@@ -3818,46 +3818,10 @@ function isMobileDevice() {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 }
 
-// Function to show download feedback
+// Download feedback function disabled - downloads happen silently
 function showDownloadFeedback(format) {
     const formatName = format.toUpperCase();
-    
-    // Create a temporary toast notification
-    const toast = document.createElement('div');
-    toast.className = 'toast align-items-center text-white bg-primary border-0';
-    toast.style.position = 'fixed';
-    toast.style.top = '20px';
-    toast.style.right = '20px';
-    toast.style.zIndex = '9999';
-    toast.setAttribute('role', 'alert');
-    toast.setAttribute('aria-live', 'assertive');
-    toast.setAttribute('aria-atomic', 'true');
-    
-    toast.innerHTML = `
-        <div class="d-flex">
-            <div class="toast-body">
-                <i class="fas fa-download me-2"></i>
-                Preparing ${formatName} download...
-            </div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-        </div>
-    `;
-    
-    document.body.appendChild(toast);
-    
-    // Initialize and show the toast
-    const bsToast = new bootstrap.Toast(toast);
-    bsToast.show();
-    
-    // Auto-remove after 3 seconds
-    setTimeout(() => {
-        bsToast.hide();
-        setTimeout(() => {
-            if (toast.parentNode) {
-                toast.parentNode.removeChild(toast);
-            }
-        }, 500);
-    }, 3000);
+    console.log(`[INFO] Preparing ${formatName} download...`);
 }
 
 // Quick date range buttons

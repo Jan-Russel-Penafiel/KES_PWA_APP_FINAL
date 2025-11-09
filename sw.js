@@ -1,5 +1,5 @@
-const CACHE_NAME = 'kes-smart-v1.0.4';
-const VERSION = '1.0.4'; // Used for auto-updates
+const CACHE_NAME = 'kes-smart-v1.0.7';
+const VERSION = '1.0.7'; // Used for auto-updates - notifications disabled
 const STATIC_CACHE = 'kes-smart-static-v1';
 const DYNAMIC_CACHE = 'kes-smart-dynamic-v1';
 const API_CACHE = 'kes-smart-api-v1';
@@ -120,15 +120,8 @@ self.addEventListener('install', (event) => {
       })
       .then(() => {
         console.log('[SW] New version installed successfully:', VERSION);
-        // Notify clients that installation is complete
-        return self.clients.matchAll().then(clients => {
-          clients.forEach(client => {
-            client.postMessage({
-              type: 'SW_INSTALLED',
-              version: VERSION
-            });
-          });
-        });
+        // Client notifications disabled - silent updates
+        return Promise.resolve();
       })
   );
 });
@@ -151,15 +144,7 @@ const checkForUpdates = async () => {
         // Automatically skip waiting and take control
         self.skipWaiting();
         
-        // Notify all clients about the update
-        const clients = await self.clients.matchAll();
-        clients.forEach(client => {
-          client.postMessage({
-            type: 'SW_UPDATE_AVAILABLE',
-            version: data.version,
-            autoUpdated: true
-          });
-        });
+        // Client notifications disabled - silent updates
       }
     }
   } catch (error) {
@@ -547,16 +532,8 @@ self.addEventListener('activate', (event) => {
       // Tell the active service worker to take control of the page immediately
       return self.clients.claim();
     }).then(() => {
-      // Notify all clients that the new version is active
-      return self.clients.matchAll().then(clients => {
-        clients.forEach(client => {
-          client.postMessage({
-            type: 'SW_ACTIVATED',
-            version: VERSION,
-            autoUpdated: true
-          });
-        });
-      });
+      // Client notifications disabled - silent updates
+      return Promise.resolve();
     })
   );
 });
@@ -657,7 +634,7 @@ function syncFormData() {
 // Function to get data from IndexedDB
 function getDataFromIndexedDB(storeName) {
   return new Promise((resolve, reject) => {
-    const dbRequest = indexedDB.open('kes-smart-offline-data', 1);
+    const dbRequest = indexedDB.open('kes-smart-offline-data', 3);
     
     dbRequest.onerror = (event) => {
       reject('Could not open IndexedDB');
@@ -689,7 +666,7 @@ function getDataFromIndexedDB(storeName) {
 // Function to clear data from IndexedDB
 function clearDataFromIndexedDB(storeName) {
   return new Promise((resolve, reject) => {
-    const dbRequest = indexedDB.open('kes-smart-offline-data', 1);
+    const dbRequest = indexedDB.open('kes-smart-offline-data', 3);
     
     dbRequest.onerror = (event) => {
       reject('Could not open IndexedDB');
@@ -721,7 +698,7 @@ function clearDataFromIndexedDB(storeName) {
 // Function to remove specific items from IndexedDB
 function removeItemsFromIndexedDB(storeName, ids) {
   return new Promise((resolve, reject) => {
-    const dbRequest = indexedDB.open('kes-smart-offline-data', 1);
+    const dbRequest = indexedDB.open('kes-smart-offline-data', 3);
     
     dbRequest.onerror = (event) => {
       reject('Could not open IndexedDB');

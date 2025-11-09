@@ -2,6 +2,9 @@
 require_once 'config.php';
 require_once 'sms_functions.php';
 
+// Set timezone to Philippines
+date_default_timezone_set('Asia/Manila');
+
 // Check if user is logged in and has permission
 requireRole(['admin', 'teacher']);
 
@@ -108,6 +111,51 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
     }
 }
 
+// Handle manual student selection submission
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'scan_manual') {
+    $student_id = intval($_POST['student_id'] ?? 0);
+    $subject_id = intval($_POST['subject_id'] ?? 0);
+    $scan_location = sanitize_input($_POST['scan_location'] ?? 'Main Gate');
+    $scan_notes = sanitize_input($_POST['scan_notes'] ?? '');
+    
+    try {
+        // Validate student ID
+        if (!$student_id) {
+            throw new Exception('Student ID is required.');
+        }
+        
+        // Validate subject selection
+        if (!$subject_id) {
+            throw new Exception('Please select a subject for attendance recording.');
+        }
+        
+        // Find student by ID
+        $stmt = $pdo->prepare("SELECT id, username, full_name, lrn, section_id FROM users WHERE id = ? AND role = 'student' AND status = 'active'");
+        $stmt->execute([$student_id]);
+        $student = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$student) {
+            throw new Exception('Student not found or inactive.');
+        }
+        
+        // Process attendance for the found student
+        $result = processStudentAttendance($pdo, $student, $current_user, $user_role, $subject_id, $scan_location, $scan_notes, false);
+        
+        header('Content-Type: application/json');
+        echo json_encode($result);
+        exit;
+        
+    } catch (Exception $e) {
+        $response = [
+            'success' => false,
+            'message' => $e->getMessage()
+        ];
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit;
+    }
+}
+
 // Function to process student attendance (shared by QR and LRN)
 function processStudentAttendance($pdo, $student, $current_user, $user_role, $subject_id, $scan_location, $scan_notes, $is_qr_scan) {
     // Validate subject exists and teacher has permission
@@ -141,10 +189,28 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $su
     // Define time boundaries
     $late_threshold = '07:15:00';  // 7:15 AM
     $absent_cutoff = '16:15:00';   // 4:15 PM
+    $checkin_start = '06:00:00';   // 6:00 AM - earliest check-in time
+    
+    // Check if current time is within allowed scanning hours
+    if ($current_time < $checkin_start) {
+        throw new Exception('Attendance scanning is not available before 6:00 AM.');
+    }
+    
+    if ($current_time > $absent_cutoff) {
+        throw new Exception('Attendance scanning is closed. School hours end at 4:15 PM. Students who haven\'t checked in will be marked as absent.');
+    }
     
     $check_attendance = $pdo->prepare("SELECT id, status, time_in, time_out FROM attendance WHERE student_id = ? AND subject_id = ? AND attendance_date = ?");
     $check_attendance->execute([$student['id'], $subject_id, $today]);
     $existing_attendance = $check_attendance->fetch(PDO::FETCH_ASSOC);
+    
+    // Also check if there's a record without subject_id (old format) to handle migration
+    $legacy_check = null;
+    if (!$existing_attendance) {
+        $legacy_stmt = $pdo->prepare("SELECT id, status, time_in, time_out, subject_id FROM attendance WHERE student_id = ? AND attendance_date = ? AND subject_id IS NULL");
+        $legacy_stmt->execute([$student['id'], $today]);
+        $legacy_check = $legacy_stmt->fetch(PDO::FETCH_ASSOC);
+    }
     
     $attendance_id = null;
     $is_checkout = false;
@@ -204,22 +270,54 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $su
             $attendance_id = $existing_attendance['id'];
         }
     } else {
-        // No existing attendance record for this subject
-        if ($current_time > $absent_cutoff) {
-            throw new Exception('Attendance recording period has ended. Students cannot check in after 4:15 PM.');
-        }
-        
-        // Determine status based on time
-        if ($current_time <= $late_threshold) {
-            $attendance_status = 'present';
+        // Check if we have a legacy record without subject_id that we should update
+        if ($legacy_check) {
+            // Update the legacy record to include subject_id and new attendance data
+            if ($current_time <= $late_threshold) {
+                $attendance_status = 'present';
+            } else {
+                $attendance_status = 'late';
+            }
+            
+            $update_legacy_stmt = $pdo->prepare("
+                UPDATE attendance 
+                SET subject_id = ?, status = ?, time_in = NOW(), teacher_id = ?, 
+                    remarks = CONCAT(IFNULL(remarks, ''), IF(remarks IS NULL OR remarks = '', '', ' | '), ?), 
+                    qr_scanned = ?
+                WHERE id = ?
+            ");
+            $update_legacy_stmt->execute([
+                $subject_id, 
+                $attendance_status, 
+                $current_user['id'], 
+                $scan_location . ($scan_notes ? ' - ' . $scan_notes : ''), 
+                $is_qr_scan ? 1 : 0,
+                $legacy_check['id']
+            ]);
+            $attendance_id = $legacy_check['id'];
         } else {
-            $attendance_status = 'late';
+            // No existing attendance record for this subject - create new one
+            // Determine status based on time
+            if ($current_time <= $late_threshold) {
+                $attendance_status = 'present';
+            } else {
+                $attendance_status = 'late';
+            }
+            
+            // Create new attendance record (check-in only)
+            $insert_stmt = $pdo->prepare("INSERT INTO attendance (student_id, teacher_id, section_id, subject_id, attendance_date, time_in, status, remarks, qr_scanned, attendance_source) VALUES (?, ?, ?, ?, ?, NOW(), ?, ?, ?, 'qr_scan')");
+            $insert_stmt->execute([
+                $student['id'], 
+                $current_user['id'], 
+                $student['section_id'], 
+                $subject_id, 
+                $today, 
+                $attendance_status, 
+                $scan_location . ($scan_notes ? ' - ' . $scan_notes : ''), 
+                $is_qr_scan ? 1 : 0
+            ]);
+            $attendance_id = $pdo->lastInsertId();
         }
-        
-        // Create new attendance record (check-in only)
-        $insert_stmt = $pdo->prepare("INSERT INTO attendance (student_id, teacher_id, section_id, subject_id, attendance_date, time_in, status, remarks, qr_scanned) VALUES (?, ?, ?, ?, ?, NOW(), ?, ?, ?)");
-        $insert_stmt->execute([$student['id'], $current_user['id'], $student['section_id'], $subject_id, $today, $attendance_status, $scan_location . ($scan_notes ? ' - ' . $scan_notes : ''), $is_qr_scan ? 1 : 0]);
-        $attendance_id = $pdo->lastInsertId();
     }
     
     // Send SMS notification to parent (only if not already sent today and not a checkout)
@@ -272,15 +370,36 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $su
     }
     
     // Prepare response
+    $operation_message = '';
+    $check_in_time = null;
+    if ($is_checkout && $existing_attendance && $existing_attendance['time_in']) {
+        $check_in_time = date('g:i A', strtotime($existing_attendance['time_in']));
+    }
+    
+    if ($is_checkout) {
+        $check_in_display = $check_in_time ? " (Originally checked in at {$check_in_time})" : "";
+        if ($attendance_status === 'out') {
+            $operation_message = "Student checked out early at {$current_time_formatted}{$check_in_display}. Status: Early Checkout";
+        } else {
+            $operation_message = "Student checked out at {$current_time_formatted}{$check_in_display}. Final status: " . ucfirst($attendance_status);
+        }
+    } else {
+        $operation_message = "Student checked in at {$current_time_formatted}. Status: " . ucfirst($attendance_status);
+    }
+    
     return [
         'success' => true,
+        'message' => $operation_message,
         'student_name' => $student['full_name'],
         'student_id' => $student['username'],
         'student_lrn' => $student['lrn'] ?? null,
         'section' => $section_name,
         'subject' => $subject['subject_name'],
         'time' => $current_time_formatted,
+        'time_in' => $is_checkout ? ($existing_attendance['time_in'] ? date('g:i A', strtotime($existing_attendance['time_in'])) : null) : $current_time_formatted,
+        'time_out' => $is_checkout ? $current_time_formatted : null,
         'date' => $current_date,
+        'attendance_date' => $current_date,
         'attendance_id' => $attendance_id,
         'status' => $attendance_status,
         'is_checkout' => $is_checkout,
@@ -482,6 +601,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET' && isset($_GET['action']) && $_GET['acti
 $page_title = 'QR Code Scanner';
 include 'header.php';
 
+// Add data attributes for offline JS
+echo '<script>document.body.dataset.teacherId = "' . $current_user['id'] . '"; document.body.dataset.teacherName = "' . addslashes($current_user['full_name']) . '";</script>';
+
 // Get SMS configuration status
 $sms_config = null;
 try {
@@ -534,10 +656,12 @@ try {
                     </button>
                 </div>
                 <div class="small text-muted mt-1">
-                    SMS Status: 
+                    <div>Current Time: <strong><span class="current-time-display"><?php echo date('g:i A'); ?></span></strong></div>
+                    <div>SMS Status: 
                     <span class="badge bg-<?php echo ($sms_config && $sms_config['status'] == 'active') ? 'success' : 'danger'; ?>">
                         <?php echo ($sms_config && $sms_config['status'] == 'active') ? 'Active' : 'Inactive'; ?>
                     </span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -547,9 +671,25 @@ try {
 <!-- Scanner Status -->
 <div class="row g-3 mb-4">
     <div class="col-12">
+        <!-- Time Status Alert -->
+        <div class="alert" id="timeStatus">
+            <i class="fas fa-clock me-2"></i>
+            <strong id="timeStatusText">Checking time status...</strong>
+        </div>
+        
         <div class="alert alert-info" id="scannerStatus">
             <i class="fas fa-info-circle me-2"></i>
             <strong>Ready to scan:</strong> Select a subject below and click "Start Scanner" to begin scanning or use manual LRN entry.
+        </div>
+        <!-- Sync Status Bar (Hidden by default, shown when there are pending syncs) -->
+        <div class="alert alert-warning d-none align-items-center justify-content-between" id="syncStatusBar" style="display: none;">
+            <div>
+                <i class="fas fa-cloud-upload-alt me-2"></i>
+                <strong id="pendingSyncText">0 scans pending sync</strong>
+            </div>
+            <button type="button" class="btn btn-sm btn-primary" onclick="syncNow()" id="syncNowBtn">
+                <i class="fas fa-sync me-1"></i>Sync Now
+            </button>
         </div>
     </div>
 </div>
@@ -686,7 +826,7 @@ try {
                             if (!isset($students_data)) {
                                 $students_data = [];
                                 try {
-                                    $stmt = $pdo->prepare("SELECT id, username, full_name, lrn, section_id FROM users WHERE role = 'student' AND status = 'active' ORDER BY full_name");
+                                    $stmt = $pdo->prepare("SELECT id, username, full_name, lrn, section_id, qr_code FROM users WHERE role = 'student' AND status = 'active' ORDER BY full_name");
                                     $stmt->execute();
                                     $students_data = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 } catch (PDOException $e) {
@@ -694,7 +834,7 @@ try {
                                 }
                                 
                                 // Convert to JSON for offline use
-                                echo "<script>const studentsData = " . json_encode($students_data) . ";</script>";
+                                echo "<script>const studentsData = " . json_encode($students_data) . "; window.studentsData = studentsData;</script>";
                             }
                             
                             // Display students in dropdown
@@ -1130,16 +1270,24 @@ try {
 </div>
 
 <!-- Toast Container -->
-<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toast-container"></div>
+<!-- Toast container removed - notifications disabled -->
 
 <!-- Include Google QR Scanner Library -->
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<!-- Include Enhanced Cache Manager (fixes IndexedDB issues) -->
+<script src="assets/js/enhanced-cache-manager.js"></script>
+
+<!-- Include Offline QR Scanner Enhancement -->
+<script src="assets/js/offline-qr-scanner.js"></script>
 
 <!-- QR Scanner Script -->
 <script>
     let scanner = null;
     let cameras = [];
     let selectedCamera = 0;
+    let isTransitioning = false; // State management for scanner transitions
+    let scannerState = 'stopped'; // 'stopped', 'starting', 'running', 'stopping'
     
     // Function to play beep sound
     function playBeepSound() {
@@ -1200,6 +1348,12 @@ try {
             const html5QrCode = new Html5Qrcode("qr-reader");
             scanner = html5QrCode;
             
+            // Initialize state
+            isTransitioning = false;
+            scannerState = 'stopped';
+            
+            console.log('Scanner initialized successfully');
+            
             // Get available cameras
             Html5Qrcode.getCameras().then(devices => {
                 cameras = devices;
@@ -1232,24 +1386,36 @@ try {
                 scanRegion.innerHTML = '<div class="alert alert-danger">Error accessing camera: ' + err.message + '</div>';
             });
             
-            // Camera switch button
+            // Camera switch button with debounce
             if (camSwitch) {
+                let camSwitchTimeout;
                 camSwitch.addEventListener('click', () => {
-                    selectedCamera = (selectedCamera + 1) % cameras.length;
-                    if (camList) {
-                        camList.value = cameras[selectedCamera].id;
+                    if (camSwitchTimeout) {
+                        clearTimeout(camSwitchTimeout);
                     }
-                    startScanner();
+                    camSwitchTimeout = setTimeout(() => {
+                        selectedCamera = (selectedCamera + 1) % cameras.length;
+                        if (camList) {
+                            camList.value = cameras[selectedCamera].id;
+                        }
+                        startScanner();
+                    }, 300); // 300ms debounce
                 });
             }
             
-            // Camera selection change
+            // Camera selection change with debounce
             if (camList) {
+                let camListTimeout;
                 camList.addEventListener('change', () => {
-                    const cameraId = camList.value;
-                    selectedCamera = cameras.findIndex(cam => cam.id === cameraId);
-                    if (selectedCamera === -1) selectedCamera = 0;
-                    startScanner();
+                    if (camListTimeout) {
+                        clearTimeout(camListTimeout);
+                    }
+                    camListTimeout = setTimeout(() => {
+                        const cameraId = camList.value;
+                        selectedCamera = cameras.findIndex(cam => cam.id === cameraId);
+                        if (selectedCamera === -1) selectedCamera = 0;
+                        startScanner();
+                    }, 300); // 300ms debounce
                 });
             }
             
@@ -1315,9 +1481,7 @@ try {
                         scanRegion.classList.remove('scanning');
                     }
                     
-                    if (scanner && scanner.isScanning) {
-                        scanner.stop();
-                    }
+                    stopScanner();
                 });
         }
         
@@ -1347,17 +1511,57 @@ try {
 function startScanner() {
         if (!scanner) {
             console.error('Scanner not initialized');
-        return;
-    }
-    
+            return;
+        }
+        
+        // Prevent multiple transitions with timeout protection
+        if (isTransitioning) {
+            // Check if we've been transitioning too long (stuck state)
+            const now = Date.now();
+            if (!window.lastTransitionStart) {
+                window.lastTransitionStart = now;
+            }
+            
+            const transitionDuration = now - window.lastTransitionStart;
+            if (transitionDuration > 10000) { // 10 seconds timeout
+                console.warn('⚠ Scanner transition timeout detected, forcing reset...');
+                isTransitioning = false;
+                scannerState = 'stopped';
+                window.lastTransitionStart = null;
+            } else {
+                console.log('Scanner is already transitioning, ignoring request (duration: ' + Math.round(transitionDuration/1000) + 's)');
+                return;
+            }
+        }
+        
+        // If already running and working properly, don't restart
+        if (scannerState === 'running' && scanner.isScanning) {
+            console.log('Scanner is already running and working properly');
+            return;
+        }
+        
+        // Reset transition timeout
+        window.lastTransitionStart = Date.now();
+        
         try {
-            // Stop any existing scan
+            isTransitioning = true;
+            scannerState = 'starting';
+            
+            // Stop any existing scan first
             if (scanner.isScanning) {
+                console.log('Stopping existing scanner before restart...');
+                scannerState = 'stopping';
                 scanner.stop()
-                    .then(() => startNewScan())
+                    .then(() => {
+                        console.log('Scanner stopped successfully, starting new scan...');
+                        startNewScan();
+                    })
                     .catch(err => {
                         console.error('Error stopping scanner:', err);
-                        startNewScan();
+                        // Try to start anyway after a delay
+                        setTimeout(() => {
+                            startNewScan();
+                        }, 500);
                     });
             } else {
                 startNewScan();
@@ -1365,6 +1569,59 @@ function startScanner() {
         } catch (error) {
             console.error('Error starting scanner:', error);
             showToast('Error starting scanner: ' + error.message, 'danger');
+            isTransitioning = false;
+            scannerState = 'stopped';
+            window.lastTransitionStart = null;
+        }
+    }
+    
+    // Stop scanner with proper state management
+    function stopScanner() {
+        if (!scanner) {
+            console.log('Scanner not initialized');
+            return Promise.resolve();
+        }
+        
+        // Prevent multiple stop attempts
+        if (isTransitioning && scannerState === 'stopping') {
+            console.log('Scanner is already stopping, ignoring request');
+            return Promise.resolve();
+        }
+        
+        // If already stopped, don't try to stop again
+        if (scannerState === 'stopped' && !scanner.isScanning) {
+            console.log('Scanner is already stopped');
+            return Promise.resolve();
+        }
+        
+        try {
+            isTransitioning = true;
+            scannerState = 'stopping';
+            
+            if (scanner.isScanning) {
+                console.log('Stopping scanner...');
+                return scanner.stop()
+                    .then(() => {
+                        console.log('Scanner stopped successfully');
+                        isTransitioning = false;
+                        scannerState = 'stopped';
+                    })
+                    .catch(err => {
+                        console.error('Error stopping scanner:', err);
+                        isTransitioning = false;
+                        scannerState = 'stopped'; // Assume stopped even if error
+                    });
+            } else {
+                console.log('Scanner was not scanning');
+                isTransitioning = false;
+                scannerState = 'stopped';
+                return Promise.resolve();
+            }
+        } catch (error) {
+            console.error('Exception in stopScanner:', error);
+            isTransitioning = false;
+            scannerState = 'stopped';
+            return Promise.resolve();
         }
     }
     
@@ -1422,6 +1679,12 @@ function startScanner() {
             handleScanResult,
             handleScanError
         )
+        .then(() => {
+            console.log('Scanner started successfully');
+            isTransitioning = false;
+            scannerState = 'running';
+            window.lastTransitionStart = null;
+        })
         .catch(err => {
             console.error('Error starting camera with advanced config:', err);
             
@@ -1440,9 +1703,18 @@ function startScanner() {
                 handleScanError
             );
         })
+        .then(() => {
+            console.log('Scanner started successfully with simple config');
+            isTransitioning = false;
+            scannerState = 'running';
+            window.lastTransitionStart = null;
+        })
         .catch(err => {
             console.error('Error starting camera with simple config:', err);
             showToast('Error starting camera: ' + err.message, 'danger');
+            isTransitioning = false;
+            scannerState = 'stopped';
+            window.lastTransitionStart = null;
             
             // Show manual LRN entry as alternative
             const alertHtml = `
@@ -1504,10 +1776,59 @@ function startScanner() {
         const scanLocation = scanLocationEl ? scanLocationEl.value : 'Main Gate';
         const scanNotes = scanNotesEl ? scanNotesEl.value : '';
         
+        // Check time restrictions before processing
+        const currentTime = new Date();
+        const currentHour = currentTime.getHours();
+        const currentMinute = currentTime.getMinutes();
+        const currentTimeString = currentTime.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hour12: true});
+        
+        // Check if before 6:00 AM
+        if (currentHour < 6) {
+            showToast('Attendance scanning is not available before 6:00 AM.', 'warning');
+            setTimeout(() => {
+                if (scanner && scanner.isPaused) {
+                    scanner.resume();
+                }
+            }, 2000);
+            return;
+        }
+        
+        // Check if after 4:15 PM
+        if (currentHour > 16 || (currentHour === 16 && currentMinute > 15)) {
+            showToast('Attendance scanning is closed. School hours end at 4:15 PM. Students who haven\'t checked in will be marked as absent.', 'danger');
+            setTimeout(() => {
+                if (scanner && scanner.isPaused) {
+                    scanner.resume();
+                }
+            }, 2000);
+            return;
+        }
+        
+        // Show time status message
+        let timeStatus = '';
+        if (currentHour < 7 || (currentHour === 7 && currentMinute <= 15)) {
+            timeStatus = 'Student will be marked as PRESENT';
+        } else {
+            timeStatus = 'Student will be marked as LATE';
+        }
+        
+        console.log(`Current time: ${currentTimeString} - ${timeStatus}`);
+        
         // Check if we're online or offline
         if (!navigator.onLine) {
-            // Handle offline scanning
-            handleOfflineScan(qrCodeMessage, scanLocation, scanNotes);
+            // Handle offline scanning with enhanced function
+            if (typeof handleEnhancedOfflineQrScan === 'function') {
+                handleEnhancedOfflineQrScan(qrCodeMessage, scanLocation, scanNotes);
+                // Resume scanning after delay
+                setTimeout(() => {
+                    if (scanner && scanner.isPaused) {
+                        scanner.resume();
+                    }
+                }, 2000);
+            } else {
+                console.error('Enhanced offline scan function not available');
+                showToast('Offline scan not available', 'danger');
+            }
         return;
     }
     
@@ -1568,96 +1889,6 @@ function startScanner() {
         });
     }
     
-    // Handle offline scan
-    function handleOfflineScan(qrData, scanLocation, scanNotes) {
-        try {
-            // Extract student ID from QR code (assuming format contains student ID)
-            let studentId = null;
-            
-            // Try to parse the QR data (could be JSON or plain text)
-            try {
-                const qrJson = JSON.parse(qrData);
-                studentId = qrJson.id || qrJson.student_id;
-        } catch (e) {
-                // Not JSON, try to extract ID from string
-                // Assuming QR code contains student ID in some format
-                studentId = qrData;
-            }
-            
-            if (!studentId) {
-                throw new Error('Could not extract student ID from QR code');
-            }
-            
-            // Use the offline utilities to save attendance data
-            if (typeof window.offlineUtils !== 'undefined') {
-                const offlineData = {
-                    student_id: studentId,
-                    action: 'scan',
-                    timestamp: new Date().toISOString(),
-                    location: scanLocation,
-                    notes: scanNotes,
-                    device_info: {
-                        userAgent: navigator.userAgent,
-                        platform: navigator.platform
-                    }
-                };
-                
-                // Save to IndexedDB
-                window.offlineUtils.saveAttendanceData(offlineData)
-                    .then(() => {
-                        // Register sync when back online
-                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
-                            navigator.serviceWorker.ready
-                                .then(registration => {
-                                    return registration.sync.register('sync-attendance');
-                                })
-                                .catch(err => {
-                                    console.error('Sync registration failed:', err);
-                                });
-                        }
-                        
-                        // Show success notification
-                                    const offlineResultData = {
-                success: true,
-                message: 'Attendance recorded for offline processing',
-                student_id: studentId,
-                student_name: 'Student',
-                attendance_date: new Date().toISOString().split('T')[0],
-                time_in: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: true}),
-                            status: 'pending',
-                            offline: true
-                        };
-                        
-                        showScanResult(offlineResultData, 'warning');
-                    })
-                    .catch(error => {
-                        console.error('Error saving offline attendance:', error);
-                        showToast('Error saving offline attendance: ' + error.message, 'danger');
-                    })
-                    .finally(() => {
-                        // Resume scanning after delay
-                        setTimeout(() => {
-                            if (scanner && scanner.isPaused) {
-                                scanner.resume();
-                            }
-                        }, 2000);
-                    });
-            } else {
-                throw new Error('Offline utilities not available');
-                }
-            } catch (error) {
-            console.error('Error processing offline scan:', error);
-            showToast('Error processing offline scan: ' + error.message, 'danger');
-            
-            // Resume scanning after delay
-                setTimeout(() => {
-                if (scanner && scanner.isPaused) {
-                    scanner.resume();
-                }
-            }, 2000);
-        }
-    }
-    
     // Show scan result
     function showScanResult(data, type) {
         try {
@@ -1673,22 +1904,31 @@ function startScanner() {
             let cardClass = 'border-success';
             let statusClass = 'bg-success';
             let icon = 'fa-check-circle';
+            let headerText = 'Success';
             
-            if (type === 'danger') {
+            // Handle different scan types
+            if (data.is_checkout) {
+                cardClass = 'border-info';
+                statusClass = 'bg-info';
+                icon = 'fa-sign-out-alt';
+                headerText = data.status === 'out' ? 'Early Checkout' : 'Checkout';
+            } else if (type === 'danger') {
                 cardClass = 'border-danger';
                 statusClass = 'bg-danger';
                 icon = 'fa-times-circle';
+                headerText = 'Error';
             } else if (type === 'warning' || data.offline) {
                 cardClass = 'border-warning';
                 statusClass = 'bg-warning';
                 icon = 'fa-exclamation-triangle';
+                headerText = 'Warning';
             }
             
             let resultHtml = `
                 <div class="card mb-3 ${cardClass} shadow-sm">
                     <div class="card-header ${statusClass} text-white">
                         <i class="fas ${icon} me-2"></i>
-                        ${data.success ? 'Success' : 'Error'}
+                        ${headerText}
                         ${data.offline ? ' (Offline Mode)' : ''}
             </div>
                     <div class="card-body">
@@ -1697,15 +1937,39 @@ function startScanner() {
         
             if (data.success || data.offline) {
                 // Add student details for successful scans
+                let timeDisplay = '';
+                if (data.is_checkout && data.time_in && data.time_out) {
+                    timeDisplay = `
+                                <p class="mb-1"><strong>Check-in:</strong> ${data.time_in}</p>
+                                <p class="mb-1"><strong>Checkout:</strong> ${data.time_out}</p>
+                    `;
+                } else if (data.time_out) {
+                    timeDisplay = `<p class="mb-1"><strong>Checkout Time:</strong> ${data.time_out}</p>`;
+                } else {
+                    const displayTime = data.time_in || data.time || new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: true});
+                    timeDisplay = `<p class="mb-1"><strong>Check-in Time:</strong> ${displayTime}</p>`;
+                }
+                
+                // Format date properly - if it's in YYYY-MM-DD format, convert it
+                let formattedDate = data.attendance_date || new Date().toLocaleDateString();
+                if (formattedDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    const dateObj = new Date(formattedDate + 'T00:00:00');
+                    formattedDate = dateObj.toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                    });
+                }
+                
                 resultHtml += `
                         <div class="row mt-3">
             <div class="col-6">
                                 <p class="mb-1"><strong>Student:</strong> ${data.student_name || 'Unknown'}</p>
                                 <p class="mb-1"><strong>Subject:</strong> ${data.subject || 'Unknown Subject'}</p>
-                                <p class="mb-1"><strong>Date:</strong> ${data.attendance_date || new Date().toLocaleDateString()}</p>
+                                <p class="mb-1"><strong>Date:</strong> ${formattedDate}</p>
             </div>
             <div class="col-6">
-                                <p class="mb-1"><strong>Time:</strong> ${data.time_in || new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: true})}</p>
+                                ${timeDisplay}
                                 <p class="mb-1"><strong>Status:</strong> ${data.status ? data.status.charAt(0).toUpperCase() + data.status.slice(1) : 'Pending'}</p>
             </div>
         </div>
@@ -1715,7 +1979,7 @@ function startScanner() {
             resultHtml += `
             </div>
                     <div class="card-footer text-muted">
-                        <small>${new Date().toLocaleString()}</small>
+                        <small>${new Date().toLocaleString([], {hour12: true})}</small>
         </div>
         </div>
     `;
@@ -1824,11 +2088,22 @@ function startScanner() {
                     
                     if (data.success || data.offline) {
                         // Add student details for successful scans
+                        // Format date properly - if it's in YYYY-MM-DD format, convert it
+                        let formattedDate = data.attendance_date;
+                        if (formattedDate && formattedDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                            const dateObj = new Date(formattedDate + 'T00:00:00');
+                            formattedDate = dateObj.toLocaleDateString('en-US', { 
+                                year: 'numeric', 
+                                month: 'long', 
+                                day: 'numeric' 
+                            });
+                        }
+                        
                         resultHtml += `
                                 <div class="row mt-3">
                                     <div class="col-6">
                                         <p class="mb-1"><strong>Student:</strong> ${data.student_name || 'Unknown'}</p>
-                                        <p class="mb-1"><strong>Date:</strong> ${data.attendance_date}</p>
+                                        <p class="mb-1"><strong>Date:</strong> ${formattedDate}</p>
                     </div>
                                     <div class="col-6">
                                         <p class="mb-1"><strong>Time:</strong> ${data.time_in}</p>
@@ -1841,7 +2116,7 @@ function startScanner() {
                     resultHtml += `
                             </div>
                             <div class="card-footer text-muted">
-                                <small>${new Date(data.timestamp).toLocaleString()}</small>
+                                <small>${new Date(data.timestamp).toLocaleString([], {hour12: true})}</small>
                 </div>
             </div>
         `;
@@ -1941,7 +2216,7 @@ function startScanner() {
                 data: {
                     student_name: data.student_name || 'Student',
                     student_id: data.student_id || '',
-                    time_in: data.time_in || new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    time_in: data.time_in || new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: true}),
                     status: data.status || 'Pending',
                     success: data.success || false,
                     offline: data.offline || false,
@@ -2030,59 +2305,9 @@ function startScanner() {
         }
     }
     
-    // Show toast notification
+    // Toast notifications disabled - messages logged to console instead
     function showToast(message, type = 'info') {
-        try {
-            const toastContainer = document.getElementById('toast-container');
-            if (!toastContainer) {
-                console.error('Toast container not found');
-                return;
-            }
-            
-            const toast = document.createElement('div');
-            toast.className = `toast align-items-center text-white bg-${type} border-0`;
-            toast.setAttribute('role', 'alert');
-            toast.setAttribute('aria-live', 'assertive');
-            toast.setAttribute('aria-atomic', 'true');
-            
-            toast.innerHTML = `
-                <div class="d-flex">
-                    <div class="toast-body">
-                        ${message}
-                    </div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                </div>
-            `;
-            
-            toastContainer.appendChild(toast);
-            
-            // Use Bootstrap's Toast component if available
-            if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
-                const bsToast = new bootstrap.Toast(toast, {
-                    autohide: true,
-                    delay: 3000
-                });
-                
-                bsToast.show();
-                
-                // Remove toast after it's hidden
-                toast.addEventListener('hidden.bs.toast', () => {
-                    if (toastContainer.contains(toast)) {
-                        toastContainer.removeChild(toast);
-                    }
-                });
-            } else {
-                // Fallback if Bootstrap JS is not loaded
-                toast.style.display = 'block';
-                setTimeout(() => {
-                    if (toastContainer.contains(toast)) {
-                        toastContainer.removeChild(toast);
-                    }
-                }, 3000);
-            }
-        } catch (error) {
-            console.error('Error showing toast:', error);
-        }
+        console.log(`[${type.toUpperCase()}] ${message}`);
     }
     
     // Initialize when DOM is loaded
@@ -2105,6 +2330,18 @@ function startScanner() {
         // Check online/offline status
         updateOfflineStatus();
         
+        // Initialize time status
+        updateTimeStatus();
+        
+        // Update current time display
+        updateCurrentTimeDisplay();
+        
+        // Update time status every minute
+        setInterval(updateTimeStatus, 60000);
+        
+        // Update current time display every second
+        setInterval(updateCurrentTimeDisplay, 1000);
+        
         // Listen for online/offline events
         window.addEventListener('online', updateOfflineStatus);
         window.addEventListener('offline', updateOfflineStatus);
@@ -2115,94 +2352,68 @@ function startScanner() {
             
             const subjectSelect = document.getElementById('subject-select');
             const studentSelect = $('#student-select');
+            const selectedOption = studentSelect.find('option:selected');
             const lrn = studentSelect.val();
-            const scanLocation = document.getElementById('scan-location').value;
-            const scanNotes = document.getElementById('scan-notes').value;
+            const studentId = selectedOption.data('id');
+            const scanLocation = document.getElementById('scan-location').value || 'Main Gate';
+            const scanNotes = document.getElementById('scan-notes').value || '';
             
             if (!subjectSelect || !subjectSelect.value) {
                 showToast('Please select a subject before recording attendance', 'warning');
                 return;
             }
             
-            if (!lrn) {
+            if (!lrn || !studentId) {
                 showToast('Please select a student', 'warning');
                 return;
             }
             
+            // Check time restrictions before processing (same as server-side)
+            const currentTime = new Date();
+            const currentHour = currentTime.getHours();
+            const currentMinute = currentTime.getMinutes();
+            const currentTimeString = currentTime.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hour12: true});
+            
+            // Check if before 6:00 AM
+            if (currentHour < 6) {
+                showToast('Attendance recording is not available before 6:00 AM.', 'warning');
+                return;
+            }
+            
+            // Check if after 4:15 PM (16:15)
+            if (currentHour > 16 || (currentHour === 16 && currentMinute > 15)) {
+                showToast('Attendance recording is closed. School hours end at 4:15 PM. Students who haven\'t checked in will be marked as absent.', 'danger');
+                return;
+            }
+            
+            // Show time status message
+            let timeStatus = '';
+            if (currentHour < 7 || (currentHour === 7 && currentMinute <= 15)) {
+                timeStatus = 'Student will be marked as PRESENT';
+            } else {
+                timeStatus = 'Student will be marked as LATE';
+            }
+            
+            console.log(`[Manual Selection] Current time: ${currentTimeString} (${currentHour}:${currentMinute}) - ${timeStatus}`);
+            console.log(`[Manual Selection] Time restrictions check: hour=${currentHour}, minute=${currentMinute}, restricted=${currentHour < 6 || currentHour > 16 || (currentHour === 16 && currentMinute > 15)}`);
+            console.log(`[Manual Selection] Selected student ID: ${studentId}, LRN: ${lrn}, Subject: ${subjectSelect.value}`);
+            
             // Check if we're online or offline
             if (!navigator.onLine) {
-                // Handle offline LRN entry
-                try {
-                    // Get student data from the selected option
-                    const selectedOption = studentSelect.find('option:selected');
-                    const studentName = selectedOption.text().split(' - ')[0];
-                    const studentId = selectedOption.data('id');
-                    
-                    if (typeof window.offlineUtils !== 'undefined') {
-                        const offlineData = {
-                            student_id: studentId || lrn,
-                            student_name: studentName || 'Unknown Student',
-                            lrn: lrn,
-                            action: 'manual',
-                            timestamp: new Date().toISOString(),
-                            location: scanLocation,
-                            notes: scanNotes,
-                            device_info: {
-                                userAgent: navigator.userAgent,
-                                platform: navigator.platform
-                            }
-                        };
-                        
-                        // Save to IndexedDB
-                        window.offlineUtils.saveAttendanceData(offlineData)
-                            .then(() => {
-                                // Register sync when back online
-                                if ('serviceWorker' in navigator && 'SyncManager' in window) {
-                                    navigator.serviceWorker.ready
-                                        .then(registration => {
-                                            return registration.sync.register('sync-attendance');
-                                        })
-                                        .catch(err => {
-                                            console.error('Sync registration failed:', err);
-                                        });
-                                }
-                                
-                                // Show success notification
-                                const offlineResultData = {
-                                    success: true,
-                                    message: 'Attendance recorded for offline processing',
-                                    student_id: studentId || lrn,
-                                    student_name: studentName || 'Unknown Student',
-                                    student_lrn: lrn,
-                                    attendance_date: new Date().toISOString().split('T')[0],
-                                    time_in: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: true}),
-                                    status: 'pending',
-                                    offline: true
-                                };
-                                
-                                showScanResult(offlineResultData, 'warning');
-                                
-                                // Reset the select
-                                studentSelect.val('').trigger('change');
-                            })
-                            .catch(error => {
-                                console.error('Error saving offline attendance:', error);
-                                showToast('Error saving offline attendance: ' + error.message, 'danger');
-                            });
-                    } else {
-                        throw new Error('Offline utilities not available');
-                    }
-                } catch (error) {
-                    console.error('Error processing offline LRN:', error);
-                    showToast('Error processing offline LRN: ' + error.message, 'danger');
+                // Handle offline using enhanced function
+                if (typeof handleEnhancedOfflineManualSelection === 'function') {
+                    handleEnhancedOfflineManualSelection(lrn, scanLocation, scanNotes);
+                } else {
+                    console.error('Enhanced offline function not available');
+                    showToast('Offline attendance not available', 'danger');
                 }
                 return;
             }
             
-            // Process LRN online
+            // Use manual student selection with student ID for better accuracy
             const formData = new FormData();
-            formData.append('action', 'scan_lrn');
-            formData.append('lrn', lrn);
+            formData.append('action', 'scan_manual');
+            formData.append('student_id', studentId);
             formData.append('subject_id', subjectSelect.value);
             formData.append('scan_location', scanLocation);
             formData.append('scan_notes', scanNotes);
@@ -2224,8 +2435,8 @@ function startScanner() {
                 }
             })
             .catch(error => {
-                console.error('Error processing LRN:', error);
-                showToast('Error processing LRN. Please try again.', 'danger');
+                console.error('Error processing manual student selection:', error);
+                showToast('Error processing student selection. Please try again.', 'danger');
             });
         });
     });
@@ -3618,14 +3829,22 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!navigator.onLine) {
                 event.preventDefault();
                 
-                const qrData = document.getElementById('qr_data').value;
-                const scanLocation = document.getElementById('scan_location').value;
-                const scanNotes = document.getElementById('scan_notes').value;
+                // Safely get form values using utility functions
+                const qrData = safeGetElementValue('qr_data');
+                const scanLocation = safeGetElementValue('scan_location', 'Main Gate');
+                const scanNotes = safeGetElementValue('scan_notes');
                 
                 // Store the scan in offline storage
-                handleOfflineQrScan(qrData, scanLocation, scanNotes);
+                if (typeof handleOfflineQrScan === 'function') {
+                    handleOfflineQrScan(qrData, scanLocation, scanNotes);
+                } else {
+                    console.error('handleOfflineQrScan function not found');
+                    showToast('Offline QR scan function not available', 'danger');
+                }
             }
         });
+    } else {
+        console.log('QR form not found - this is normal if using direct QR scanning instead of form submission');
     }
     
     // Add offline mode handling to the LRN form
@@ -3636,12 +3855,34 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!navigator.onLine) {
                 event.preventDefault();
                 
-                const lrn = document.getElementById('lrn').value;
-                const scanLocation = document.getElementById('lrn_scan_location').value;
-                const scanNotes = document.getElementById('lrn_scan_notes').value;
+                // Get values the same way as the online form handler
+                const subjectSelect = document.getElementById('subject-select');
+                const studentSelect = $('#student-select');
+                const studentValue = studentSelect.val();
+                const scanLocation = safeGetElementValue('scan-location', 'Main Gate');
+                const scanNotes = safeGetElementValue('scan-notes');
                 
-                // Store the scan in offline storage
-                handleOfflineLrnScan(lrn, scanLocation, scanNotes);
+                // Validate subject selection (same as online form)
+                if (!subjectSelect || !subjectSelect.value) {
+                    showToast('Please select a subject before recording attendance', 'warning');
+                    return;
+                }
+                
+                // Validate student selection
+                if (!studentValue) {
+                    showToast('Please select a student', 'warning');
+                    return;
+                }
+                
+                console.log('Offline form submission - Subject:', subjectSelect.value, 'Student:', studentValue);
+                
+                // Store the scan in offline storage using the same method as online
+                if (typeof handleEnhancedOfflineManualSelection === 'function') {
+                    handleEnhancedOfflineManualSelection(studentValue, scanLocation, scanNotes);
+                } else {
+                    console.error('Enhanced offline manual selection function not available');
+                    showToast('Offline attendance functionality not available', 'danger');
+                }
             }
         });
     }
@@ -3673,14 +3914,14 @@ function handleOfflineQrScan(qrData, scanLocation, scanNotes) {
     .then(() => {
         showOfflineAlert('success', 'Attendance recorded offline. Will sync when online.');
         
-        // Clear the form
-        document.getElementById('qr_data').value = '';
+        // Clear the form using safe utility function
+        safeSetElementValue('qr_data', '');
         
         // Add to the recent scans table
         addToRecentScansTable({
             student_name: 'Pending sync...',
             status: 'pending',
-            time: new Date().toLocaleTimeString(),
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hour12: true}),
             offline: true
         });
         
@@ -3718,14 +3959,14 @@ function handleOfflineLrnScan(lrn, scanLocation, scanNotes) {
     .then(() => {
         showOfflineAlert('success', 'LRN attendance recorded offline. Will sync when online.');
         
-        // Clear the form
-        document.getElementById('lrn').value = '';
+        // Clear the form using safe utility function
+        safeSetElementValue('lrn', '');
         
         // Add to the recent scans table
         addToRecentScansTable({
             student_name: 'Pending sync (LRN: ' + lrn + ')',
             status: 'pending',
-            time: new Date().toLocaleTimeString(),
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hour12: true}),
             offline: true
         });
     })
@@ -3795,6 +4036,94 @@ function addToRecentScansTable(data) {
     }
 }
 
+// Update current time display in header
+function updateCurrentTimeDisplay() {
+    // Update any current time displays in the interface
+    const currentTimeElements = document.querySelectorAll('.current-time-display');
+    const currentTime = new Date();
+    const timeString = currentTime.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hour12: true});
+    
+    currentTimeElements.forEach(element => {
+        element.textContent = timeString;
+    });
+    
+    // Also update the title with current time for easy reference
+    const timeDisplays = document.querySelectorAll('[data-time-display="current"]');
+    timeDisplays.forEach(element => {
+        element.textContent = timeString;
+    });
+}
+
+// Update time status display
+function updateTimeStatus() {
+    const timeStatusElement = document.getElementById('timeStatus');
+    const timeStatusTextElement = document.getElementById('timeStatusText');
+    
+    if (!timeStatusElement || !timeStatusTextElement) return;
+    
+    const currentTime = new Date();
+    const currentHour = currentTime.getHours();
+    const currentMinute = currentTime.getMinutes();
+    const currentTimeString = currentTime.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hour12: true});
+    
+    let statusClass = 'alert-info';
+    let statusIcon = 'fa-clock';
+    let statusText = '';
+    
+    // Check current time status
+    if (currentHour < 6) {
+        statusClass = 'alert-secondary';
+        statusIcon = 'fa-moon';
+        statusText = `Current time: ${currentTimeString} - Attendance recording not yet available (starts at 6:00 AM)`;
+    } else if (currentHour < 7 || (currentHour === 7 && currentMinute <= 15)) {
+        statusClass = 'alert-success';
+        statusIcon = 'fa-check-circle';
+        statusText = `Current time: ${currentTimeString} - Students will be marked as PRESENT`;
+    } else if (currentHour < 16 || (currentHour === 16 && currentMinute <= 15)) {
+        statusClass = 'alert-warning';
+        statusIcon = 'fa-exclamation-triangle';
+        statusText = `Current time: ${currentTimeString} - Students will be marked as LATE`;
+    } else {
+        statusClass = 'alert-danger';
+        statusIcon = 'fa-times-circle';
+        statusText = `Current time: ${currentTimeString} - Attendance recording closed. Auto-absent marking will run soon.`;
+    }
+    
+    console.log(`[Time Status Update] ${currentTimeString} (${currentHour}:${currentMinute}) - Status: ${statusClass.replace('alert-', '')}`);
+    
+    // Update the status display
+    timeStatusElement.className = `alert ${statusClass}`;
+    timeStatusTextElement.innerHTML = `<strong>${statusText}</strong>`;
+    
+    // Also disable/enable scanner buttons based on time
+    const startScannerBtn = document.getElementById('startScannerBtn');
+    const lrnSubmitBtn = document.querySelector('#lrn-form button[type="submit"]');
+    
+    // Use the same logic as server-side (allow 6:00 AM to 4:15 PM)
+    const isTimeRestricted = currentHour < 6 || currentHour > 16 || (currentHour === 16 && currentMinute > 15);
+    
+    if (startScannerBtn) {
+        startScannerBtn.disabled = isTimeRestricted;
+        if (isTimeRestricted) {
+            startScannerBtn.innerHTML = '<i class="fas fa-times me-2"></i>Scanner Disabled';
+        } else {
+            startScannerBtn.innerHTML = '<i class="fas fa-camera me-2"></i>Start Scanner';
+        }
+    }
+    
+    if (lrnSubmitBtn) {
+        lrnSubmitBtn.disabled = isTimeRestricted;
+        console.log(`[Button Status] Manual selection button disabled: ${isTimeRestricted} (time: ${currentHour}:${currentMinute})`);
+        if (isTimeRestricted) {
+            lrnSubmitBtn.innerHTML = '<i class="fas fa-times me-2"></i>Recording Disabled';
+            lrnSubmitBtn.title = 'Attendance recording is only available from 6:00 AM to 4:15 PM';
+        } else {
+            lrnSubmitBtn.innerHTML = '<i class="fas fa-user-check me-2"></i>Record Attendance';
+            lrnSubmitBtn.title = 'Record student attendance';
+        }
+    }
+}
+
 // Update UI based on online/offline status
 function updateOfflineStatus() {
     const isOnline = navigator.onLine;
@@ -3811,7 +4140,7 @@ function updateOfflineStatus() {
             // Try to sync data when back online
             if (typeof syncOfflineData === 'function') {
                 syncOfflineData().then(() => {
-                    showOfflineAlert('success', 'Offline attendance records synced successfully.');
+                    console.log('Offline attendance records synced successfully.');
                 }).catch(error => {
                     console.error('Error syncing offline data:', error);
                 });
@@ -3873,6 +4202,33 @@ function updateOfflineStatus() {
 
 <!-- Offline utilities -->
 <script>
+// Utility function to safely get element values
+function safeGetElementValue(elementId, defaultValue = '') {
+    const element = document.getElementById(elementId);
+    const value = element ? element.value : defaultValue;
+    
+    // Debug logging for troubleshooting
+    if (!element) {
+        console.warn(`⚠ Element not found: ${elementId}`);
+    } else if (!element.value && elementId.includes('lrn')) {
+        console.log(`ℹ Element '${elementId}' found but empty`);
+    }
+    
+    return value;
+}
+
+// Utility function to safely set element values
+function safeSetElementValue(elementId, value) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.value = value;
+        return true;
+    } else {
+        console.warn(`Element with ID '${elementId}' not found`);
+        return false;
+    }
+}
+
 // Initialize offline utilities
 window.offlineUtils = {
     // Save attendance data for offline processing
@@ -4080,4 +4436,213 @@ if ('serviceWorker' in navigator && 'SyncManager' in window) {
         });
     });
 }
+
+// Database troubleshooting functions
+window.fixOfflineDatabase = function() {
+    console.log('🔧 Starting database troubleshooting...');
+    
+    if (typeof window.resetEnhancedCacheDB === 'function') {
+        console.log('🔄 Using enhanced cache manager reset...');
+        return window.resetEnhancedCacheDB()
+            .then(() => {
+                console.log('✅ Database reset successful!');
+                alert('Database reset successful! The page will now reload.');
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('❌ Enhanced reset failed:', error);
+                alert('Database reset failed: ' + error.message);
+            });
+    }
+    
+    // Fallback reset method
+    console.log('🔄 Using fallback reset method...');
+    
+    // Close any existing connections
+    if (window.db) {
+        window.db.close();
+        window.db = null;
+    }
+    
+    // Delete the database
+    const deleteRequest = indexedDB.deleteDatabase('kes-smart-offline-data');
+    
+    deleteRequest.onsuccess = () => {
+        console.log('✅ Database deleted successfully!');
+        alert('Database reset successful! The page will now reload.');
+        window.location.reload();
+    };
+    
+    deleteRequest.onerror = (event) => {
+        console.error('❌ Failed to delete database:', event.target.error);
+        alert('Failed to reset database: ' + event.target.error);
+    };
+    
+    deleteRequest.onblocked = () => {
+        console.warn('⚠ Database deletion blocked');
+        alert('Database reset is blocked. Please close all other tabs of this website and try again.');
+    };
+};
+
+// Add database troubleshooting info to console
+console.log('📚 DATABASE TROUBLESHOOTING COMMANDS:');
+console.log('- fixOfflineDatabase() - Reset the offline database if you\'re having issues');
+console.log('- window.db - Current database connection');
+console.log('- window.STORE_NAMES - Available database stores');
+
+// Auto-fix if there are critical database errors
+if (typeof window.addEventListener === 'function') {
+    window.addEventListener('error', function(event) {
+        const errorMessage = event.message || '';
+        if (errorMessage.includes('object stores was not found') || 
+            errorMessage.includes('IDBDatabase') ||
+            errorMessage.includes('IndexedDB')) {
+            console.error('🚨 Critical database error detected:', errorMessage);
+            console.log('💡 Try running fixOfflineDatabase() to resolve the issue');
+            
+            // Show user-friendly error message
+            if (typeof showToast === 'function') {
+                showToast('Database error detected. Please refresh the page or contact support.', 'danger');
+            }
+        }
+    });
+}
+
+// Cleanup scanner on page unload to prevent state issues
+window.addEventListener('beforeunload', function() {
+    if (scanner && scanner.isScanning) {
+        try {
+            scanner.stop();
+            console.log('Scanner stopped on page unload');
+        } catch (error) {
+            console.log('Error stopping scanner on unload:', error);
+        }
+    }
+});
+
+// Also handle visibility change (when tab becomes hidden)
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden && scanner && scanner.isScanning) {
+        try {
+            console.log('Page hidden, stopping scanner to prevent issues');
+            stopScanner();
+        } catch (error) {
+            console.log('Error stopping scanner on visibility change:', error);
+        }
+    }
+});
+
+// Enhanced error handling for null reference errors and IndexedDB issues
+window.addEventListener('error', function(event) {
+    const errorMessage = event.message || '';
+    const errorLine = event.lineno || 0;
+    const errorFile = event.filename || '';
+    
+    if (errorMessage.includes('Cannot read properties of null') || 
+        errorMessage.includes('reading \'value\'')) {
+        console.error('🚨 NULL REFERENCE ERROR DETECTED:');
+        console.error('  Message:', errorMessage);
+        console.error('  Line:', errorLine);
+        console.error('  File:', errorFile);
+        console.error('  This is likely a missing form element. Check your HTML for missing IDs.');
+        
+        // Show user-friendly message
+        if (typeof showToast === 'function') {
+            showToast('Form element not found. Please refresh the page.', 'warning');
+        }
+        
+        // Prevent further errors
+        event.preventDefault();
+        return true;
+    }
+    
+    // Handle IndexedDB "not a valid key" errors
+    if (errorMessage.includes('not a valid key') || errorMessage.includes('DataError')) {
+        console.warn('🛡 IndexedDB error detected, attempting automatic fix...');
+        
+        // Try to clean corrupted records
+        if (typeof window.cleanCorruptedAttendanceRecords === 'function') {
+            window.cleanCorruptedAttendanceRecords().then(result => {
+                if (result.cleaned > 0) {
+                    console.log(`✅ Auto-fixed ${result.cleaned} corrupted records`);
+                    showToast('Database issues fixed automatically!', 'success');
+                } else {
+                    console.log('ℹ️ No corrupted records found to fix');
+                }
+            }).catch(error => {
+                console.warn('⚠️ Auto-fix failed:', error.message);
+                showToast('Database error detected. Please refresh the page.', 'warning');
+            });
+        }
+        
+        // Prevent further errors
+        event.preventDefault();
+        return true;
+    }
+});
+
+// Function to reset scanner state (for debugging stuck states)
+window.resetScannerState = function() {
+    console.log('🔄 Manually resetting scanner state...');
+    isTransitioning = false;
+    scannerState = 'stopped';
+    window.lastTransitionStart = null;
+    console.log('✅ Scanner state reset. Try startScanner() again.');
+};
+
+// Function to show current scanner state
+window.getScannerState = function() {
+    console.log('📊 SCANNER STATE INFO:');
+    console.log('  - isTransitioning:', isTransitioning);
+    console.log('  - scannerState:', scannerState);
+    console.log('  - scanner.isScanning:', scanner ? scanner.isScanning : 'scanner not initialized');
+    console.log('  - lastTransitionStart:', window.lastTransitionStart);
+    if (window.lastTransitionStart) {
+        const duration = Date.now() - window.lastTransitionStart;
+        console.log('  - transition duration:', Math.round(duration/1000) + 's');
+    }
+};
+
+console.log('QR Scanner state management initialized');
+console.log('Available commands: startScanner(), stopScanner(), fixOfflineDatabase()');
+console.log('Debug commands: resetScannerState(), getScannerState()');
+console.log('Time debugging: testTimeRestriction(), checkCurrentTime()');
+console.log('Enhanced null reference protection enabled');
+console.log('');
+console.log('TROUBLESHOOTING:');
+console.log('   If you see "not a valid key" errors, try:');
+console.log('   - window.cleanCorruptedAttendanceRecords()');
+console.log('   - window.resetEnhancedCacheDB()');
+console.log('   - Or just refresh the page (auto-fix enabled)');
+
+// Function to test time restrictions manually
+window.testTimeRestriction = function(testHour, testMinute) {
+    console.log(`Testing time restriction for ${testHour}:${testMinute}`);
+    const isRestricted = testHour < 6 || testHour > 16 || (testHour === 16 && testMinute > 15);
+    console.log(`Time ${testHour}:${testMinute} - Restricted: ${isRestricted}`);
+    return !isRestricted;
+};
+
+// Function to check current time and restrictions
+window.checkCurrentTime = function() {
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    const timeString = now.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hour12: true});
+    const isRestricted = hour < 6 || hour > 16 || (hour === 16 && minute > 15);
+    
+    console.log('=== CURRENT TIME STATUS ===');
+    console.log(`Current time: ${timeString} (${hour}:${minute})`);
+    console.log(`Time restricted: ${isRestricted}`);
+    console.log(`Should allow recording: ${!isRestricted}`);
+    console.log('=== BUTTON STATUS ===');
+    const btn = document.querySelector('#lrn-form button[type="submit"]');
+    if (btn) {
+        console.log(`Button disabled: ${btn.disabled}`);
+        console.log(`Button text: ${btn.textContent}`);
+    } else {
+        console.log('Button not found!');
+    }
+    return !isRestricted;
+};
 </script>

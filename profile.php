@@ -757,6 +757,21 @@ document.querySelectorAll('#preferences input, #preferences select').forEach(inp
     .badge {
         font-size: 0.75rem;
     }
+    
+    /* Bottom navigation mobile-specific improvements */
+    body.has-bottom-nav {
+        padding-bottom: 80px;
+    }
+    
+    /* Remove offline banner spacing conflicts with bottom nav */
+    body.offline-mode.has-bottom-nav {
+        padding-bottom: 80px; /* Keep consistent with online mode */
+    }
+    
+    /* Ensure proper spacing for main content */
+    main.container {
+        margin-bottom: 1rem;
+    }
 }
 
 .theme-dark {
@@ -822,6 +837,9 @@ document.querySelectorAll('#preferences input, #preferences select').forEach(inp
 <script>
 // Initialize offline support for profile page
 document.addEventListener('DOMContentLoaded', function() {
+    // Add bottom nav body class for proper spacing
+    document.body.classList.add('has-bottom-nav');
+    
     // Check if we're in offline mode
     if (!navigator.onLine) {
         showOfflineMode();
@@ -851,22 +869,6 @@ function showOfflineMode() {
     // Apply offline mode class to body for consistent styling
     document.body.classList.add('offline-mode');
     
-    // Show offline indicator if not already present
-    if (!document.getElementById('offline-mode-indicator')) {
-        const indicator = document.createElement('div');
-        indicator.id = 'offline-mode-indicator';
-        indicator.className = 'alert alert-warning mb-3';
-        indicator.innerHTML = `
-            <i class="fas fa-wifi-slash me-2"></i>
-            <strong>You are offline.</strong> Some profile features may be limited.
-        `;
-        
-        const container = document.querySelector('main.container');
-        if (container && container.firstChild) {
-            container.insertBefore(indicator, container.firstChild);
-        }
-    }
-    
     // Disable form elements
     const formElements = document.querySelectorAll('form input, form select, form textarea, form button');
     formElements.forEach(el => {
@@ -885,47 +887,12 @@ function showOfflineMode() {
     offlineMessages.forEach(element => {
         element.style.display = 'block';
     });
-    
-    // Add offline badge to tab navigation
-    const tabNavs = document.querySelectorAll('.nav-link');
-    tabNavs.forEach(nav => {
-        if (!nav.querySelector('.badge')) {
-            const badge = document.createElement('span');
-            badge.className = 'badge bg-warning text-dark ms-2';
-            badge.textContent = 'Offline';
-            badge.style.fontSize = '0.7rem';
-            nav.appendChild(badge);
-        }
-    });
-    
-    // Add offline message to forms
-    const forms = document.querySelectorAll('form');
-    forms.forEach(form => {
-        if (!form.querySelector('.offline-message')) {
-            const message = document.createElement('div');
-            message.className = 'alert alert-warning offline-message mt-3';
-            message.innerHTML = '<i class="fas fa-wifi-slash me-2"></i> Form submissions are disabled while offline.';
-            form.appendChild(message);
-        }
-    });
-    
-    // Ensure footer navigation has offline styling
-    const bottomNav = document.querySelector('.bottom-nav');
-    if (bottomNav) {
-        bottomNav.classList.add('offline-nav');
-    }
 }
 
 // Hide offline mode UI
 function hideOfflineMode() {
     // Remove offline mode class from body
     document.body.classList.remove('offline-mode');
-    
-    // Hide offline indicator
-    const offlineIndicator = document.getElementById('offline-mode-indicator');
-    if (offlineIndicator) {
-        offlineIndicator.remove();
-    }
     
     // Enable form elements
     const formElements = document.querySelectorAll('form input, form select, form textarea, form button');
@@ -945,26 +912,6 @@ function hideOfflineMode() {
     offlineMessages.forEach(element => {
         element.style.display = 'none';
     });
-    
-    // Remove offline badges
-    const badges = document.querySelectorAll('.badge.bg-warning');
-    badges.forEach(badge => {
-        if (badge.textContent === 'Offline') {
-            badge.remove();
-        }
-    });
-    
-    // Remove offline messages from forms
-    const messages = document.querySelectorAll('.offline-message');
-    messages.forEach(message => {
-        message.remove();
-    });
-    
-    // Remove offline styling from footer navigation
-    const bottomNav = document.querySelector('.bottom-nav');
-    if (bottomNav) {
-        bottomNav.classList.remove('offline-nav');
-    }
 }
 
 // Store profile data in localStorage for offline use

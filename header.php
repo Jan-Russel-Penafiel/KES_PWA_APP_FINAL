@@ -454,63 +454,80 @@ if (!in_array($current_page, $public_pages)) {
                     console.error('Service Worker registration failed:', error);
                 });
                 
-            // Listen for service worker messages
-            navigator.serviceWorker.addEventListener('message', event => {
-                const { type, version, autoUpdated } = event.data;
-                
-                switch (type) {
-                    case 'SW_UPDATE_AVAILABLE':
-                        console.log(`Update available: ${version}`);
-                        if (autoUpdated) {
-                            showUpdateNotification('App is updating automatically...', 'info');
-                        }
-                        break;
-                        
-                    case 'SW_ACTIVATED':
-                        console.log(`New version activated: ${version}`);
-                        if (autoUpdated) {
-                            showUpdateNotification('App updated successfully! New features are now available.', 'success');
-                            // Optionally reload the page after a short delay
-                            setTimeout(() => {
-                                if (confirm('App has been updated. Reload to see new features?')) {
-                                    window.location.reload();
-                                }
-                            }, 2000);
-                        }
-                        break;
-                        
-                    case 'SW_INSTALLED':
-                        console.log(`Service worker installed: ${version}`);
-                        break;
-                }
-            });
+            // Service worker message listeners removed - updates now happen silently
         });
     }
     
-    // Function to show update notifications
-    function showUpdateNotification(message, type = 'info') {
-        // Create notification element
-        const notification = document.createElement('div');
-        notification.className = `alert alert-${type === 'success' ? 'success' : 'info'} alert-dismissible fade show position-fixed`;
-        notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 350px;';
-        notification.innerHTML = `
-            <i class="fas fa-${type === 'success' ? 'check-circle' : 'info-circle'} me-2"></i>
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-        
-        document.body.appendChild(notification);
-        
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            if (notification && notification.parentNode) {
-                notification.remove();
-            }
-        }, 5000);
-    }
+    // Update notification function removed - updates now happen silently
     
+    // Remove any lingering update notifications
+    function removeUpdateNotifications() {
+        // Only target specific notification elements with update-related content
+        const specificSelectors = [
+            '#pwa-install-banner',
+            '.toast-container',
+            '[id*="update-notification"]',
+            '[class*="update-notification"]'
+        ];
+        
+        specificSelectors.forEach(selector => {
+            try {
+                document.querySelectorAll(selector).forEach(element => {
+                    element.remove();
+                    console.log('Removed specific notification element:', element);
+                });
+            } catch (e) {
+                // Ignore selector errors
+            }
+        });
+        
+        // Only check elements that are likely to be notifications (not form inputs, cards, etc.)
+        const notificationElements = document.querySelectorAll('.alert, .toast, .notification, [role="alert"], .position-fixed');
+        notificationElements.forEach(element => {
+            if (element.textContent && 
+                (element.textContent.includes('A new version of the app is available') ||
+                 element.textContent.includes('version') && element.textContent.includes('available') ||
+                 element.textContent.includes('reload') && element.textContent.includes('version'))) {
+                // Double-check this isn't a form or main content
+                if (!element.closest('form') && !element.closest('main') && !element.closest('.card-body')) {
+                    element.remove();
+                    console.log('Removed notification with version text:', element);
+                }
+            }
+        });
+    }
+
+    // Disable any cached notification functions to prevent errors
+    window.showUpdateNotification = function() {
+        console.log('Update notification disabled');
+    };
+    
+    // Override any service worker message handlers
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', function(event) {
+            // Ignore all service worker messages about updates
+            console.log('Service worker message ignored:', event.data);
+        });
+    }
+
     // Online/Offline detection
     document.addEventListener('DOMContentLoaded', function() {
+        // Override any notification functions that might be loaded later
+        window.showUpdateNotification = function() {
+            console.log('Update notification disabled');
+        };
+        
+        // Remove any update notifications immediately
+        removeUpdateNotifications();
+        
+        // Also remove them periodically but less frequently and with safety checks
+        setInterval(() => {
+            // Only run if page is not a login or critical form page
+            if (!document.querySelector('#login-form') && !document.querySelector('form[method="POST"]')) {
+                removeUpdateNotifications();
+            }
+        }, 2000);
+        
         const offlineBanner = document.createElement('div');
         offlineBanner.id = 'offline-banner';
         offlineBanner.innerHTML = '<i class="fas fa-wifi-slash me-2"></i> You are currently offline. Some features may be limited.';
@@ -566,6 +583,7 @@ if (!in_array($current_page, $public_pages)) {
     
     <!-- Offline Support Scripts -->
     <script src="assets/js/sw-updater.js"></script>
+    <script src="assets/js/enhanced-cache-manager.js"></script>
     <script src="assets/js/offline-forms.js"></script>
     <script src="assets/js/cache-manager.js"></script>
     <script src="assets/js/cache-clear.js"></script>

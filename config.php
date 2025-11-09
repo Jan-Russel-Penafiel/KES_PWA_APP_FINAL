@@ -48,7 +48,9 @@ function getSMSConfig($pdo) {
 }
 
 // Session management
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 // Helper functions
 function sanitize_input($data) {

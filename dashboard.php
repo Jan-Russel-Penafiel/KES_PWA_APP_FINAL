@@ -1,29 +1,30 @@
 <?php
 require_once 'config.php';
 
-// Check if user is logged in through PHP session
-if (!isLoggedIn()) {
-    // If no PHP session, we'll check for client-side session in JavaScript
-    // This allows for offline authentication
-    // The actual check happens in the JavaScript below
-    $check_offline_auth = true;
-} else {
-    $check_offline_auth = false;
-}
-
-// Initialize variables for both online and offline mode
-$user_role = isset($_SESSION['role']) ? $_SESSION['role'] : '';
+// Enhanced authentication check supporting both online and offline modes
+$check_offline_auth = false;
+$user_role = '';
 $current_user = [];
 
-// If we have a PHP session, get user data from database
-if (isset($_SESSION['user_id']) && !empty($_SESSION['user_id'])) {
+// Check if user is logged in through PHP session (online mode)
+if (isLoggedIn() && isset($_SESSION['user_id']) && !empty($_SESSION['user_id'])) {
     $current_user = getCurrentUser($pdo);
     $user_role = $_SESSION['role'];
+} else {
+    // Mark that we need to check offline authentication
+    $check_offline_auth = true;
 }
 
 $page_title = 'Dashboard';
 include 'header.php';
 ?>
+
+<!-- Offline Authentication Script -->
+<script src="assets/js/offline-auth.js"></script>
+<script>
+// Set data attribute for offline auth check
+document.body.dataset.checkOfflineAuth = '<?php echo $check_offline_auth ? 'true' : 'false'; ?>';
+</script>
 
 <!-- Student ID Card Styles -->
 <style>
@@ -63,6 +64,29 @@ include 'header.php';
     background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
 }
 
+/* Time Display Styles */
+.current-time-display {
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 8px;
+    padding: 10px;
+    border: 1px solid #e0e0e0;
+}
+
+#currentTimeDisplay {
+    font-family: 'Courier New', monospace;
+    font-size: 1.1rem;
+    color: #333;
+}
+
+#attendanceStatusDisplay {
+    font-weight: bold;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.1);
+}
+
+.alert-warning .current-time-display {
+    background: rgba(255, 255, 255, 0.9);
+}
+
 @media (max-width: 768px) {
     .student-id-card {
         max-width: 100% !important;
@@ -75,6 +99,11 @@ include 'header.php';
     
     .student-info .fw-bold {
         font-size: 0.8rem !important;
+    }
+    
+    .current-time-display {
+        margin-top: 10px;
+        text-align: center !important;
     }
     
     #qr-code-small {
@@ -98,6 +127,151 @@ include 'header.php';
     .btn, .alert, .navbar, .footer {
         display: none !important;
     }
+}
+
+/* QR Scanner and Generator Styles */
+.scanning {
+    position: relative;
+    overflow: hidden;
+}
+
+.scanning::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0, 123, 255, 0.2), transparent);
+    animation: scan 2s infinite;
+    z-index: 10;
+}
+
+@keyframes scan {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+.qr-display-container {
+    transition: all 0.3s ease;
+}
+
+.qr-display-container:hover {
+    transform: scale(1.02);
+}
+
+.scanner-container {
+    position: relative;
+}
+
+.session-item {
+    transition: all 0.3s ease;
+}
+
+.session-item:hover {
+    background-color: rgba(0, 123, 255, 0.1);
+    border-radius: 5px;
+}
+
+.info-item {
+    border-bottom: 1px solid #eee;
+    padding-bottom: 0.5rem;
+}
+
+.info-item:last-child {
+    border-bottom: none;
+}
+
+/* Mobile optimizations for QR scanner */
+@media (max-width: 768px) {
+    #student-qr-reader video,
+    #teacher-qr-container img {
+        max-width: 100% !important;
+        height: auto !important;
+    }
+    
+    .scanner-container {
+        padding: 0.5rem;
+    }
+    
+    .qr-display-container h6 {
+        font-size: 0.9rem;
+    }
+    
+    /* Optimize QR scanner for mobile */
+    #student-scan-region {
+        min-height: 250px !important;
+    }
+    
+    #student-qr-reader {
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    
+    #student-qr-reader video {
+        border-radius: 10px;
+        object-fit: cover;
+    }
+    
+    /* Camera controls styling for mobile */
+    .btn-group-mobile {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        justify-content: center;
+    }
+    
+    .btn-group-mobile .btn {
+        flex: 1;
+        min-width: 100px;
+    }
+}
+
+/* Scanner video styling */
+#student-qr-reader video {
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Camera info styling */
+#studentCameraInfo {
+    background: rgba(0, 123, 255, 0.1);
+    border-radius: 15px;
+    padding: 5px 10px;
+    display: inline-block;
+}
+
+/* Improved button styling for scanner controls */
+#startStudentScanBtn:hover {
+    background-color: #218838;
+    transform: scale(1.05);
+}
+
+#stopStudentScanBtn:hover {
+    background-color: #c82333;
+    transform: scale(1.05);
+}
+
+#switchStudentCameraBtn:hover {
+    background-color: #0056b3;
+    color: white;
+    transform: scale(1.05);
+}
+
+/* Loading animation for QR generation */
+.qr-loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 </style>
 
@@ -186,7 +360,7 @@ try {
 <div id="offline-auth-required" class="d-none">
     <div class="alert alert-warning" role="alert">
         <h4 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Authentication Required</h4>
-        <p>You need to log in to access this page. It appears you're currently offline.</p>
+        <p>You need to log in to access this page.</p>
         <hr>
         <p class="mb-0">
             <a href="login.php" class="btn btn-primary btn-sm">Go to Login</a>
@@ -194,7 +368,7 @@ try {
     </div>
 </div>
 
-<div id="dashboard-content">
+<div id="dashboard-content" <?php if ($check_offline_auth): ?>style="display: none;"<?php endif; ?>>
 <?php if ($user_role == 'admin'): ?>
     <!-- Admin Dashboard -->
     <div class="row g-3 mb-4">
@@ -364,84 +538,131 @@ try {
         </div>
     </div>
 
-    <!-- Teacher QR Code for Attendance -->
+    <!-- Teacher QR Code Generator Section -->
     <div class="row g-3 mb-4">
         <div class="col-12">
             <div class="card shadow-sm rounded-3">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0"><i class="fas fa-qrcode me-2"></i>Generate Attendance QR Code</h5>
+                <div class="card-header bg-transparent py-3 text-center">
+                    <h5 class="card-title h6 fw-bold mb-0">
+                        <i class="fas fa-qrcode me-2"></i>Attendance QR Code Generator
+                    </h5>
                 </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-8">
-                            <form id="attendance-qr-form">
-                                <div class="row mb-3">
-                                    <div class="col-md-6">
-                                        <label for="qr-section" class="form-label">Section</label>
-                                        <select class="form-select" id="qr-section" name="section_id" required>
-                                            <option value="">Select Section</option>
-                                            <?php
-                                            try {
-                                                $teacher_sections_stmt = $pdo->prepare("SELECT id, section_name, grade_level FROM sections WHERE teacher_id = ? AND status = 'active' ORDER BY section_name");
-                                                $teacher_sections_stmt->execute([$current_user['id']]);
-                                                $teacher_sections = $teacher_sections_stmt->fetchAll(PDO::FETCH_ASSOC);
-                                                
-                                                foreach ($teacher_sections as $section) {
-                                                    echo "<option value='{$section['id']}'>{$section['section_name']} - Grade {$section['grade_level']}</option>";
-                                                }
-                                            } catch (PDOException $e) {
-                                                echo "<option value=''>Error loading sections</option>";
-                                            }
-                                            ?>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label for="qr-subject" class="form-label">Subject</label>
-                                        <select class="form-select" id="qr-subject" name="subject_id" required>
-                                            <option value="">Select Subject</option>
-                                            <?php
-                                            try {
-                                                $teacher_subjects_stmt = $pdo->prepare("SELECT id, subject_name, subject_code FROM subjects WHERE teacher_id = ? AND status = 'active' ORDER BY subject_name");
-                                                $teacher_subjects_stmt->execute([$current_user['id']]);
-                                                $teacher_subjects = $teacher_subjects_stmt->fetchAll(PDO::FETCH_ASSOC);
-                                                
-                                                foreach ($teacher_subjects as $subject) {
-                                                    echo "<option value='{$subject['id']}'>{$subject['subject_name']} ({$subject['subject_code']})</option>";
-                                                }
-                                            } catch (PDOException $e) {
-                                                echo "<option value=''>Error loading subjects</option>";
-                                            }
-                                            ?>
-                                        </select>
-                                    </div>
-                                </div>
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="fas fa-qrcode me-2"></i>Generate QR Code
-                                </button>
-                                <button type="button" class="btn btn-secondary ms-2" onclick="clearQRCode()">
-                                    <i class="fas fa-times me-2"></i>Clear
-                                </button>
-                            </form>
+                <div class="card-body p-3">
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Generate QR Code for Attendance</strong><br>
+                        Create a QR code that students can scan to record their attendance for a specific subject and section.
+                    </div>
+                    
+                    <!-- Subject and Section Selection -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-12 col-md-6">
+                            <label for="teacher-subject-select" class="form-label fw-semibold">Subject <span class="text-danger">*</span></label>
+                            <select class="form-select" id="teacher-subject-select" required>
+                                <option value="">Choose a subject...</option>
+                                <?php
+                                // Get teacher's subjects
+                                if ($user_role == 'teacher') {
+                                    try {
+                                        $subjects_stmt = $pdo->prepare("SELECT id, subject_name, subject_code, grade_level FROM subjects WHERE teacher_id = ? AND status = 'active' ORDER BY subject_name");
+                                        $subjects_stmt->execute([$current_user['id']]);
+                                        $teacher_subjects = $subjects_stmt->fetchAll(PDO::FETCH_ASSOC);
+                                        
+                                        foreach ($teacher_subjects as $subject) {
+                                            echo '<option value="' . $subject['id'] . '">' . 
+                                                htmlspecialchars($subject['subject_name']) . ' (' . 
+                                                htmlspecialchars($subject['subject_code']) . ') - Grade ' . 
+                                                htmlspecialchars($subject['grade_level']) . '</option>';
+                                        }
+                                    } catch (PDOException $e) {
+                                        // Handle error silently
+                                    }
+                                }
+                                ?>
+                            </select>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-12 col-md-6">
+                            <label for="teacher-section-select" class="form-label fw-semibold">Section <span class="text-danger">*</span></label>
+                            <select class="form-select" id="teacher-section-select" required>
+                                <option value="">Choose a section...</option>
+                                <?php
+                                // Get teacher's sections
+                                if ($user_role == 'teacher') {
+                                    try {
+                                        $sections_stmt = $pdo->prepare("SELECT id, section_name, grade_level FROM sections WHERE teacher_id = ? AND status = 'active' ORDER BY section_name");
+                                        $sections_stmt->execute([$current_user['id']]);
+                                        $teacher_sections = $sections_stmt->fetchAll(PDO::FETCH_ASSOC);
+                                        
+                                        foreach ($teacher_sections as $section) {
+                                            echo '<option value="' . $section['id'] . '">' . 
+                                                htmlspecialchars($section['section_name']) . ' - Grade ' . 
+                                                htmlspecialchars($section['grade_level']) . '</option>';
+                                        }
+                                    } catch (PDOException $e) {
+                                        // Handle error silently
+                                    }
+                                }
+                                ?>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- QR Generation Controls -->
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-8">
+                            <!-- QR Code Display -->
                             <div class="text-center">
-                                <div id="teacher-qr-code" class="border rounded p-3" style="min-height: 200px; display: flex; align-items: center; justify-content: center; background-color: #f8f9fa;">
-                                    <div class="text-muted">
-                                        <i class="fas fa-qrcode fa-3x mb-2"></i>
-                                        <p class="mb-0">Select section and subject to generate QR code</p>
+                                <div id="teacher-qr-container" class="border rounded-3 p-4 bg-light" style="min-height: 300px;">
+                                    <div class="py-4">
+                                        <i class="fas fa-qrcode fa-3x text-muted mb-3"></i>
+                                        <h5 class="text-muted">Select Subject & Section</h5>
+                                        <p class="text-muted small">Choose subject and section above to generate QR code</p>
                                     </div>
                                 </div>
-                                <div id="qr-actions" class="mt-3 d-none">
-                                    <button type="button" class="btn btn-outline-primary btn-sm me-2" onclick="downloadTeacherQR()">
+                                
+                                <!-- QR Controls -->
+                                <div class="d-flex justify-content-center gap-2 mt-3">
+                                    <button id="generateTeacherQRBtn" class="btn btn-primary" disabled>
+                                        <i class="fas fa-qrcode me-1"></i>Generate QR Code
+                                    </button>
+                                    <button id="downloadTeacherQRBtn" class="btn btn-outline-success" style="display: none;">
                                         <i class="fas fa-download me-1"></i>Download
                                     </button>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="printTeacherQR()">
+                                    <button id="printTeacherQRBtn" class="btn btn-outline-secondary" style="display: none;">
                                         <i class="fas fa-print me-1"></i>Print
                                     </button>
                                 </div>
-                                <div id="qr-info" class="mt-2 small text-muted d-none">
-                                    <p class="mb-1"><strong>Instructions:</strong></p>
-                                    <p class="mb-0">Students scan this QR code with their phones to mark attendance</p>
+                            </div>
+                        </div>
+                        
+                        <div class="col-12 col-lg-4">
+                            <!-- QR Code Info -->
+                            <div class="card border-0 bg-light">
+                                <div class="card-header bg-transparent">
+                                    <h6 class="card-title mb-0">
+                                        <i class="fas fa-info-circle me-2"></i>QR Code Info
+                                    </h6>
+                                </div>
+                                <div class="card-body" id="teacherQRInfo">
+                                    <div class="text-center text-muted py-3">
+                                        <i class="fas fa-info fa-2x mb-2"></i>
+                                        <p class="mb-0">Generate QR code to see details</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Active Sessions -->
+                            <div class="card border-0 bg-light mt-3">
+                                <div class="card-header bg-transparent">
+                                    <h6 class="card-title mb-0">
+                                        <i class="fas fa-clock me-2"></i>Active Sessions
+                                    </h6>
+                                </div>
+                                <div class="card-body" id="activeSessions">
+                                    <div class="text-center text-muted py-3">
+                                        <i class="fas fa-clock fa-2x mb-2"></i>
+                                        <p class="mb-0">No active sessions</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -514,23 +735,81 @@ try {
         </div>
     </div>
 
-    <!-- QR Scanner Section -->
+    <!-- Student QR Scanner Section -->
     <div class="row g-3 mb-4">
-        <div class="col-12 col-lg-8 mx-auto">
+        <div class="col-12">
             <div class="card shadow-sm rounded-3">
-                <div class="card-header bg-success text-white text-center">
-                    <h5 class="mb-0"><i class="fas fa-qrcode me-2"></i>Scan Attendance QR Code</h5>
+                <div class="card-header bg-transparent py-3 text-center">
+                    <h5 class="card-title h6 fw-bold mb-0">
+                        <i class="fas fa-qrcode me-2"></i>QR Attendance Scanner
+                    </h5>
                 </div>
-                <div class="card-body text-center p-4">
-                    <p class="text-muted mb-3">Scan your teacher's QR code to mark your attendance</p>
-                    <button type="button" class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#qrScannerModal">
-                        <i class="fas fa-camera me-2"></i>Open QR Scanner
-                    </button>
-                    <div class="mt-3">
-                        <small class="text-muted">
-                            <i class="fas fa-info-circle me-1"></i>
-                            Ask your teacher to show the attendance QR code
-                        </small>
+                <div class="card-body p-3">
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Scan Your Teacher's QR Code</strong><br>
+                        Ask your teacher to show their attendance QR code for your subject, then scan it below to record your attendance.
+                    </div>
+                    
+                    <!-- Time Rules Alert -->
+                    <div class="alert alert-warning mb-3">
+                        <div class="row align-items-center">
+                            <div class="col-12 col-md-8">
+                                <i class="fas fa-clock me-2"></i>
+                                <strong>Attendance Time Rules:</strong>
+                                <ul class="mb-0 mt-1 small">
+                                    <li><span class="text-success">Before 7:15 AM:</span> Present</li>
+                                    <li><span class="text-warning">7:15 AM - 4:15 PM:</span> Late</li>
+                                    <li><span class="text-danger">After 4:15 PM:</span> Cannot scan (Absent)</li>
+                                </ul>
+                            </div>
+                            <div class="col-12 col-md-4 text-end">
+                                <div class="current-time-display">
+                                    <div class="text-muted small">Current Time</div>
+                                    <div id="currentTimeDisplay" class="fw-bold"></div>
+                                    <div id="attendanceStatusDisplay" class="small mt-1"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Scanner Interface -->
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-8">
+                            <div class="scanner-container">
+                                <div id="student-scan-region" class="border rounded-3 p-3 bg-light text-center" style="min-height: 300px;">
+                                    <div class="py-4">
+                                        <i class="fas fa-camera fa-3x text-muted mb-3"></i>
+                                        <h5 class="text-muted">QR Scanner Ready</h5>
+                                        <p class="text-muted small">Click "Start Scanner" to scan teacher's QR code</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Scanner Controls -->
+                                <div class="btn-group-mobile mt-3">
+                                    <button id="startStudentScanBtn" class="btn btn-success">
+                                        <i class="fas fa-camera me-1"></i>
+                                        <span class="d-none d-sm-inline">Start </span>Scanner
+                                    </button>
+                                    <button id="stopStudentScanBtn" class="btn btn-danger" style="display: none;">
+                                        <i class="fas fa-stop me-1"></i>
+                                        <span class="d-none d-sm-inline">Stop </span>Scanner
+                                    </button>
+                                    <button id="switchStudentCameraBtn" class="btn btn-outline-primary" style="display: none;">
+                                        <i class="fas fa-sync-alt me-1"></i>
+                                        <span class="d-none d-sm-inline">Switch </span>Camera
+                                    </button>
+                                </div>
+                                
+                                <!-- Camera Info -->
+                                <div id="studentCameraInfo" class="text-center mt-2" style="display: none;">
+                                    <small class="text-muted">
+                                        <i class="fas fa-camera me-1"></i>
+                                        <span id="currentCameraLabel">Back Camera</span>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1031,79 +1310,44 @@ function updateDateTime() {
     document.getElementById('current-datetime').textContent = now.toLocaleString('en-US', options);
 }
 
-// Check for offline session
-function checkOfflineSession() {
-    <?php if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])): ?>
-    try {
-        const sessionData = localStorage.getItem('kes_smart_session');
-        if (sessionData) {
-            const userData = JSON.parse(sessionData);
-            
-            // Update the UI with user data
-            document.querySelector('.text-muted.small.mb-0').textContent = 'Welcome back, ' + userData.full_name + '!';
-            
-            // Set user role
-            const roleBadge = document.querySelector('.badge.bg-primary');
-            if (roleBadge) {
-                roleBadge.textContent = userData.role.charAt(0).toUpperCase() + userData.role.slice(1);
+// Handle bottom navigation visibility for students and parents when offline
+function updateBottomNavVisibility() {
+    const isOnline = navigator.onLine;
+    const userRole = '<?php echo $user_role; ?>';
+    const bottomNavs = document.querySelectorAll('.bottom-nav');
+    
+    // Only hide bottom nav for students and parents when offline
+    if (userRole === 'student' || userRole === 'parent') {
+        bottomNavs.forEach(nav => {
+            if (isOnline) {
+                // Online - show bottom nav
+                nav.style.display = '';
+                nav.classList.remove('d-none');
+            } else {
+                // Offline - hide bottom nav
+                nav.style.display = 'none';
+                nav.classList.add('d-none');
             }
-            
-            // Add offline indicator to the page
-            const offlineAlert = document.createElement('div');
-            offlineAlert.className = 'alert alert-warning mb-3';
-            offlineAlert.innerHTML = '<i class="fas fa-wifi-slash me-2"></i> You are browsing in offline mode. Some features may be limited.';
-            
-            const mainContainer = document.querySelector('main.container');
-            if (mainContainer && mainContainer.firstChild) {
-                mainContainer.insertBefore(offlineAlert, mainContainer.firstChild);
-            }
-            
-            console.log('Using offline session data');
-            
-            // If we're back online, try to sync the session
-            if (navigator.onLine) {
-                // Attempt to sync session with the server
-                fetch('api/auth.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: new URLSearchParams({
-                        action: 'verify',
-                        username: userData.username,
-                        role: userData.role
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        // Refresh the page to get a proper PHP session
-                        window.location.reload();
-                    }
-                })
-                .catch(error => {
-                    console.error('Error syncing session:', error);
-                });
-            }
-        } else {
-            // No offline session, redirect to login
-            window.location.href = 'login.php';
-        }
-    } catch (error) {
-        console.error('Error checking offline session:', error);
-        window.location.href = 'login.php';
+        });
     }
-    <?php endif; ?>
 }
+
+// Note: Offline authentication is handled by assets/js/offline-auth.js
 
 // Animate dashboard elements
 document.addEventListener('DOMContentLoaded', function() {
-    // Check for offline session first
-    checkOfflineSession();
+    // Offline auth check is handled by offline-auth.js automatically
     
     // Update date and time
     updateDateTime();
     setInterval(updateDateTime, 60000);
+    
+    // Initialize bottom nav visibility based on online/offline status
+    updateBottomNavVisibility();
+    
+    // Listen for online/offline events
+    window.addEventListener('online', updateBottomNavVisibility);
+    window.addEventListener('offline', updateBottomNavVisibility);
     
     // Animate cards with stagger effect
     const cards = document.querySelectorAll('.card');
@@ -1134,155 +1378,6 @@ document.addEventListener('DOMContentLoaded', function() {
     generateStudentQR();
     <?php endif; ?>
 });
-
-<?php if ($user_role == 'teacher'): ?>
-// Teacher QR Code Generation Functions
-document.addEventListener('DOMContentLoaded', function() {
-    const qrForm = document.getElementById('attendance-qr-form');
-    if (qrForm) {
-        qrForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            generateTeacherQR();
-        });
-    }
-});
-
-function generateTeacherQR() {
-    const sectionId = document.getElementById('qr-section').value;
-    const subjectId = document.getElementById('qr-subject').value;
-    
-    if (!sectionId || !subjectId) {
-        alert('Please select both section and subject');
-        return;
-    }
-    
-    // Generate teacher QR data: KES-SMART-TEACHER-{teacher_id}-{section_id}-{subject_id}
-    const teacherId = <?php echo $current_user['id']; ?>;
-    const qrData = btoa(`KES-SMART-TEACHER-${teacherId}-${sectionId}-${subjectId}`);
-    
-    const qrContainer = document.getElementById('teacher-qr-code');
-    const qrActions = document.getElementById('qr-actions');
-    const qrInfo = document.getElementById('qr-info');
-    
-    // Show loading
-    qrContainer.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2 text-muted">Generating QR Code...</p></div>';
-    
-    // Generate QR code using API
-    const qrSize = 200;
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${qrSize}x${qrSize}&data=${encodeURIComponent(qrData)}&format=png&margin=10`;
-    
-    const img = document.createElement('img');
-    img.src = qrUrl;
-    img.alt = 'Teacher QR Code';
-    img.style.border = '3px solid #007bff';
-    img.style.borderRadius = '15px';
-    img.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
-    img.style.maxWidth = '100%';
-    img.style.height = 'auto';
-    img.style.width = qrSize + 'px';
-    img.dataset.qrData = qrData;
-    
-    img.onload = function() {
-        qrContainer.innerHTML = '';
-        qrContainer.appendChild(img);
-        qrActions.classList.remove('d-none');
-        qrInfo.classList.remove('d-none');
-        
-        // Store current QR info for actions
-        window.currentTeacherQR = {
-            data: qrData,
-            sectionId: sectionId,
-            subjectId: subjectId,
-            sectionName: document.getElementById('qr-section').selectedOptions[0].text,
-            subjectName: document.getElementById('qr-subject').selectedOptions[0].text
-        };
-        
-        console.log('Teacher QR Code generated successfully');
-    };
-    
-    img.onerror = function() {
-        qrContainer.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> Failed to generate QR code. Please try again.</div>';
-        console.error('Teacher QR Code generation failed');
-    };
-}
-
-function clearQRCode() {
-    const qrContainer = document.getElementById('teacher-qr-code');
-    const qrActions = document.getElementById('qr-actions');
-    const qrInfo = document.getElementById('qr-info');
-    
-    qrContainer.innerHTML = `
-        <div class="text-muted">
-            <i class="fas fa-qrcode fa-3x mb-2"></i>
-            <p class="mb-0">Select section and subject to generate QR code</p>
-        </div>
-    `;
-    qrActions.classList.add('d-none');
-    qrInfo.classList.add('d-none');
-    
-    // Reset form
-    document.getElementById('attendance-qr-form').reset();
-    window.currentTeacherQR = null;
-}
-
-function downloadTeacherQR() {
-    const img = document.querySelector('#teacher-qr-code img');
-    
-    if (img && window.currentTeacherQR) {
-        const link = document.createElement('a');
-        link.download = `teacher_qr_${window.currentTeacherQR.sectionName.replace(/\s+/g, '_')}_${window.currentTeacherQR.subjectName.replace(/\s+/g, '_')}.png`;
-        link.href = img.src;
-        link.click();
-    } else {
-        alert('No QR code to download. Please generate a QR code first.');
-    }
-}
-
-function printTeacherQR() {
-    const img = document.querySelector('#teacher-qr-code img');
-    
-    if (img && window.currentTeacherQR) {
-        const printWindow = window.open('', '_blank');
-        const qrElement = `<img src="${img.src}" style="border: 3px solid #000; border-radius: 15px; max-width: 300px;">`;
-        
-        const teacherInfo = `
-            <div style="text-align: center; padding: 20px; font-family: Arial, sans-serif;">
-                <h1 style="color: #007bff; margin-bottom: 10px;">KES-SMART</h1>
-                <h2 style="margin-bottom: 20px;">Attendance QR Code</h2>
-                <p style="margin-bottom: 5px;"><strong>Teacher:</strong> <?php echo $current_user['full_name']; ?></p>
-                <p style="margin-bottom: 5px;"><strong>Section:</strong> ${window.currentTeacherQR.sectionName}</p>
-                <p style="margin-bottom: 20px;"><strong>Subject:</strong> ${window.currentTeacherQR.subjectName}</p>
-                <div style="margin: 20px 0;">
-                    ${qrElement}
-                </div>
-                <p style="margin-top: 20px; font-size: 12px; color: #666;">
-                    Students should scan this QR code to mark their attendance.<br>
-                    Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
-                </p>
-            </div>
-        `;
-        
-        printWindow.document.write(`
-            <html>
-            <head>
-                <title>Attendance QR Code - ${window.currentTeacherQR.sectionName}</title>
-                <style>
-                    body { margin: 0; padding: 20px; }
-                    @media print { body { padding: 0; } }
-                </style>
-            </head>
-            <body>
-                ${teacherInfo}
-            </body>
-            </html>
-        `);
-        printWindow.document.close();
-        printWindow.print();
-    } else {
-        alert('No QR code to print. Please generate a QR code first.');
-    }
-}
-<?php endif; ?>
 
 <?php if ($user_role == 'student'): ?>
 // Generate QR Code for student
@@ -1859,252 +1954,793 @@ function fallbackShare() {
     }
 }
 <?php endif; ?>
-</script>
 
-<!-- QR Scanner Modal -->
-<div class="modal fade" id="qrScannerModal" tabindex="-1" aria-labelledby="qrScannerModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header bg-success text-white">
-                <h5 class="modal-title" id="qrScannerModalLabel">
-                    <i class="fas fa-qrcode me-2"></i>QR Code Scanner
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="row">
-                    <div class="col-md-8">
-                        <div id="qr-scanner-container">
-                            <div id="qr-scanner" style="width: 100%;"></div>
-                            <div id="scanner-loading" class="text-center p-4">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading camera...</span>
-                                </div>
-                                <p class="mt-2 text-muted">Initializing camera...</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="card">
-                            <div class="card-header">
-                                <h6 class="mb-0">Instructions</h6>
-                            </div>
-                            <div class="card-body">
-                                <ol class="small">
-                                    <li>Ask your teacher to show the attendance QR code</li>
-                                    <li>Point your camera at the QR code</li>
-                                    <li>Wait for automatic scanning</li>
-                                    <li>Your attendance will be marked automatically</li>
-                                </ol>
-                                
-                                <div class="alert alert-info small mt-3">
-                                    <i class="fas fa-info-circle me-1"></i>
-                                    Make sure to scan the teacher's QR code, not another student's QR code
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div id="scan-result" class="mt-3 d-none">
-                            <div class="card">
-                                <div class="card-header">
-                                    <h6 class="mb-0">Scan Result</h6>
-                                </div>
-                                <div class="card-body" id="scan-result-content">
-                                    <!-- Scan result will be displayed here -->
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" onclick="toggleCamera()" id="camera-toggle-btn">
-                    <i class="fas fa-camera me-1"></i>Restart Camera
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- QR Scanner JavaScript -->
 <?php if ($user_role == 'student'): ?>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script>
-let html5QrcodeScanner = null;
-let isScanning = false;
+// Student QR Scanner Functionality
+let studentScanner = null;
+let availableCameras = [];
+let currentCameraIndex = 0;
 
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize scanner when modal is shown
-    const qrModal = document.getElementById('qrScannerModal');
-    qrModal.addEventListener('shown.bs.modal', function() {
-        initializeScanner();
-    });
+// Update current time and attendance status display
+function updateTimeDisplay() {
+    const now = new Date();
+    const timeDisplay = document.getElementById('currentTimeDisplay');
+    const statusDisplay = document.getElementById('attendanceStatusDisplay');
     
-    // Stop scanner when modal is hidden
-    qrModal.addEventListener('hidden.bs.modal', function() {
-        stopScanner();
-    });
-});
-
-function initializeScanner() {
-    if (html5QrcodeScanner) {
-        stopScanner();
-    }
-    
-    document.getElementById('scanner-loading').style.display = 'block';
-    document.getElementById('qr-scanner').style.display = 'none';
-    
-    html5QrcodeScanner = new Html5QrcodeScanner(
-        "qr-scanner", 
-        { 
-            fps: 10, 
-            qrbox: {width: 250, height: 250},
-            aspectRatio: 1.0
-        },
-        /* verbose= */ false
-    );
-    
-    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-    
-    // Hide loading after a delay
-    setTimeout(() => {
-        document.getElementById('scanner-loading').style.display = 'none';
-        document.getElementById('qr-scanner').style.display = 'block';
-    }, 2000);
-    
-    isScanning = true;
-}
-
-function onScanSuccess(decodedText, decodedResult) {
-    if (!isScanning) return;
-    
-    console.log(`QR Code scanned: ${decodedText}`);
-    
-    // Stop scanning to prevent multiple scans
-    stopScanner();
-    
-    // Show scan result
-    showScanResult('Processing...', 'info');
-    
-    // Validate QR code format
-    try {
-        const qrData = atob(decodedText);
-        console.log('Decoded QR data:', qrData);
+    if (timeDisplay && statusDisplay) {
+        // Format current time
+        const timeString = now.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
+        timeDisplay.textContent = timeString;
         
-        if (qrData.startsWith('KES-SMART-TEACHER-')) {
-            // This is a teacher QR code for attendance
-            processAttendanceQR(decodedText);
-        } else if (qrData.startsWith('KES-SMART-STUDENT-')) {
-            showScanResult('This is a student QR code. Please scan your teacher\'s attendance QR code instead.', 'warning');
+        // Calculate attendance status
+        const currentTime = now.getHours() * 100 + now.getMinutes();
+        const lateThreshold = 715; // 7:15 AM
+        const absentCutoff = 1615; // 4:15 PM
+        
+        let statusText = '';
+        let statusClass = '';
+        
+        if (currentTime <= lateThreshold) {
+            statusText = '✓ On Time (Present)';
+            statusClass = 'text-success';
+        } else if (currentTime > lateThreshold && currentTime <= absentCutoff) {
+            statusText = '⚠ Late Period';
+            statusClass = 'text-warning';
         } else {
-            showScanResult('Invalid QR code. Please scan a KES-SMART attendance QR code.', 'danger');
+            statusText = '✗ Too Late (Absent)';
+            statusClass = 'text-danger';
         }
-    } catch (error) {
-        console.error('Error decoding QR code:', error);
-        showScanResult('Invalid QR code format. Please scan a valid KES-SMART QR code.', 'danger');
+        
+        statusDisplay.textContent = statusText;
+        statusDisplay.className = `small mt-1 fw-bold ${statusClass}`;
     }
 }
 
-function onScanFailure(error) {
-    // Ignore scan failures - they happen frequently during normal operation
-    console.debug(`QR Code scan error: ${error}`);
+// Initialize student QR scanner
+function initStudentQRScanner() {
+    try {
+        const scanRegion = document.getElementById('student-scan-region');
+        if (!scanRegion) return;
+
+        // Create QR scanner element
+        scanRegion.innerHTML = '<div id="student-qr-reader" style="width: 100%"></div>';
+        
+        const html5QrCode = new Html5Qrcode("student-qr-reader");
+        studentScanner = html5QrCode;
+        
+        // Get scanner controls
+        const startBtn = document.getElementById('startStudentScanBtn');
+        const stopBtn = document.getElementById('stopStudentScanBtn');
+        const switchBtn = document.getElementById('switchStudentCameraBtn');
+        const cameraInfo = document.getElementById('studentCameraInfo');
+        
+        if (startBtn && stopBtn) {
+            startBtn.addEventListener('click', function() {
+                // Check time restrictions before starting scanner
+                const now = new Date();
+                const currentTime = now.getHours() * 100 + now.getMinutes();
+                const absentCutoff = 1615; // 4:15 PM
+                const lateThreshold = 715; // 7:15 AM
+                
+                // Prevent scanning after cutoff time
+                if (currentTime > absentCutoff) {
+                    showToast('Cannot scan QR code after 4:15 PM. This time will be marked as absent.', 'danger');
+                    return;
+                }
+                
+                // Show confirmation for late scanning
+                if (currentTime > lateThreshold) {
+                    if (!confirm('You are scanning after 7:15 AM. This will be marked as LATE. Do you want to continue?')) {
+                        return;
+                    }
+                }
+                
+                startStudentScanner();
+                this.style.display = 'none';
+                stopBtn.style.display = 'inline-block';
+                if (switchBtn) switchBtn.style.display = 'inline-block';
+                if (cameraInfo) cameraInfo.style.display = 'block';
+            });
+            
+            stopBtn.addEventListener('click', function() {
+                stopStudentScanner();
+                this.style.display = 'none';
+                startBtn.style.display = 'inline-block';
+                if (switchBtn) switchBtn.style.display = 'none';
+                if (cameraInfo) cameraInfo.style.display = 'none';
+            });
+        }
+        
+        if (switchBtn) {
+            switchBtn.addEventListener('click', function() {
+                switchStudentCamera();
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error initializing student QR scanner:', error);
+    }
 }
 
-function processAttendanceQR(teacherQRData) {
-    const studentQRData = '<?php echo $qr_data; ?>';
+// Start student scanner
+function startStudentScanner() {
+    if (!studentScanner) return;
     
-    // Send both QR codes to the server for processing
-    const requestData = {
-        teacher_qr_data: teacherQRData,
-        student_qr_data: studentQRData
+    Html5Qrcode.getCameras().then(devices => {
+        if (devices && devices.length) {
+            availableCameras = devices;
+            
+            // Try to find the back camera first
+            let selectedCameraIndex = 0; // fallback to first camera
+            
+            // Look for back/rear camera
+            for (let i = 0; i < devices.length; i++) {
+                const label = devices[i].label.toLowerCase();
+                if (label.includes('back') || label.includes('rear') || label.includes('environment')) {
+                    selectedCameraIndex = i;
+                    console.log('Using back camera:', devices[i].label);
+                    break;
+                }
+            }
+            
+            // If no back camera found by label, try to use the last camera (usually back camera)
+            if (selectedCameraIndex === 0 && devices.length > 1) {
+                selectedCameraIndex = devices.length - 1;
+                console.log('Using last camera (likely back camera):', devices[selectedCameraIndex].label);
+            }
+            
+            currentCameraIndex = selectedCameraIndex;
+            updateCameraLabel();
+            
+            const config = {
+                fps: 10,
+                qrbox: { width: 280, height: 280 },
+                aspectRatio: 1.0,
+                disableFlip: false,
+                videoConstraints: {
+                    facingMode: { ideal: "environment" }, // Prefer back camera
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true
+                }
+            };
+            
+            studentScanner.start(
+                devices[currentCameraIndex].id,
+                config,
+                handleStudentScanResult,
+                handleStudentScanError
+            ).catch(err => {
+                console.error('Error starting student scanner with back camera:', err);
+                // Fallback: try with simpler config and environment facing mode
+                const fallbackConfig = {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 },
+                    aspectRatio: 1.0,
+                    videoConstraints: {
+                        facingMode: "environment" // Force back camera
+                    }
+                };
+                
+                return studentScanner.start(
+                    devices[currentCameraIndex].id,
+                    fallbackConfig,
+                    handleStudentScanResult,
+                    handleStudentScanError
+                );
+            }).catch(err => {
+                console.error('Error starting student scanner with fallback:', err);
+                showToast('Error starting camera: ' + err.message, 'danger');
+            });
+        }
+    }).catch(err => {
+        console.error('Error getting cameras:', err);
+        showToast('No cameras found. Please allow camera access.', 'danger');
+    });
+}
+
+// Switch student camera
+function switchStudentCamera() {
+    if (!studentScanner || !availableCameras || availableCameras.length <= 1) {
+        showToast('Only one camera available', 'info');
+        return;
+    }
+    
+    // Stop current scanner
+    if (studentScanner.isScanning) {
+        studentScanner.stop().then(() => {
+            // Switch to next camera
+            currentCameraIndex = (currentCameraIndex + 1) % availableCameras.length;
+            updateCameraLabel();
+            
+            // Start with new camera
+            const config = {
+                fps: 10,
+                qrbox: { width: 280, height: 280 },
+                aspectRatio: 1.0,
+                disableFlip: false,
+                videoConstraints: {
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
+            };
+            
+            studentScanner.start(
+                availableCameras[currentCameraIndex].id,
+                config,
+                handleStudentScanResult,
+                handleStudentScanError
+            ).catch(err => {
+                console.error('Error switching camera:', err);
+                showToast('Error switching camera: ' + err.message, 'danger');
+            });
+        }).catch(err => {
+            console.error('Error stopping scanner for camera switch:', err);
+        });
+    }
+}
+
+// Update camera label
+function updateCameraLabel() {
+    const labelElement = document.getElementById('currentCameraLabel');
+    if (labelElement && availableCameras && availableCameras[currentCameraIndex]) {
+        const cameraLabel = availableCameras[currentCameraIndex].label;
+        const isBackCamera = cameraLabel.toLowerCase().includes('back') || 
+                            cameraLabel.toLowerCase().includes('rear') || 
+                            cameraLabel.toLowerCase().includes('environment');
+        
+        labelElement.textContent = isBackCamera ? 'Back Camera' : 
+                                  (cameraLabel.toLowerCase().includes('front') || 
+                                   cameraLabel.toLowerCase().includes('user') ? 'Front Camera' : 
+                                   `Camera ${currentCameraIndex + 1}`);
+    }
+}
+
+// Stop student scanner
+function stopStudentScanner() {
+    if (studentScanner && studentScanner.isScanning) {
+        studentScanner.stop().then(() => {
+            console.log('Student scanner stopped');
+        }).catch(err => {
+            console.error('Error stopping student scanner:', err);
+        });
+    }
+}
+
+// Handle student scan result
+function handleStudentScanResult(qrCodeMessage) {
+    console.log('Student scanned QR:', qrCodeMessage);
+    
+    // Stop scanner temporarily
+    if (studentScanner && studentScanner.isScanning) {
+        studentScanner.pause();
+    }
+    
+    // Play success sound
+    playBeepSound();
+    
+    // Process teacher QR code
+    processTeacherQRCode(qrCodeMessage);
+}
+
+// Handle student scan error
+function handleStudentScanError(err) {
+    // Only log meaningful errors
+    if (err && typeof err === 'string' && !err.includes('No MultiFormat Readers')) {
+        console.warn('Student QR scan error:', err);
+    }
+}
+
+// Process teacher QR code
+function processTeacherQRCode(qrData) {
+    try {
+        // Parse the teacher QR data
+        let teacherData;
+        try {
+            teacherData = JSON.parse(qrData);
+        } catch (e) {
+            throw new Error('Invalid QR code format');
+        }
+        
+        // Validate required fields
+        if (!teacherData.teacher_id || !teacherData.subject_id || !teacherData.section_id) {
+            throw new Error('Invalid teacher QR code - missing required data');
+        }
+        
+        // Check time restrictions on client side
+        const now = new Date();
+        const currentTime = now.getHours() * 100 + now.getMinutes(); // Convert to HHMM format
+        const lateThreshold = 715; // 7:15 AM
+        const absentCutoff = 1615; // 4:15 PM (16:15)
+        
+        // Check if it's past the attendance cutoff time
+        if (currentTime > absentCutoff) {
+            throw new Error('Attendance recording period has ended. Students cannot scan QR codes after 4:15 PM. This will be marked as absent.');
+        }
+        
+        // Show time-based warning messages
+        let timeWarning = '';
+        if (currentTime > lateThreshold && currentTime <= absentCutoff) {
+            timeWarning = 'Warning: You are scanning after 7:15 AM. This will be marked as LATE.';
+            showToast(timeWarning, 'warning');
+        } else if (currentTime <= lateThreshold) {
+            timeWarning = 'Good! You are on time. This will be marked as PRESENT.';
+            showToast(timeWarning, 'success');
+        }
+        
+        // Send attendance request
+        const formData = new FormData();
+        formData.append('action', 'record_attendance');
+        formData.append('teacher_id', teacherData.teacher_id);
+        formData.append('subject_id', teacherData.subject_id);
+        formData.append('section_id', teacherData.section_id);
+        formData.append('attendance_session_id', teacherData.session_id || '');
+        
+        fetch('api/student-scan-attendance.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            // Check if response is ok
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            // Get response text first to check if it's valid JSON
+            return response.text();
+        })
+        .then(text => {
+            // Try to parse JSON
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (parseError) {
+                console.error('Invalid JSON response:', text);
+                throw new Error('Server returned invalid response. Please check server logs.');
+            }
+            
+            if (data.success) {
+                showStudentScanResult(data, 'success');
+            } else {
+                showStudentScanResult(data, 'danger');
+            }
+            
+            // Resume scanning after delay
+            setTimeout(() => {
+                if (studentScanner && studentScanner.isPaused) {
+                    studentScanner.resume();
+                }
+            }, 3000);
+        })
+        .catch(error => {
+            console.error('Error recording attendance:', error);
+            showToast('Error recording attendance: ' + error.message, 'danger');
+            
+            // Resume scanning after delay
+            setTimeout(() => {
+                if (studentScanner && studentScanner.isPaused) {
+                    studentScanner.resume();
+                }
+            }, 2000);
+        });
+        
+    } catch (error) {
+        console.error('Error processing teacher QR code:', error);
+        showToast(error.message, 'danger');
+        
+        // Resume scanning after delay
+        setTimeout(() => {
+            if (studentScanner && studentScanner.isPaused) {
+                studentScanner.resume();
+            }
+        }, 2000);
+    }
+}
+
+// Show student scan result
+function showStudentScanResult(data, type) {
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const icon = type === 'success' ? 'fa-check-circle' : 'fa-times-circle';
+    
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show">
+            <i class="fas ${icon} me-2"></i>
+            <strong>${data.success ? 'Success!' : 'Error!'}</strong> ${data.message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    // Show alert above scanner
+    const scannerContainer = document.querySelector('.scanner-container');
+    if (scannerContainer) {
+        const existingAlert = scannerContainer.querySelector('.alert');
+        if (existingAlert) {
+            existingAlert.remove();
+        }
+        scannerContainer.insertAdjacentHTML('afterbegin', alertHtml);
+    }
+    
+    showToast(data.message, type);
+}
+<?php endif; ?>
+
+<?php if ($user_role == 'teacher'): ?>
+// Teacher QR Generator Functionality
+let currentTeacherQRData = null;
+
+// Initialize teacher QR generator
+function initTeacherQRGenerator() {
+    const subjectSelect = document.getElementById('teacher-subject-select');
+    const sectionSelect = document.getElementById('teacher-section-select');
+    const generateBtn = document.getElementById('generateTeacherQRBtn');
+    const downloadBtn = document.getElementById('downloadTeacherQRBtn');
+    const printBtn = document.getElementById('printTeacherQRBtn');
+    
+    if (subjectSelect && sectionSelect && generateBtn) {
+        // Enable generate button when both subject and section are selected
+        function checkSelection() {
+            const canGenerate = subjectSelect.value && sectionSelect.value;
+            generateBtn.disabled = !canGenerate;
+            
+            if (!canGenerate) {
+                // Hide QR code and reset container
+                const container = document.getElementById('teacher-qr-container');
+                if (container) {
+                    container.innerHTML = `
+                        <div class="py-4">
+                            <i class="fas fa-qrcode fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">Select Subject & Section</h5>
+                            <p class="text-muted small">Choose subject and section above to generate QR code</p>
+                        </div>
+                    `;
+                }
+                
+                // Hide download/print buttons
+                if (downloadBtn) downloadBtn.style.display = 'none';
+                if (printBtn) printBtn.style.display = 'none';
+                
+                // Clear QR info
+                updateTeacherQRInfo(null);
+            }
+        }
+        
+        subjectSelect.addEventListener('change', checkSelection);
+        sectionSelect.addEventListener('change', checkSelection);
+        
+        // Generate QR code
+        generateBtn.addEventListener('click', generateTeacherQRCode);
+        
+        // Download QR code
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', downloadTeacherQRCode);
+        }
+        
+        // Print QR code
+        if (printBtn) {
+            printBtn.addEventListener('click', printTeacherQRCode);
+        }
+    }
+}
+
+// Generate teacher QR code
+function generateTeacherQRCode() {
+    const subjectSelect = document.getElementById('teacher-subject-select');
+    const sectionSelect = document.getElementById('teacher-section-select');
+    
+    if (!subjectSelect.value || !sectionSelect.value) {
+        showToast('Please select both subject and section', 'warning');
+        return;
+    }
+    
+    // Create QR data
+    const sessionId = 'session_' + Date.now();
+    const qrData = {
+        teacher_id: <?php echo $current_user['id']; ?>,
+        teacher_name: '<?php echo addslashes($current_user['full_name']); ?>',
+        subject_id: parseInt(subjectSelect.value),
+        subject_name: subjectSelect.options[subjectSelect.selectedIndex].text,
+        section_id: parseInt(sectionSelect.value),
+        section_name: sectionSelect.options[sectionSelect.selectedIndex].text,
+        session_id: sessionId,
+        created_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
     };
     
-    fetch('api/process-attendance-qr.php', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestData)
-    })
-    .then(response => response.json())
-    .then(data => {
-        console.log('Attendance processing result:', data);
-        
-        if (data.success) {
-            showScanResult(
-                `<div class="text-success">
-                    <i class="fas fa-check-circle me-2"></i>
-                    <strong>Attendance Marked Successfully!</strong>
-                </div>
-                <div class="mt-2 small">
-                    <strong>Subject:</strong> ${data.attendance_data.subject_name}<br>
-                    <strong>Section:</strong> ${data.attendance_data.section_name}<br>
-                    <strong>Time:</strong> ${data.attendance_data.time_in}<br>
-                    <strong>Date:</strong> ${data.attendance_data.date}
-                </div>`,
-                'success'
-            );
-            
-            // Auto-close modal after 3 seconds
-            setTimeout(() => {
-                const modal = bootstrap.Modal.getInstance(document.getElementById('qrScannerModal'));
-                modal.hide();
-                
-                // Refresh the page to update attendance data
-                location.reload();
-            }, 3000);
-            
-        } else {
-            showScanResult(
-                `<div class="text-danger">
-                    <i class="fas fa-exclamation-circle me-2"></i>
-                    <strong>Error:</strong> ${data.message}
-                </div>`,
-                'danger'
-            );
-        }
-    })
-    .catch(error => {
-        console.error('Error processing attendance:', error);
-        showScanResult(
-            `<div class="text-danger">
-                <i class="fas fa-exclamation-circle me-2"></i>
-                <strong>Error:</strong> Failed to process attendance. Please try again.
-            </div>`,
-            'danger'
-        );
-    });
-}
-
-function showScanResult(message, type) {
-    const resultContainer = document.getElementById('scan-result');
-    const resultContent = document.getElementById('scan-result-content');
+    currentTeacherQRData = qrData;
     
-    resultContent.innerHTML = `<div class="alert alert-${type} mb-0">${message}</div>`;
-    resultContainer.classList.remove('d-none');
+    // Generate QR code
+    const qrDataString = JSON.stringify(qrData);
+    const qrContainer = document.getElementById('teacher-qr-container');
+    
+    if (qrContainer) {
+        // Use QR Server API to generate QR code
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrDataString)}&format=png&margin=10`;
+        
+        qrContainer.innerHTML = `
+            <div class="qr-display-container">
+                <img src="${qrUrl}" 
+                     alt="Teacher QR Code" 
+                     class="img-fluid border rounded shadow" 
+                     style="max-width: 300px; height: auto;"
+                     onload="this.style.opacity=1" 
+                     style="opacity: 0; transition: opacity 0.3s;"
+                     onerror="handleQRGenerationError(this)">
+                <div class="mt-3">
+                    <h6 class="text-primary fw-bold">${qrData.subject_name}</h6>
+                    <p class="text-muted mb-0">${qrData.section_name}</p>
+                    <small class="text-muted">Session ID: ${sessionId}</small>
+                </div>
+            </div>
+        `;
+        
+        // Show download/print buttons
+        const downloadBtn = document.getElementById('downloadTeacherQRBtn');
+        const printBtn = document.getElementById('printTeacherQRBtn');
+        if (downloadBtn) downloadBtn.style.display = 'inline-block';
+        if (printBtn) printBtn.style.display = 'inline-block';
+        
+        // Update QR info
+        updateTeacherQRInfo(qrData);
+        
+        // Add to active sessions
+        addToActiveSessions(qrData);
+        
+        showToast('QR code generated successfully!', 'success');
+    }
 }
 
-function stopScanner() {
-    if (html5QrcodeScanner) {
-        html5QrcodeScanner.clear().catch(error => {
-            console.error("Failed to clear scanner:", error);
-        });
-        html5QrcodeScanner = null;
-    }
-    isScanning = false;
+// Handle QR generation error
+function handleQRGenerationError(img) {
+    console.error('QR generation failed');
+    img.parentElement.innerHTML = `
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            QR Code generation failed. Please try again.
+        </div>
+    `;
 }
 
-function toggleCamera() {
-    if (isScanning) {
-        stopScanner();
-        document.getElementById('camera-toggle-btn').innerHTML = '<i class="fas fa-camera me-1"></i>Start Camera';
-    } else {
-        initializeScanner();
-        document.getElementById('camera-toggle-btn').innerHTML = '<i class="fas fa-stop me-1"></i>Stop Camera';
+// Update teacher QR info
+function updateTeacherQRInfo(qrData) {
+    const infoContainer = document.getElementById('teacherQRInfo');
+    if (!infoContainer) return;
+    
+    if (!qrData) {
+        infoContainer.innerHTML = `
+            <div class="text-center text-muted py-3">
+                <i class="fas fa-info fa-2x mb-2"></i>
+                <p class="mb-0">Generate QR code to see details</p>
+            </div>
+        `;
+        return;
+    }
+    
+    infoContainer.innerHTML = `
+        <div class="qr-info">
+            <div class="info-item mb-2">
+                <small class="text-muted">Subject</small>
+                <div class="fw-semibold">${qrData.subject_name}</div>
+            </div>
+            <div class="info-item mb-2">
+                <small class="text-muted">Section</small>
+                <div class="fw-semibold">${qrData.section_name}</div>
+            </div>
+            <div class="info-item mb-2">
+                <small class="text-muted">Session ID</small>
+                <div class="fw-semibold small">${qrData.session_id}</div>
+            </div>
+            <div class="info-item mb-2">
+                <small class="text-muted">Created</small>
+                <div class="small">${new Date(qrData.created_at).toLocaleString()}</div>
+            </div>
+            <div class="info-item">
+                <small class="text-muted">Expires</small>
+                <div class="small">${new Date(qrData.expires_at).toLocaleString()}</div>
+            </div>
+        </div>
+    `;
+}
+
+// Add to active sessions
+function addToActiveSessions(qrData) {
+    const sessionsContainer = document.getElementById('activeSessions');
+    if (!sessionsContainer) return;
+    
+    // Remove placeholder if present
+    const placeholder = sessionsContainer.querySelector('.text-muted.py-3');
+    if (placeholder) {
+        sessionsContainer.innerHTML = '';
+    }
+    
+    // Create session item
+    const sessionItem = document.createElement('div');
+    sessionItem.className = 'session-item border-start border-4 border-primary ps-2 mb-2';
+    sessionItem.id = 'session-' + qrData.session_id;
+    sessionItem.innerHTML = `
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <strong class="small">${qrData.subject_name}</strong>
+                <div class="text-muted small">${qrData.section_name}</div>
+                <div class="text-muted small">${new Date(qrData.created_at).toLocaleTimeString()}</div>
+            </div>
+            <button class="btn btn-sm btn-outline-danger" onclick="endSession('${qrData.session_id}')">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+    
+    // Add to container
+    sessionsContainer.insertBefore(sessionItem, sessionsContainer.firstChild);
+}
+
+// End session
+function endSession(sessionId) {
+    const sessionElement = document.getElementById('session-' + sessionId);
+    if (sessionElement) {
+        sessionElement.remove();
+        showToast('Session ended', 'info');
+        
+        // If no more sessions, show placeholder
+        const sessionsContainer = document.getElementById('activeSessions');
+        if (sessionsContainer && sessionsContainer.children.length === 0) {
+            sessionsContainer.innerHTML = `
+                <div class="text-center text-muted py-3">
+                    <i class="fas fa-clock fa-2x mb-2"></i>
+                    <p class="mb-0">No active sessions</p>
+                </div>
+            `;
+        }
     }
 }
-</script>
+
+// Download teacher QR code
+function downloadTeacherQRCode() {
+    if (!currentTeacherQRData) {
+        showToast('No QR code to download', 'warning');
+        return;
+    }
+    
+    const img = document.querySelector('#teacher-qr-container img');
+    if (img) {
+        const link = document.createElement('a');
+        link.download = `attendance_qr_${currentTeacherQRData.subject_name}_${currentTeacherQRData.section_name}.png`;
+        link.href = img.src;
+        link.target = '_blank';
+        link.click();
+        showToast('QR code downloaded', 'success');
+    }
+}
+
+// Print teacher QR code
+function printTeacherQRCode() {
+    if (!currentTeacherQRData) {
+        showToast('No QR code to print', 'warning');
+        return;
+    }
+    
+    const img = document.querySelector('#teacher-qr-container img');
+    if (img) {
+        const printWindow = window.open('', '_blank');
+        const qrInfo = `
+            <div style="text-align: center; padding: 20px; font-family: Arial, sans-serif;">
+                <h1 style="color: #007bff; margin-bottom: 10px;">KES-SMART Attendance</h1>
+                <h2 style="margin-bottom: 20px;">${currentTeacherQRData.subject_name}</h2>
+                <h3 style="margin-bottom: 20px; color: #666;">${currentTeacherQRData.section_name}</h3>
+                <div style="margin: 20px 0;">
+                    <img src="${img.src}" style="border: 2px solid #007bff; border-radius: 10px; max-width: 300px;">
+                </div>
+                <p style="margin-top: 20px; font-size: 14px; color: #666;">
+                    Students: Scan this QR code to record your attendance
+                </p>
+                <p style="font-size: 12px; color: #999;">
+                    Session ID: ${currentTeacherQRData.session_id}<br>
+                    Generated: ${new Date(currentTeacherQRData.created_at).toLocaleString()}<br>
+                    Teacher: ${currentTeacherQRData.teacher_name}
+                </p>
+            </div>
+        `;
+        
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Attendance QR Code - ${currentTeacherQRData.subject_name}</title>
+                    <style>
+                        @media print {
+                            body { margin: 0; }
+                            img { border: 2px solid #000; border-radius: 10px; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    ${qrInfo}
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+    }
+}
 <?php endif; ?>
+
+// Toast notification function
+// Toast notifications disabled - messages logged to console instead
+function showToast(message, type = 'info') {
+    console.log(`[${type.toUpperCase()}] ${message}`);
+}
+
+// Play beep sound for successful scans
+function playBeepSound() {
+    // Check if AudioContext is supported
+    if (typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined') {
+        try {
+            // Create audio context
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            const audioContext = new AudioContextClass();
+            
+            // Create oscillator
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            // Configure oscillator
+            oscillator.type = 'sine';
+            oscillator.frequency.value = 1000; // Frequency in Hz
+            
+            // Configure gain (volume)
+            gainNode.gain.value = 0.3;
+            
+            // Connect nodes
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            // Start and stop the sound
+            const now = audioContext.currentTime;
+            oscillator.start(now);
+            oscillator.stop(now + 0.2); // 200ms duration
+            
+            // Clean up
+            setTimeout(() => {
+                audioContext.close();
+            }, 300);
+        } catch (error) {
+            console.log('Audio not available:', error);
+        }
+    }
+}
+
+// Initialize appropriate scanner/generator on page load
+document.addEventListener('DOMContentLoaded', function() {
+    <?php if ($user_role == 'student'): ?>
+    // Initialize student QR scanner
+    if (typeof Html5Qrcode !== 'undefined') {
+        initStudentQRScanner();
+    } else {
+        console.error('Html5Qrcode library not loaded');
+    }
+    
+    // Initialize time display for attendance rules
+    updateTimeDisplay();
+    // Update time every second
+    setInterval(updateTimeDisplay, 1000);
+    <?php endif; ?>
+    
+    <?php if ($user_role == 'teacher'): ?>
+    // Initialize teacher QR generator
+    initTeacherQRGenerator();
+    <?php endif; ?>
+});
+</script>
+
+<!-- QR Scanner Library -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<!-- Toast Container -->
+<!-- Toast container removed - notifications disabled -->
 
 <?php include 'footer.php'; ?>

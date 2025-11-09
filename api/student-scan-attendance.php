@@ -1,0 +1,351 @@
+<?php
+// Start output buffering to prevent any accidental output
+ob_start();
+
+// Set proper content type
+header('Content-Type: application/json');
+
+// Disable error display to prevent HTML errors in JSON response
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
+
+require_once '../config.php';
+
+// Check if SMS functions file exists before including
+if (file_exists('../sms_functions.php')) {
+    require_once '../sms_functions.php';
+} else {
+    // Define a fallback function if sms_functions.php doesn't exist
+    function sendSMSNotification($pdo, $phone_number, $message) {
+        return ['success' => false, 'message' => 'SMS service not available'];
+    }
+}
+
+// Clear any output that might have been generated
+ob_clean();
+
+// Check if user is logged in as student
+if (!isLoggedIn() || $_SESSION['role'] !== 'student') {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'Unauthorized access']);
+    exit;
+}
+
+// Handle POST request for attendance recording
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'record_attendance') {
+    
+    try {
+        // Clear any previous output
+        ob_clean();
+        
+        $teacher_id = intval($_POST['teacher_id'] ?? 0);
+        $subject_id = intval($_POST['subject_id'] ?? 0);
+        $section_id = intval($_POST['section_id'] ?? 0);
+        $session_id = isset($_POST['attendance_session_id']) ? sanitize_input($_POST['attendance_session_id']) : '';
+        
+        // Get current student
+        $student_id = $_SESSION['user_id'];
+        
+        // Check if database connection is available
+        if ($GLOBALS['is_offline_mode'] || !$pdo) {
+            throw new Exception('Database connection not available. Please try again later.');
+        }
+        
+        $current_user = getCurrentUser($pdo);
+        
+        if (!$current_user) {
+            throw new Exception('Student not found');
+        }
+        
+        // Validate required parameters
+        if (!$teacher_id || !$subject_id || !$section_id) {
+            throw new Exception('Invalid QR code data - missing required information');
+        }
+        
+        // Verify teacher exists and is active
+        $teacher_check = $pdo->prepare("SELECT id, full_name FROM users WHERE id = ? AND role = 'teacher' AND status = 'active'");
+        $teacher_check->execute([$teacher_id]);
+        $teacher = $teacher_check->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$teacher) {
+            throw new Exception('Teacher not found or inactive');
+        }
+        
+        // Verify subject exists and teacher is assigned
+        $subject_check = $pdo->prepare("SELECT id, subject_name, subject_code, teacher_id FROM subjects WHERE id = ? AND status = 'active'");
+        $subject_check->execute([$subject_id]);
+        $subject = $subject_check->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$subject) {
+            throw new Exception('Subject not found or inactive');
+        }
+        
+        if ($subject['teacher_id'] != $teacher_id) {
+            throw new Exception('Teacher is not assigned to this subject');
+        }
+        
+        // Verify section exists
+        $section_check = $pdo->prepare("SELECT id, section_name, grade_level FROM sections WHERE id = ? AND status = 'active'");
+        $section_check->execute([$section_id]);
+        $section = $section_check->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$section) {
+            throw new Exception('Section not found or inactive');
+        }
+        
+        // Check if student is enrolled in this subject
+        $enrollment_check = null;
+        try {
+            $enrollment_check = $pdo->prepare("SELECT 1 FROM student_subjects WHERE student_id = ? AND subject_id = ? AND status = 'enrolled'");
+            $enrollment_check->execute([$student_id, $subject_id]);
+            
+            if (!$enrollment_check->fetch()) {
+                throw new Exception('You are not enrolled in this subject');
+            }
+        } catch (PDOException $e) {
+            // If student_subjects table doesn't exist, skip enrollment check
+            if (strpos($e->getMessage(), "doesn't exist") !== false || strpos($e->getMessage(), "Table") !== false) {
+                error_log('student_subjects table not found, skipping enrollment check');
+                // Continue without enrollment check
+            } else {
+                throw new Exception('Database error checking enrollment: ' . $e->getMessage());
+            }
+        }
+        
+        // Check if student belongs to this section
+        if ($current_user['section_id'] != $section_id) {
+            throw new Exception('You are not assigned to this section');
+        }
+        
+        // Check if attendance already recorded today for this subject
+        $today = date('Y-m-d');
+        $current_time = date('H:i:s');
+        $current_time_formatted = date('g:i A');
+        
+        // Define time boundaries
+        $late_threshold = '07:15:00';  // 7:15 AM
+        $absent_cutoff = '16:15:00';   // 4:15 PM
+        
+        $existing_attendance_check = $pdo->prepare("
+            SELECT id, status, time_in, time_out 
+            FROM attendance 
+            WHERE student_id = ? AND subject_id = ? AND attendance_date = ?
+        ");
+        $existing_attendance_check->execute([$student_id, $subject_id, $today]);
+        $existing_attendance = $existing_attendance_check->fetch(PDO::FETCH_ASSOC);
+        
+        $attendance_id = null;
+        $is_checkout = false;
+        
+        if ($existing_attendance) {
+            // Check if this is a checkout scan
+            if ($existing_attendance['time_in'] && !$existing_attendance['time_out']) {
+                // Student has checked in, now checking out
+                if ($current_time < $absent_cutoff) {
+                    // Early checkout - mark as 'out'
+                    $update_stmt = $pdo->prepare("
+                        UPDATE attendance 
+                        SET status = 'out', time_out = NOW(), 
+                            remarks = CONCAT(IFNULL(remarks, ''), ' | Early checkout via student scan')
+                        WHERE id = ?
+                    ");
+                    $update_stmt->execute([$existing_attendance['id']]);
+                    $attendance_status = 'out';
+                } else {
+                    // Normal checkout after 4:15 PM
+                    $update_stmt = $pdo->prepare("
+                        UPDATE attendance 
+                        SET time_out = NOW(),
+                            remarks = CONCAT(IFNULL(remarks, ''), ' | Checkout via student scan')
+                        WHERE id = ?
+                    ");
+                    $update_stmt->execute([$existing_attendance['id']]);
+                    $attendance_status = $existing_attendance['status']; // Keep original status
+                }
+                $attendance_id = $existing_attendance['id'];
+                $is_checkout = true;
+                
+            } elseif ($existing_attendance['time_out']) {
+                // Student has already checked in and out today for this subject
+                $time_in = date('g:i A', strtotime($existing_attendance['time_in']));
+                $time_out = date('g:i A', strtotime($existing_attendance['time_out']));
+                $status = ucfirst($existing_attendance['status']);
+                
+                throw new Exception("You have already checked in and out today for {$subject['subject_name']}. Check-in: {$time_in}, Check-out: {$time_out}");
+                
+            } else {
+                // No time_in recorded yet, this shouldn't happen but handle it
+                if ($current_time > $absent_cutoff) {
+                    throw new Exception('Attendance recording period has ended for the day');
+                }
+                
+                // Determine status based on time
+                if ($current_time <= $late_threshold) {
+                    $attendance_status = 'present';
+                } else {
+                    $attendance_status = 'late';
+                }
+                
+                $update_stmt = $pdo->prepare("
+                    UPDATE attendance 
+                    SET status = ?, time_in = NOW(), teacher_id = ?,
+                        remarks = 'Student self-scan attendance'
+                    WHERE id = ?
+                ");
+                $update_stmt->execute([$attendance_status, $teacher_id, $existing_attendance['id']]);
+                $attendance_id = $existing_attendance['id'];
+            }
+        } else {
+            // No existing attendance record for this subject
+            if ($current_time > $absent_cutoff) {
+                throw new Exception('Attendance recording period has ended. Students cannot check in after 4:15 PM');
+            }
+            
+            // Determine status based on time
+            if ($current_time <= $late_threshold) {
+                $attendance_status = 'present';
+            } else {
+                $attendance_status = 'late';
+            }
+            
+            // Create new attendance record (check-in only)
+            $insert_stmt = $pdo->prepare("
+                INSERT INTO attendance 
+                (student_id, teacher_id, section_id, subject_id, attendance_date, time_in, status, remarks, qr_scanned) 
+                VALUES (?, ?, ?, ?, ?, NOW(), ?, 'Student self-scan attendance', 1)
+            ");
+            $insert_stmt->execute([$student_id, $teacher_id, $section_id, $subject_id, $today, $attendance_status]);
+            $attendance_id = $pdo->lastInsertId();
+        }
+        
+        // Send SMS notification to parent (only for check-in or checkout)
+        $current_date = date('F j, Y');
+        $sms_result = ['success' => true, 'message' => 'SMS not configured'];
+        
+        // Get section name for SMS
+        $section_name = $section['section_name'];
+        
+        // Send SMS based on scan type
+        if ($is_checkout) {
+            // Checkout SMS
+            if ($attendance_status == 'out') {
+                $sms_message = "Hi! Your child {$current_user['full_name']} has left {$subject['subject_name']} class early at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+            } else {
+                $sms_message = "Hi! Your child {$current_user['full_name']} has finished {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+            }
+            $sms_result = sendSMSNotificationToParent($student_id, $sms_message, 'checkout');
+        } else {
+            // Check-in SMS - only if not already sent today
+            $sms_check = $pdo->prepare("
+                SELECT COUNT(*) as sms_count 
+                FROM sms_logs 
+                WHERE phone_number IN (
+                    SELECT u.phone 
+                    FROM users u 
+                    JOIN student_parents sp ON u.id = sp.parent_id 
+                    WHERE sp.student_id = ? AND sp.is_primary = 1 AND u.phone IS NOT NULL
+                ) 
+                AND notification_type = 'attendance' 
+                AND status = 'sent' 
+                AND DATE(sent_at) = ?
+            ");
+            $sms_check->execute([$student_id, $today]);
+            $sms_already_sent = $sms_check->fetchColumn() > 0;
+            
+            if (!$sms_already_sent) {
+                $status_text = ($attendance_status == 'late') ? 'arrived late to' : 'arrived at';
+                $sms_message = "Hi! Your child {$current_user['full_name']} has {$status_text} {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+                $sms_result = sendSMSNotificationToParent($student_id, $sms_message, 'attendance');
+            } else {
+                $sms_result = ['success' => true, 'message' => 'SMS already sent today'];
+            }
+        }
+        
+        // Log QR scan
+        try {
+            $scan_log_stmt = $pdo->prepare("
+                INSERT INTO qr_scans (student_id, teacher_id, scan_time, location, device_info) 
+                VALUES (?, ?, NOW(), 'Student Self-Scan', ?)
+            ");
+            $device_info = json_encode([
+                'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? '',
+                'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '',
+                'session_id' => $session_id
+            ]);
+            $scan_log_stmt->execute([$student_id, $teacher_id, $device_info]);
+        } catch (Exception $e) {
+            // Log error but don't fail the attendance recording
+            error_log('Failed to log QR scan: ' . $e->getMessage());
+        }
+        
+        // Prepare success response
+        $response = [
+            'success' => true,
+            'message' => $is_checkout ? 
+                ($attendance_status == 'out' ? 'Early checkout recorded successfully' : 'Checkout recorded successfully') :
+                'Attendance recorded successfully',
+            'student_name' => $current_user['full_name'],
+            'student_id' => $current_user['username'],
+            'student_lrn' => $current_user['lrn'] ?? null,
+            'subject_name' => $subject['subject_name'],
+            'subject_code' => $subject['subject_code'],
+            'section_name' => $section_name,
+            'teacher_name' => $teacher['full_name'],
+            'time' => $current_time_formatted,
+            'date' => $current_date,
+            'attendance_id' => $attendance_id,
+            'status' => $attendance_status,
+            'is_checkout' => $is_checkout,
+            'scan_method' => 'Student Self-Scan',
+            'sms_sent' => $sms_result['success'],
+            'sms_message' => $sms_result['message'],
+            'session_id' => $session_id
+        ];
+        
+        // Clear any output and send JSON response
+        ob_clean();
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit;
+        
+    } catch (Exception $e) {
+        // Log the error for debugging
+        error_log('Attendance recording error: ' . $e->getMessage());
+        
+        $response = [
+            'success' => false,
+            'message' => $e->getMessage(),
+            'error_code' => 'attendance_error'
+        ];
+        
+        // Clear any output and send JSON response
+        ob_clean();
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit;
+    } catch (Error $e) {
+        // Handle fatal errors
+        error_log('Fatal error in attendance recording: ' . $e->getMessage());
+        
+        $response = [
+            'success' => false,
+            'message' => 'A system error occurred. Please try again.',
+            'error_code' => 'system_error'
+        ];
+        
+        // Clear any output and send JSON response
+        ob_clean();
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit;
+    }
+    
+} else {
+    // Invalid request method or action
+    ob_clean();
+    http_response_code(405);
+    header('Content-Type: application/json');
+    echo json_encode(['success' => false, 'message' => 'Method not allowed']);
+    exit;
+}
+?>

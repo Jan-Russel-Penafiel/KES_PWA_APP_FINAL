@@ -343,13 +343,19 @@ function storeCredentials(username, role, userData) {
             const transaction = db.transaction([STORE_NAME], 'readwrite');
             const store = transaction.objectStore(STORE_NAME);
             
-            // Store the credentials
-            const request = store.put({
+            // Add timestamp for session validation
+            const credentialData = {
                 username: username,
                 role: role,
-                userData: userData,
-                timestamp: new Date().getTime()
-            });
+                userData: {
+                    ...userData,
+                    cached_at: Date.now() // Add cache timestamp
+                },
+                timestamp: Date.now()
+            };
+            
+            // Store the credentials
+            const request = store.put(credentialData);
             
             request.onsuccess = () => {
                 console.log(`Credentials stored successfully for ${username}`);
@@ -428,58 +434,55 @@ async function performOfflineLogin(username, role) {
         
         const credentials = await checkOfflineCredentials(username, role);
         if (credentials) {
-            // Store login data in localStorage for the offline auth page
-            localStorage.setItem('offline_login_data', JSON.stringify({
+            // Add timestamp to the session data
+            const sessionData = {
                 username: username,
                 role: role,
                 userData: credentials.userData,
-                timestamp: new Date().getTime()
-            }));
+                timestamp: Date.now()
+            };
             
-            // Set offline login cookie
-            document.cookie = "kes_smart_offline_logged_in=1; path=/; max-age=86400";
+            // Store login data in localStorage for the offline auth page
+            localStorage.setItem('offline_login_data', JSON.stringify(sessionData));
             
-            // If we're online, use form POST submission
-            if (navigator.onLine) {
-                // Create a form to submit the data for offline login
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = 'offline-auth.php';
-                
-                // Add fields
-                const usernameField = document.createElement('input');
-                usernameField.type = 'hidden';
-                usernameField.name = 'username';
-                usernameField.value = username;
-                
-                const roleField = document.createElement('input');
-                roleField.type = 'hidden';
-                roleField.name = 'role';
-                roleField.value = role;
-                
-                const userDataField = document.createElement('input');
-                userDataField.type = 'hidden';
-                userDataField.name = 'user_data';
-                userDataField.value = JSON.stringify(credentials.userData);
-                
-                const offlineField = document.createElement('input');
-                offlineField.type = 'hidden';
-                offlineField.name = 'offline_login';
-                offlineField.value = '1';
-                
-                // Append fields to form
-                form.appendChild(usernameField);
-                form.appendChild(roleField);
-                form.appendChild(userDataField);
-                form.appendChild(offlineField);
-                
-                // Append form to document and submit
-                document.body.appendChild(form);
-                form.submit();
-            } else {
-                // If offline, redirect to offline auth page with parameters
-                window.location.href = `offline-auth.php?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}&user_data=${encodeURIComponent(JSON.stringify(credentials.userData))}`;
-            }
+            // Set offline login cookie (7 days)
+            document.cookie = "kes_smart_offline_logged_in=1; path=/; max-age=604800";
+            
+            // Create a form to submit the data for offline login
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = 'offline-auth.php';
+            
+            // Add fields
+            const usernameField = document.createElement('input');
+            usernameField.type = 'hidden';
+            usernameField.name = 'username';
+            usernameField.value = username;
+            
+            const roleField = document.createElement('input');
+            roleField.type = 'hidden';
+            roleField.name = 'role';
+            roleField.value = role;
+            
+            const userDataField = document.createElement('input');
+            userDataField.type = 'hidden';
+            userDataField.name = 'user_data';
+            userDataField.value = JSON.stringify(credentials.userData);
+            
+            const offlineField = document.createElement('input');
+            offlineField.type = 'hidden';
+            offlineField.name = 'offline_login';
+            offlineField.value = '1';
+            
+            // Append fields to form
+            form.appendChild(usernameField);
+            form.appendChild(roleField);
+            form.appendChild(userDataField);
+            form.appendChild(offlineField);
+            
+            // Append form to document and submit
+            document.body.appendChild(form);
+            form.submit();
             
             return true;
         } else {
