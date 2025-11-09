@@ -141,6 +141,42 @@ try {
     // Sort by date (newest first)
     krsort($records_by_date);
     
+    // Group records by subject for tabbed display
+    $records_by_subject = [];
+    $subject_stats = [];
+    foreach ($attendance_records as $record) {
+        $subject_key = $record['subject_id'] ?: 'no_subject';
+        $subject_name = $record['subject_name'] ?: 'No Subject';
+        $subject_code = $record['subject_code'] ?: 'N/A';
+        
+        if (!isset($records_by_subject[$subject_key])) {
+            $records_by_subject[$subject_key] = [
+                'info' => [
+                    'name' => $subject_name,
+                    'code' => $subject_code,
+                    'id' => $record['subject_id']
+                ],
+                'records' => []
+            ];
+            $subject_stats[$subject_key] = [
+                'total' => 0,
+                'present' => 0,
+                'absent' => 0,
+                'late' => 0,
+                'out' => 0
+            ];
+        }
+        
+        $records_by_subject[$subject_key]['records'][] = $record;
+        $subject_stats[$subject_key]['total']++;
+        $subject_stats[$subject_key][$record['status']]++;
+    }
+    
+    // Sort subjects by name
+    uksort($records_by_subject, function($a, $b) use ($records_by_subject) {
+        return strcmp($records_by_subject[$a]['info']['name'], $records_by_subject[$b]['info']['name']);
+    });
+    
 } catch(PDOException $e) {
     $attendance_records = [];
     $students = [];
@@ -255,112 +291,15 @@ try {
     </div>
 </div>
 
-<!-- Summary Statistics -->
-<div class="row g-3 mb-4">
-    <div class="col-6 col-lg-3">
-        <div class="card bg-primary text-white h-100">
-            <div class="card-body text-center p-3">
-                <i class="fas fa-list fa-2x mb-2"></i>
-                <h4 class="fw-bold mb-0"><?php echo $total_records; ?></h4>
-                <p class="small mb-0">Total Records</p>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-6 col-lg-3">
-        <div class="card bg-success text-white h-100">
-            <div class="card-body text-center p-3">
-                <i class="fas fa-check fa-2x mb-2"></i>
-                <h4 class="fw-bold mb-0"><?php echo $effective_present_count; ?></h4>
-                <p class="small mb-0">Present</p>
-                <?php if ($out_count > 0): ?>
-                <div class="mt-1 small">
-                    <span class="badge bg-white text-success"><?php echo $present_count; ?> in</span>
-                    <span class="badge bg-info text-white"><?php echo $out_count; ?> out</span>
-                </div>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-6 col-lg-3">
-        <div class="card bg-danger text-white h-100">
-            <div class="card-body text-center p-3">
-                <i class="fas fa-times fa-2x mb-2"></i>
-                <h4 class="fw-bold mb-0"><?php echo $absent_count; ?></h4>
-                <p class="small mb-0">Absent</p>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-6 col-lg-3">
-        <div class="card bg-warning text-dark h-100">
-            <div class="card-body text-center p-3">
-                <i class="fas fa-clock fa-2x mb-2"></i>
-                <h4 class="fw-bold mb-0"><?php echo $late_count; ?></h4>
-                <p class="small mb-0">Late</p>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Additional Statistics Row -->
-<div class="row g-3 mb-4">
-    <div class="col-6 col-lg-3">
-        <div class="card bg-info text-white h-100">
-            <div class="card-body text-center p-3">
-                <i class="fas fa-sign-out-alt fa-2x mb-2"></i>
-                <h4 class="fw-bold mb-0"><?php echo $out_count; ?></h4>
-                <p class="small mb-0">Out</p>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-6 col-lg-3">
-        <div class="card bg-secondary text-white h-100">
-            <div class="card-body text-center p-3">
-                <i class="fas fa-percentage fa-2x mb-2"></i>
-                <h4 class="fw-bold mb-0"><?php echo $total_records > 0 ? round(($effective_present_count / $total_records) * 100, 1) : 0; ?>%</h4>
-                <p class="small mb-0">Attendance Rate</p>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-6 col-lg-3">
-        <div class="card bg-dark text-white h-100">
-            <div class="card-body text-center p-3">
-                <i class="fas fa-chart-line fa-2x mb-2"></i>
-                <h4 class="fw-bold mb-0"><?php echo $total_records > 0 ? round((($effective_present_count + $late_count) / $total_records) * 100, 1) : 0; ?>%</h4>
-                <p class="small mb-0">Participation Rate</p>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-6 col-lg-3">
-        <div class="card bg-light text-dark border h-100">
-            <div class="card-body text-center p-3">
-                <i class="fas fa-calendar-day fa-2x mb-2 text-muted"></i>
-                <h4 class="fw-bold mb-0"><?php echo (new DateTime($date_to))->diff(new DateTime($date_from))->days + 1; ?></h4>
-                <p class="small mb-0">Days Period</p>
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- Attendance Records -->
 <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card-header">
         <h5 class="card-title mb-0">
             <i class="fas fa-table me-2"></i>Attendance Records
             <span class="badge bg-secondary ms-2"><?php echo $total_records; ?></span>
         </h5>
-        <div class="d-flex gap-2">
-            <button class="btn btn-link btn-sm p-0 d-md-none" type="button" data-bs-toggle="collapse" data-bs-target="#recordsCollapse">
-                <i class="fas fa-chevron-down"></i>
-            </button>
-        </div>
     </div>
-    <div class="card-body p-0 p-sm-3 collapse d-md-block" id="recordsCollapse">
+    <div class="card-body">
         <?php if (empty($attendance_records)): ?>
             <div class="text-center py-5">
                 <i class="fas fa-calendar-times fa-4x text-muted mb-3"></i>
@@ -371,107 +310,313 @@ try {
                 </a>
             </div>
         <?php else: ?>
-            <div class="attendance-timeline">
-                <?php foreach ($records_by_date as $date => $day_records): ?>
-                    <div class="date-group mb-4">
-                        <div class="date-header mb-3">
-                            <h6 class="fw-bold text-primary mb-1">
-                                <i class="fas fa-calendar me-2"></i>
-                                <?php echo date('l, F j, Y', strtotime($date)); ?>
-                            </h6>
-                            <small class="text-muted">
-                                <?php echo count($day_records); ?> record(s)
-                            </small>
+            
+            <!-- Subject Tabs -->
+            <ul class="nav nav-pills nav-fill mb-4" id="subjectTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="all-subjects-tab" data-bs-toggle="pill" data-bs-target="#all-subjects" type="button" role="tab">
+                        <i class="fas fa-list me-2"></i>All Records
+                        <span class="badge bg-light text-dark ms-2"><?php echo $total_records; ?></span>
+                    </button>
+                </li>
+                <?php foreach ($records_by_subject as $subject_key => $subject_data): ?>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="subject-<?php echo $subject_key; ?>-tab" data-bs-toggle="pill" data-bs-target="#subject-<?php echo $subject_key; ?>" type="button" role="tab">
+                            <i class="fas fa-book me-2"></i>
+                            <span class="d-none d-md-inline"><?php echo $subject_data['info']['name']; ?></span>
+                            <span class="d-md-none"><?php echo $subject_data['info']['code']; ?></span>
+                            <span class="badge bg-light text-dark ms-2"><?php echo count($subject_data['records']); ?></span>
+                        </button>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+            
+            <!-- Tab Content -->
+            <div class="tab-content" id="subjectTabsContent">
+                
+                <!-- All Records Tab -->
+                <div class="tab-pane fade show active" id="all-subjects" role="tabpanel">
+                    
+                    <!-- All Records Statistics -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-6 col-lg-3">
+                            <div class="card bg-primary text-white">
+                                <div class="card-body text-center p-1">
+                                    <h6 class="fw-bold mb-0" style="font-size: 0.9rem;"><?php echo $total_records; ?></h6>
+                                    <small style="font-size: 0.7rem;">Total Records</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <div class="card bg-success text-white">
+                                <div class="card-body text-center p-1">
+                                    <h6 class="fw-bold mb-0" style="font-size: 0.9rem;"><?php echo $effective_present_count; ?></h6>
+                                    <small style="font-size: 0.7rem;">Present</small>
+                                    <?php if ($out_count > 0): ?>
+                                    <div class="mt-1">
+                                        <span class="badge bg-white text-success" style="font-size: 0.55rem; padding: 0.1rem 0.3rem;"><?php echo $present_count; ?> in</span>
+                                        <span class="badge bg-info text-white" style="font-size: 0.55rem; padding: 0.1rem 0.3rem;"><?php echo $out_count; ?> out</span>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <div class="card bg-danger text-white">
+                                <div class="card-body text-center p-1">
+                                    <h6 class="fw-bold mb-0" style="font-size: 0.9rem;"><?php echo $absent_count; ?></h6>
+                                    <small style="font-size: 0.7rem;">Absent</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <div class="card bg-warning text-dark">
+                                <div class="card-body text-center p-1">
+                                    <h6 class="fw-bold mb-0" style="font-size: 0.9rem;"><?php echo $late_count; ?></h6>
+                                    <small style="font-size: 0.7rem;">Late</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Additional Statistics for All Records -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-6 col-lg-3">
+                            <div class="card bg-info text-white">
+                                <div class="card-body text-center p-1">
+                                    <h6 class="fw-bold mb-0" style="font-size: 0.9rem;"><?php echo $out_count; ?></h6>
+                                    <small style="font-size: 0.7rem;">Out</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <div class="card bg-secondary text-white">
+                                <div class="card-body text-center p-1">
+                                    <h6 class="fw-bold mb-0" style="font-size: 0.9rem;"><?php echo $total_records > 0 ? round(($effective_present_count / $total_records) * 100, 1) : 0; ?>%</h6>
+                                    <small style="font-size: 0.7rem;">Attendance Rate</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <div class="card bg-dark text-white">
+                                <div class="card-body text-center p-1">
+                                    <h6 class="fw-bold mb-0" style="font-size: 0.9rem;"><?php echo $total_records > 0 ? round((($effective_present_count + $late_count) / $total_records) * 100, 1) : 0; ?>%</h6>
+                                    <small style="font-size: 0.7rem;">Participation Rate</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <div class="card bg-light text-dark border">
+                                <div class="card-body text-center p-1">
+                                    <h6 class="fw-bold mb-0" style="font-size: 0.9rem;"><?php echo count($records_by_subject); ?></h6>
+                                    <small style="font-size: 0.7rem;">Subjects</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-hover table-striped attendance-table table-sm text-center">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th style="width: 30%;">Student</th>
+                                    <th style="width: 25%;">Subject</th>
+                                    <th style="width: 18%;">Date</th>
+                                    <th style="width: 17%;">Time</th>
+                                    <th style="width: 10%;">Status</th>
+                                    <?php if ($user_role == 'admin' || $user_role == 'teacher'): ?>
+                                    <th style="width: 6%;">Teacher</th>
+                                    <?php endif; ?>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php 
+                                // Sort all records by date and time (newest first)
+                                usort($attendance_records, function($a, $b) {
+                                    $date_cmp = strcmp($b['attendance_date'], $a['attendance_date']);
+                                    if ($date_cmp !== 0) return $date_cmp;
+                                    return strcmp($b['created_at'], $a['created_at']);
+                                });
+                                
+                                foreach ($attendance_records as $record): 
+                                ?>
+                                    <tr>
+                                        <td>
+                                            <div class="fw-bold" style="font-size: 0.8rem; line-height: 1.2;"><?php echo $record['student_name']; ?></div>
+                                            <small class="text-muted" style="font-size: 0.65rem;"><?php echo $record['student_username']; ?></small>
+                                            <?php if ($record['student_lrn']): ?>
+                                                <br><small class="text-muted font-monospace" style="font-size: 0.6rem;">LRN: <?php echo $record['student_lrn']; ?></small>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if ($record['subject_name']): ?>
+                                                <div class="fw-bold" style="font-size: 0.8rem; line-height: 1.2;"><?php echo $record['subject_name']; ?></div>
+                                                <small class="text-muted" style="font-size: 0.65rem;"><?php echo $record['subject_code']; ?></small>
+                                            <?php else: ?>
+                                                <span class="text-muted fst-italic" style="font-size: 0.75rem;">No Subject</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <div style="font-size: 0.8rem; line-height: 1.2;"><?php echo date('M j', strtotime($record['attendance_date'])); ?></div>
+                                            <small class="text-muted" style="font-size: 0.65rem;"><?php echo date('D', strtotime($record['attendance_date'])); ?></small>
+                                        </td>
+                                        <td>
+                                            <?php if ($record['time_in']): ?>
+                                                <div>
+                                                    <span class="badge bg-success text-white" style="font-size: 0.6rem; margin-bottom: 2px; padding: 0.1rem 0.3rem;">
+                                                        <?php echo date('g:i A', strtotime($record['time_in'])); ?>
+                                                    </span>
+                                                </div>
+                                            <?php endif; ?>
+                                            <?php if ($record['time_out']): ?>
+                                                <div>
+                                                    <span class="badge bg-info text-white" style="font-size: 0.6rem; padding: 0.1rem 0.3rem;">
+                                                        <?php echo date('g:i A', strtotime($record['time_out'])); ?>
+                                                    </span>
+                                                </div>
+                                            <?php endif; ?>
+                                            <?php if (!$record['time_in'] && !$record['time_out']): ?>
+                                                <span class="text-muted" style="font-size: 0.75rem;">-</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-<?php 
+                                                echo $record['status'] == 'present' ? 'success' : 
+                                                     ($record['status'] == 'late' ? 'warning' : 
+                                                      ($record['status'] == 'absent' ? 'danger' : 
+                                                       ($record['status'] == 'out' ? 'info' : 'secondary'))); 
+                                            ?>" style="font-size: 0.65rem; padding: 0.15rem 0.4rem;">
+                                                <?php echo ucfirst($record['status']); ?>
+                                            </span>
+                                        </td>
+                                        <?php if ($user_role == 'admin' || $user_role == 'teacher'): ?>
+                                        <td>
+                                            <small style="font-size: 0.65rem;"><?php echo $record['teacher_name']; ?></small>
+                                        </td>
+                                        <?php endif; ?>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Individual Subject Tabs -->
+                <?php foreach ($records_by_subject as $subject_key => $subject_data): ?>
+                    <div class="tab-pane fade" id="subject-<?php echo $subject_key; ?>" role="tabpanel">
+                        
+                        <!-- Subject Statistics -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-6 col-lg-3">
+                                <div class="card bg-primary text-white">
+                                    <div class="card-body text-center p-2">
+                                        <h6 class="fw-bold mb-0"><?php echo $subject_stats[$subject_key]['total']; ?></h6>
+                                        <small>Total</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-lg-3">
+                                <div class="card bg-success text-white">
+                                    <div class="card-body text-center p-2">
+                                        <h6 class="fw-bold mb-0"><?php echo $subject_stats[$subject_key]['present'] + $subject_stats[$subject_key]['out']; ?></h6>
+                                        <small>Present</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-lg-3">
+                                <div class="card bg-danger text-white">
+                                    <div class="card-body text-center p-2">
+                                        <h6 class="fw-bold mb-0"><?php echo $subject_stats[$subject_key]['absent']; ?></h6>
+                                        <small>Absent</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-lg-3">
+                                <div class="card bg-warning text-dark">
+                                    <div class="card-body text-center p-2">
+                                        <h6 class="fw-bold mb-0"><?php echo $subject_stats[$subject_key]['late']; ?></h6>
+                                        <small>Late</small>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         
-                        <div class="row g-3">
-                            <?php foreach ($day_records as $record): ?>
-                                <div class="col-12 col-sm-6 col-lg-4">
-                                    <div class="card border-0 shadow-sm attendance-card h-100 <?php echo $record['status']; ?>">
-                                        <div class="card-body p-3">
-                                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                                <div class="d-flex align-items-center">
-                                                    <div class="profile-avatar me-2" style="width: 40px; height: 40px; background: linear-gradient(45deg, 
-                                                        <?php 
-                                                        echo $record['status'] == 'present' ? '#28a745, #20c997' : 
-                                                             ($record['status'] == 'late' ? '#ffc107, #fd7e14' : 
-                                                              ($record['status'] == 'absent' ? '#dc3545, #e83e8c' : 
-                                                               ($record['status'] == 'out' ? '#17a2b8, #20c997' : '#6c757d, #adb5bd'))); 
-                                                        ?>); display: flex; align-items: center; justify-content: center; border-radius: 50%; color: white; font-weight: bold; font-size: 0.9rem;">
-                                                        <?php echo strtoupper(substr($record['student_name'], 0, 1)); ?>
+                        <!-- Subject Records Table -->
+                        <div class="table-responsive">
+                            <table class="table table-hover table-striped attendance-table table-sm text-center">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th style="width: 35%;">Student</th>
+                                        <th style="width: 20%;">Date</th>
+                                        <th style="width: 25%;">Time</th>
+                                        <th style="width: 12%;">Status</th>
+                                        <?php if ($user_role == 'admin' || $user_role == 'teacher'): ?>
+                                        <th style="width: 8%;">Teacher</th>
+                                        <?php endif; ?>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php 
+                                    // Sort subject records by date and time (newest first)
+                                    $subject_records = $subject_data['records'];
+                                    usort($subject_records, function($a, $b) {
+                                        $date_cmp = strcmp($b['attendance_date'], $a['attendance_date']);
+                                        if ($date_cmp !== 0) return $date_cmp;
+                                        return strcmp($b['created_at'], $a['created_at']);
+                                    });
+                                    
+                                    foreach ($subject_records as $record): 
+                                    ?>
+                                        <tr>
+                                            <td>
+                                                <div class="fw-bold" style="font-size: 0.8rem; line-height: 1.2;"><?php echo $record['student_name']; ?></div>
+                                                <small class="text-muted" style="font-size: 0.65rem;"><?php echo $record['student_username']; ?></small>
+                                                <?php if ($record['student_lrn']): ?>
+                                                    <br><small class="text-muted font-monospace" style="font-size: 0.6rem;">LRN: <?php echo $record['student_lrn']; ?></small>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <div style="font-size: 0.8rem; line-height: 1.2;"><?php echo date('M j', strtotime($record['attendance_date'])); ?></div>
+                                                <small class="text-muted" style="font-size: 0.65rem;"><?php echo date('D', strtotime($record['attendance_date'])); ?></small>
+                                            </td>
+                                            <td>
+                                                <?php if ($record['time_in']): ?>
+                                                    <div>
+                                                        <span class="badge bg-success text-white" style="font-size: 0.6rem; margin-bottom: 2px; padding: 0.1rem 0.3rem;">
+                                                            <?php echo date('g:i A', strtotime($record['time_in'])); ?>
+                                                        </span>
                                                     </div>
-                                                    <div class="overflow-hidden">
-                                                        <h6 class="fw-bold mb-0 text-truncate"><?php echo $record['student_name']; ?></h6>
-                                                        <small class="text-muted d-block text-truncate"><?php echo $record['student_username']; ?></small>
-                                                        <?php if ($record['student_lrn']): ?>
-                                                            <small class="text-muted d-block font-monospace text-truncate">LRN: <?php echo $record['student_lrn']; ?></small>
-                                                        <?php endif; ?>
+                                                <?php endif; ?>
+                                                <?php if ($record['time_out']): ?>
+                                                    <div>
+                                                        <span class="badge bg-info text-white" style="font-size: 0.6rem; padding: 0.1rem 0.3rem;">
+                                                            <?php echo date('g:i A', strtotime($record['time_out'])); ?>
+                                                        </span>
                                                     </div>
-                                                </div>
-                                                
+                                                <?php endif; ?>
+                                                <?php if (!$record['time_in'] && !$record['time_out']): ?>
+                                                    <span class="text-muted" style="font-size: 0.75rem;">-</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
                                                 <span class="badge bg-<?php 
                                                     echo $record['status'] == 'present' ? 'success' : 
                                                          ($record['status'] == 'late' ? 'warning' : 
                                                           ($record['status'] == 'absent' ? 'danger' : 
                                                            ($record['status'] == 'out' ? 'info' : 'secondary'))); 
-                                                ?>">
+                                                ?>" style="font-size: 0.65rem; padding: 0.15rem 0.4rem;">
                                                     <?php echo ucfirst($record['status']); ?>
                                                 </span>
-                                            </div>
-                                            
-                                            <div class="record-details small">
-                                                <p class="mb-2">
-                                                    <i class="fas fa-book me-2 text-primary"></i>
-                                                    <span class="text-truncate d-inline-block" style="max-width: 200px;">
-                                                        <?php echo $record['subject_name'] ? $record['subject_name'] . ' (' . $record['subject_code'] . ')' : 'No Subject'; ?>
-                                                    </span>
-                                                </p>
-                                                
-                                                <?php if ($record['time_in']): ?>
-                                                    <p class="mb-2">
-                                                        <i class="fas fa-clock me-2 text-info"></i>
-                                                        Time In: <?php echo date('g:i A', strtotime($record['time_in'])); ?>
-                                                    </p>
-                                                <?php endif; ?>
-                                                
-                                                <?php if ($record['time_out']): ?>
-                                                    <p class="mb-2">
-                                                        <i class="fas fa-sign-out-alt me-2 text-warning"></i>
-                                                        Time Out: <?php echo date('g:i A', strtotime($record['time_out'])); ?>
-                                                    </p>
-                                                <?php endif; ?>
-                                                
-                                                <?php if ($user_role == 'admin' || $user_role == 'teacher'): ?>
-                                                    <p class="mb-2">
-                                                        <i class="fas fa-user-tie me-2 text-secondary"></i>
-                                                        <span class="text-truncate d-inline-block" style="max-width: 200px;">By: <?php echo $record['teacher_name']; ?></span>
-                                                    </p>
-                                                <?php endif; ?>
-                                                
-                                                <?php if ($record['qr_scanned']): ?>
-                                                    <p class="mb-2 text-success">
-                                                        <i class="fas fa-qrcode me-2"></i>
-                                                        QR Code Scanned
-                                                    </p>
-                                                <?php endif; ?>
-                                                
-                                                <?php if ($record['remarks']): ?>
-                                                    <p class="mb-0">
-                                                        <i class="fas fa-comment me-2 text-muted"></i>
-                                                        <span class="text-truncate d-inline-block" style="max-width: 200px;"><?php echo $record['remarks']; ?></span>
-                                                    </p>
-                                                <?php endif; ?>
-                                            </div>
-                                            
-                                            <div class="mt-3 pt-2 border-top text-center">
-                                                <small class="text-muted">
-                                                    Recorded: <?php echo date('g:i A', strtotime($record['created_at'])); ?>
-                                                </small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
+                                            </td>
+                                            <?php if ($user_role == 'admin' || $user_role == 'teacher'): ?>
+                                            <td>
+                                                <small style="font-size: 0.65rem;"><?php echo $record['teacher_name']; ?></small>
+                                            </td>
+                                            <?php endif; ?>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 <?php endforeach; ?>
@@ -603,6 +748,62 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
     `;
     filterCard.insertBefore(quickRangeDiv, filterCard.lastElementChild);
+    
+    // Initialize Bootstrap tabs
+    const tabTriggerList = document.querySelectorAll('#subjectTabs button[data-bs-toggle="pill"]');
+    const tabList = [...tabTriggerList].map(tabTriggerEl => new bootstrap.Tab(tabTriggerEl));
+    
+    // Add tab change event listeners
+    tabTriggerList.forEach(function(tabTrigger) {
+        tabTrigger.addEventListener('shown.bs.tab', function(event) {
+            // Store active tab in localStorage for persistence
+            localStorage.setItem('attendanceActiveTab', event.target.id);
+            
+            // Update URL hash without scrolling
+            const targetId = event.target.getAttribute('data-bs-target');
+            if (targetId) {
+                history.replaceState(null, null, window.location.pathname + window.location.search + targetId);
+            }
+        });
+    });
+    
+    // Restore active tab from localStorage or URL hash
+    const savedTab = localStorage.getItem('attendanceActiveTab');
+    const urlHash = window.location.hash;
+    
+    if (urlHash && document.querySelector(`button[data-bs-target="${urlHash}"]`)) {
+        const tabToActivate = document.querySelector(`button[data-bs-target="${urlHash}"]`);
+        bootstrap.Tab.getInstance(tabToActivate) || new bootstrap.Tab(tabToActivate);
+        tabToActivate.click();
+    } else if (savedTab && document.getElementById(savedTab)) {
+        const tabToActivate = document.getElementById(savedTab);
+        bootstrap.Tab.getInstance(tabToActivate) || new bootstrap.Tab(tabToActivate);
+        tabToActivate.click();
+    }
+    
+    // Make table rows clickable for better mobile experience
+    const tableRows = document.querySelectorAll('.attendance-table tbody tr');
+    tableRows.forEach(function(row) {
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', function() {
+            // Toggle row highlighting
+            row.classList.toggle('table-active');
+            
+            // Remove highlighting from other rows
+            tableRows.forEach(function(otherRow) {
+                if (otherRow !== row) {
+                    otherRow.classList.remove('table-active');
+                }
+            });
+        });
+    });
+    
+    // Add search functionality to tables
+    addTableSearch();
+    
+    // Initialize tooltips for truncated content
+    const tooltipTriggerList = document.querySelectorAll('[title]');
+    const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
 });
 
 function setDateRange(range) {
@@ -637,6 +838,198 @@ function setDateRange(range) {
             break;
     }
 }
+
+// Add search functionality to tables
+function addTableSearch() {
+    // Create search input for each tab pane
+    const tabPanes = document.querySelectorAll('.tab-pane');
+    
+    tabPanes.forEach(function(tabPane) {
+        const table = tabPane.querySelector('.attendance-table');
+        if (!table) return;
+        
+        // Create search container
+        const searchContainer = document.createElement('div');
+        searchContainer.className = 'mb-3';
+        searchContainer.innerHTML = `
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input type="text" class="form-control table-search" placeholder="Search records...">
+                        <button class="btn btn-outline-secondary table-search-clear" type="button">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="d-flex justify-content-end align-items-center">
+                        <small class="text-muted search-results"></small>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Insert search before table
+        tabPane.insertBefore(searchContainer, table.parentElement);
+        
+        // Get search elements
+        const searchInput = searchContainer.querySelector('.table-search');
+        const clearButton = searchContainer.querySelector('.table-search-clear');
+        const resultsSpan = searchContainer.querySelector('.search-results');
+        
+        // Add search functionality
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const rows = table.querySelectorAll('tbody tr');
+            let visibleCount = 0;
+            
+            rows.forEach(function(row) {
+                const text = row.textContent.toLowerCase();
+                const isVisible = text.includes(searchTerm);
+                row.style.display = isVisible ? '' : 'none';
+                if (isVisible) visibleCount++;
+            });
+            
+            // Update results display
+            if (searchTerm) {
+                resultsSpan.textContent = `${visibleCount} of ${rows.length} records`;
+                clearButton.style.display = 'block';
+            } else {
+                resultsSpan.textContent = '';
+                clearButton.style.display = 'none';
+            }
+        });
+        
+        // Clear search
+        clearButton.addEventListener('click', function() {
+            searchInput.value = '';
+            searchInput.dispatchEvent(new Event('input'));
+            searchInput.focus();
+        });
+        
+        // Initial setup
+        clearButton.style.display = 'none';
+    });
+}
+
+// Add keyboard shortcuts
+document.addEventListener('keydown', function(event) {
+    // Ctrl/Cmd + F to focus search
+    if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+        const activeTabPane = document.querySelector('.tab-pane.active');
+        if (activeTabPane) {
+            const searchInput = activeTabPane.querySelector('.table-search');
+            if (searchInput) {
+                event.preventDefault();
+                searchInput.focus();
+            }
+        }
+    }
+    
+    // Tab navigation with arrow keys
+    if (event.altKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        event.preventDefault();
+        const tabs = document.querySelectorAll('#subjectTabs button[data-bs-toggle="pill"]');
+        const activeTab = document.querySelector('#subjectTabs button.active');
+        const currentIndex = Array.from(tabs).indexOf(activeTab);
+        
+        if (event.key === 'ArrowLeft' && currentIndex > 0) {
+            tabs[currentIndex - 1].click();
+        } else if (event.key === 'ArrowRight' && currentIndex < tabs.length - 1) {
+            tabs[currentIndex + 1].click();
+        }
+    }
+});
+
+// Add export functionality for current tab
+function exportCurrentTab() {
+    const activeTab = document.querySelector('#subjectTabs button.active');
+    const activeTabPane = document.querySelector('.tab-pane.active');
+    
+    if (!activeTabPane) return;
+    
+    const table = activeTabPane.querySelector('.attendance-table');
+    if (!table) return;
+    
+    // Get tab name for filename
+    const tabName = activeTab.textContent.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+    const filename = `attendance_${tabName}_${new Date().toISOString().split('T')[0]}.csv`;
+    
+    // Convert table to CSV
+    const csv = tableToCSV(table);
+    
+    // Download CSV
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+}
+
+// Helper function to convert table to CSV
+function tableToCSV(table) {
+    const rows = table.querySelectorAll('tr');
+    const csv = [];
+    
+    rows.forEach(function(row) {
+        const cols = row.querySelectorAll('th, td');
+        const rowData = [];
+        
+        cols.forEach(function(col) {
+            let text = col.textContent.trim();
+            // Handle quotes in CSV
+            text = text.replace(/"/g, '""');
+            if (text.includes(',') || text.includes('"') || text.includes('\n')) {
+                text = `"${text}"`;
+            }
+            rowData.push(text);
+        });
+        
+        csv.push(rowData.join(','));
+    });
+    
+    return csv.join('\n');
+}
+
+// Add print functionality for current tab
+function printCurrentTab() {
+    const activeTabPane = document.querySelector('.tab-pane.active');
+    if (!activeTabPane) return;
+    
+    const table = activeTabPane.querySelector('.attendance-table');
+    if (!table) return;
+    
+    const printContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Attendance Records</title>
+            <style>
+                body { font-family: Arial, sans-serif; }
+                table { width: 100%; border-collapse: collapse; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; }
+                .no-print { display: none; }
+            </style>
+        </head>
+        <body>
+            <h2>Attendance Records - ${document.querySelector('#subjectTabs button.active').textContent.trim()}</h2>
+            ${table.outerHTML}
+        </body>
+        </html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.print();
+}
+</script>
 </script>
 
 <script>
@@ -1003,16 +1396,6 @@ function showOfflineMessage(message) {
         font-size: 0.75rem;
     }
     
-    .date-header {
-        position: relative;
-        top: auto;
-        padding: 0.5rem 0;
-    }
-    
-    .attendance-card {
-        margin-bottom: 0;
-    }
-    
     .profile-avatar {
         width: 32px !important;
         height: 32px !important;
@@ -1032,45 +1415,119 @@ function showOfflineMessage(message) {
     }
 }
 
-/* Custom styles for attendance cards */
-.attendance-card.present {
-    border-left: 4px solid #28a745 !important;
+/* Table styles for attendance records */
+.attendance-table {
+    margin-bottom: 0;
 }
 
-.attendance-card.absent {
-    border-left: 4px solid #dc3545 !important;
+.attendance-table th {
+    font-weight: 600;
+    border-bottom: 2px solid #dee2e6;
+    white-space: nowrap;
 }
 
-.attendance-card.late {
-    border-left: 4px solid #ffc107 !important;
+.attendance-table td {
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f3f4;
 }
 
-.attendance-card.out {
-    border-left: 4px solid #17a2b8 !important;
+.attendance-table tbody tr:hover {
+    background-color: #f8f9fa;
 }
 
-.attendance-card {
-    transition: transform 0.2s ease-in-out;
+/* Tab styles */
+.nav-pills .nav-link {
+    border-radius: 0.375rem;
+    color: #6c757d;
+    transition: all 0.15s ease-in-out;
 }
 
-.attendance-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
+.nav-pills .nav-link:hover {
+    background-color: #f8f9fa;
+    color: #495057;
 }
 
-.date-header {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    z-index: 10;
-    border-radius: 8px;
-    border-bottom: 2px solid #e9ecef;
+.nav-pills .nav-link.active {
+    background-color: #007bff;
+    color: white;
 }
 
-/* Status-based text colors */
-.text-status-present { color: #28a745 !important; }
-.text-status-absent { color: #dc3545 !important; }
-.text-status-late { color: #ffc107 !important; }
-.text-status-out { color: #17a2b8 !important; }
+.nav-pills .nav-link .badge {
+    font-size: 0.75rem;
+}
+
+/* Subject tab responsive behavior */
+@media (max-width: 768px) {
+    .nav-pills .nav-link {
+        padding: 0.5rem 0.75rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    .nav-pills {
+        flex-direction: column;
+    }
+    
+    .nav-item {
+        width: 100%;
+    }
+    
+    .nav-link {
+        text-align: left !important;
+    }
+}
+
+/* Profile avatar styles */
+.profile-avatar {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: white;
+    font-weight: bold;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+}
+
+/* Status badges */
+.badge {
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+/* Table responsive improvements */
+@media (max-width: 992px) {
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+    
+    .table td {
+        padding: 0.5rem 0.25rem;
+    }
+    
+    .table th {
+        padding: 0.75rem 0.25rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .table td,
+    .table th {
+        padding: 0.5rem 0.125rem;
+        font-size: 0.75rem;
+    }
+    
+    .table .profile-avatar {
+        width: 24px;
+        height: 24px;
+        font-size: 0.7rem;
+    }
+    
+    .badge {
+        font-size: 0.65rem;
+    }
+}
 
 /* Animation for statistics cards */
 .card {
@@ -1100,11 +1557,44 @@ function showOfflineMessage(message) {
     }
 }
 
-/* Chart responsiveness */
-@media (max-width: 768px) {
-    canvas {
-        max-height: 200px !important;
-    }
+/* Tab content animations */
+.tab-pane {
+    opacity: 0;
+    transition: opacity 0.15s ease-in-out;
+}
+
+.tab-pane.show.active {
+    opacity: 1;
+}
+
+/* Subject statistics mini cards */
+.tab-pane .card {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+}
+
+/* Improved table scroll behavior */
+.table-responsive {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Text truncation improvements */
+.text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Icon spacing in table headers */
+.table th i {
+    margin-right: 0.5rem;
+    width: 1rem;
+    text-align: center;
+}
+
+/* Make sure tab navigation is accessible */
+.nav-pills .nav-link:focus {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
 }
 </style>
 
