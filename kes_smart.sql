@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Nov 11, 2025 at 06:30 AM
+-- Generation Time: Nov 11, 2025 at 06:37 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -417,9 +417,9 @@ CREATE TABLE `users` (
 
 INSERT INTO `users` (`id`, `username`, `full_name`, `email`, `phone`, `role`, `lrn`, `section_id`, `parent_id`, `profile_image`, `profile_image_path`, `qr_code`, `status`, `created_at`, `updated_at`) VALUES
 (1, 'admin', 'System Administrator', 'admin@kes-smart.com', NULL, 'admin', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:04:17', '2025-11-11 02:52:36'),
-(2, 'teacher', 'Jan Russel Peñafiel', 'artiedastephany@gmail.com', '09677726912', 'teacher', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:10:24', '2025-11-11 01:43:41'),
-(3, 'student', 'Jan Russel Peñafielaaa', 'artiedastephanya@gmail.com', '09677726912', 'student', '217614409312', 1, NULL, 'student_3_1762762339.jpg', 'uploads/student_photos/thumbnails/student_3_1762762339.jpg', 'S0VTLVNNQVJULVNUVURFTlQtc3R1ZGVudC0yMDI1', 'active', '2025-07-17 09:10:59', '2025-11-11 01:42:07'),
-(4, 'parent', 'Jan Russel Peñafiel', 'penafielliezl3322@gmail.com', '09677726912', 'parent', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:11:21', '2025-11-11 02:15:42');
+(2, 'teacher', 'test@teacher', 'test@teacher@gmail.com', '09677726912', 'teacher', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:10:24', '2025-11-11 05:36:44'),
+(3, 'student', 'test@student', 'test@student@gmail.com', '09677726912', 'student', '217614409312', 1, NULL, 'student_3_1762762339.jpg', 'uploads/student_photos/thumbnails/student_3_1762762339.jpg', 'S0VTLVNNQVJULVNUVURFTlQtc3R1ZGVudC0yMDI1', 'active', '2025-07-17 09:10:59', '2025-11-11 05:37:04'),
+(4, 'parent', 'test@parent', 'test@parent@gmail.com', '09677726912', 'parent', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:11:21', '2025-11-11 05:37:34');
 
 -- --------------------------------------------------------
 
