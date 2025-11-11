@@ -72,6 +72,30 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             } catch(PDOException $e) {
                 $_SESSION['error'] = 'Error accessing SMS configuration: ' . $e->getMessage();
             }
+            
+        } elseif ($action == 'log_sms_test') {
+            // Log SMS test from QR scanner page
+            $phone = sanitize_input($_POST['phone']);
+            $message = sanitize_input($_POST['message']);
+            $status = sanitize_input($_POST['status']);
+            $result = sanitize_input($_POST['result'] ?? '');
+            
+            try {
+                $stmt = $pdo->prepare("
+                    INSERT INTO sms_logs (phone_number, message, status, response, notification_type, sent_at) 
+                    VALUES (?, ?, ?, ?, 'test', NOW())
+                ");
+                $stmt->execute([$phone, $message, $status, $result]);
+                
+                // Return JSON response for AJAX
+                header('Content-Type: application/json');
+                echo json_encode(['success' => true, 'message' => 'SMS test logged successfully']);
+                exit;
+            } catch(PDOException $e) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'message' => 'Failed to log SMS test: ' . $e->getMessage()]);
+                exit;
+            }
         }
     }
     

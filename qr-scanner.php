@@ -322,51 +322,86 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $su
     
     // Send SMS notification to parent (only if not already sent today and not a checkout)
     $current_date = date('F j, Y');
-    
-    // Check if SMS notification already sent today for this student
-    $sms_check = $pdo->prepare("
-        SELECT COUNT(*) as sms_count 
-        FROM sms_logs 
-        WHERE phone_number IN (
-            SELECT u.phone 
-            FROM users u 
-            JOIN student_parents sp ON u.id = sp.parent_id 
-            WHERE sp.student_id = ? AND sp.is_primary = 1 AND u.phone IS NOT NULL
-        ) 
-        AND notification_type = 'attendance' 
-        AND status = 'sent' 
-        AND DATE(sent_at) = ?
-    ");
-    $sms_check->execute([$student['id'], $today]);
-    $sms_already_sent = $sms_check->fetchColumn() > 0;
-    
-    $sms_result = ['success' => true, 'message' => 'SMS already sent today'];
+    $sms_result = ['success' => true, 'message' => 'SMS not configured'];
+    $sms_already_sent = false;
     
     // Get student's section name
     $section_name = 'Unknown Section';
     if ($student['section_id']) {
-        $section_stmt = $pdo->prepare("SELECT section_name FROM sections WHERE id = ?");
-        $section_stmt->execute([$student['section_id']]);
-        $section_result = $section_stmt->fetch(PDO::FETCH_ASSOC);
-        if ($section_result) {
-            $section_name = $section_result['section_name'];
+        try {
+            $section_stmt = $pdo->prepare("SELECT section_name FROM sections WHERE id = ?");
+            $section_stmt->execute([$student['section_id']]);
+            $section_result = $section_stmt->fetch(PDO::FETCH_ASSOC);
+            if ($section_result) {
+                $section_name = $section_result['section_name'];
+            }
+        } catch (PDOException $e) {
+            error_log("Error getting section name: " . $e->getMessage());
         }
     }
     
-    // Send SMS based on scan type
-    if ($is_checkout) {
-        // Checkout SMS - always send regardless of previous SMS
-        if ($attendance_status == 'out') {
-            $sms_message = "Hi! Your child {$student['full_name']} has left {$subject['subject_name']} class early at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
-        } else {
-            $sms_message = "Hi! Your child {$student['full_name']} has left {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+    // Check if SMS functions are available
+    if (function_exists('sendSMSNotificationToParent')) {
+        try {
+            // Check if SMS notification already sent today for this student (only for check-in)
+            if (!$is_checkout) {
+                try {
+                    $sms_check = $pdo->prepare("
+                        SELECT COUNT(*) as sms_count 
+                        FROM sms_logs 
+                        WHERE phone_number IN (
+                            SELECT u.phone 
+                            FROM users u 
+                            JOIN student_parents sp ON u.id = sp.parent_id 
+                            WHERE sp.student_id = ? AND sp.is_primary = 1 AND u.phone IS NOT NULL
+                        ) 
+                        AND notification_type = 'attendance' 
+                        AND status = 'sent' 
+                        AND DATE(sent_at) = ?
+                    ");
+                    $sms_check->execute([$student['id'], $today]);
+                    $sms_already_sent = $sms_check->fetchColumn() > 0;
+                } catch (PDOException $e) {
+                    // If sms_logs table doesn't exist, proceed to send SMS
+                    error_log('SMS logs table check failed: ' . $e->getMessage());
+                    $sms_already_sent = false;
+                }
+            }
+            
+            // Send SMS based on scan type
+            if ($is_checkout) {
+                // Checkout SMS - always send regardless of previous SMS
+                if ($attendance_status == 'out') {
+                    $sms_message = "Hi! Your child {$student['full_name']} has left {$subject['subject_name']} class early at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+                } else {
+                    $sms_message = "Hi! Your child {$student['full_name']} has finished {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+                }
+                $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'checkout');
+                
+                // Log SMS result for debugging
+                error_log("Checkout SMS result for student {$student['id']}: " . json_encode($sms_result));
+                
+            } elseif (!$sms_already_sent) {
+                // Check-in SMS - only if not already sent today
+                $status_text = ($attendance_status == 'late') ? 'arrived late to' : 'arrived at';
+                $sms_message = "Hi! Your child {$student['full_name']} has {$status_text} {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+                $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'attendance');
+                
+                // Log SMS result for debugging
+                error_log("Check-in SMS result for student {$student['id']}: " . json_encode($sms_result));
+                
+            } else {
+                $sms_result = ['success' => true, 'message' => 'SMS already sent today'];
+                error_log("SMS already sent today for student {$student['id']}");
+            }
+            
+        } catch (Exception $e) {
+            $sms_result = ['success' => false, 'message' => 'SMS sending failed: ' . $e->getMessage()];
+            error_log("SMS sending error for student {$student['id']}: " . $e->getMessage());
         }
-        $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'checkout');
-    } elseif (!$sms_already_sent) {
-        // Check-in SMS - only if not already sent today
-        $status_text = ($attendance_status == 'late') ? 'arrived late to' : 'arrived at';
-        $sms_message = "Hi! Your child {$student['full_name']} has {$status_text} {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
-        $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'attendance');
+    } else {
+        $sms_result = ['success' => false, 'message' => 'SMS service not available - function not found'];
+        error_log('sendSMSNotificationToParent function not found');
     }
     
     // Prepare response
@@ -979,6 +1014,74 @@ try {
                         <p class="mb-0">No recent scans</p>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- SMS Status Card -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-<?php echo ($sms_config && $sms_config['status'] == 'active') ? 'success' : 'secondary'; ?> text-white">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-sms me-2"></i>SMS Notifications
+                </h6>
+            </div>
+            <div class="card-body p-3">
+                <div class="text-center">
+                    <?php if ($sms_config && $sms_config['status'] == 'active'): ?>
+                        <div class="mb-2">
+                            <i class="fas fa-check-circle text-success fa-2x"></i>
+                        </div>
+                        <h6 class="text-success mb-1">Active</h6>
+                        <small class="text-muted d-block">Parents will receive SMS notifications for attendance updates</small>
+                        <div class="mt-2">
+                            <small class="text-muted d-block">Provider: <strong><?php echo htmlspecialchars($sms_config['provider_name'] ?? 'IPROG SMS'); ?></strong></small>
+                        </div>
+                    <?php else: ?>
+                        <div class="mb-2">
+                            <i class="fas fa-times-circle text-muted fa-2x"></i>
+                        </div>
+                        <h6 class="text-muted mb-1">Inactive</h6>
+                        <small class="text-muted d-block">SMS service is not configured</small>
+                        <div class="mt-2">
+                            <a href="sms-config.php" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-cog me-1"></i>Configure
+                            </a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+                
+                <!-- SMS Statistics Today -->
+                <?php if ($sms_config && $sms_config['status'] == 'active'): ?>
+                <div class="border-top mt-3 pt-3">
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <small class="text-muted d-block">Today Sent</small>
+                            <strong id="smsSentToday" class="text-success">
+                                <?php
+                                try {
+                                    $sent_today = $pdo->query("SELECT COUNT(*) FROM sms_logs WHERE status = 'sent' AND DATE(sent_at) = CURDATE()")->fetchColumn();
+                                    echo $sent_today;
+                                } catch(PDOException $e) {
+                                    echo '0';
+                                }
+                                ?>
+                            </strong>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">Failed</small>
+                            <strong id="smsFailedToday" class="text-danger">
+                                <?php
+                                try {
+                                    $failed_today = $pdo->query("SELECT COUNT(*) FROM sms_logs WHERE status = 'failed' AND DATE(sent_at) = CURDATE()")->fetchColumn();
+                                    echo $failed_today;
+                                } catch(PDOException $e) {
+                                    echo '0';
+                                }
+                                ?>
+                            </strong>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
             </div>
         </div>
 

@@ -122,6 +122,22 @@ function sendSMSNotificationToParent($student_id, $message, $notification_type =
     global $pdo;
 
     try {
+        // Check if we're in offline mode
+        if (isset($GLOBALS['is_offline_mode']) && $GLOBALS['is_offline_mode']) {
+            return array(
+                'success' => false,
+                'message' => 'SMS service not available - system offline'
+            );
+        }
+
+        // Validate input parameters
+        if (empty($student_id) || empty($message)) {
+            return array(
+                'success' => false,
+                'message' => 'Invalid input parameters'
+            );
+        }
+
         // Get student's parent phone number
         $stmt = $pdo->prepare("
             SELECT u.phone, u.full_name as parent_name, s.full_name as student_name
@@ -134,6 +150,7 @@ function sendSMSNotificationToParent($student_id, $message, $notification_type =
         $parent = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$parent || empty($parent['phone'])) {
+            error_log("SMS Error: No parent phone found for student ID {$student_id}");
             return array(
                 'success' => false,
                 'message' => 'Invalid student or missing parent phone number'
@@ -142,7 +159,16 @@ function sendSMSNotificationToParent($student_id, $message, $notification_type =
 
         // Get SMS API key from config
         $sms_config = getSMSConfig($pdo);
-        if (!$sms_config || $sms_config['status'] != 'active') {
+        if (!$sms_config) {
+            error_log("SMS Error: SMS configuration not found");
+            return array(
+                'success' => false,
+                'message' => 'SMS service is not configured'
+            );
+        }
+
+        if ($sms_config['status'] != 'active') {
+            error_log("SMS Error: SMS service is not active");
             return array(
                 'success' => false,
                 'message' => 'SMS service is not active'
@@ -151,6 +177,7 @@ function sendSMSNotificationToParent($student_id, $message, $notification_type =
 
         $api_key = $sms_config['api_key'];
         if (empty($api_key)) {
+            error_log("SMS Error: SMS API key not configured");
             return array(
                 'success' => false,
                 'message' => 'SMS API key not configured'
@@ -159,64 +186,89 @@ function sendSMSNotificationToParent($student_id, $message, $notification_type =
 
         // If scheduled for future, just store in database
         if (!empty($scheduled_at) && strtotime($scheduled_at) > time()) {
-                    $sent_at = date('Y-m-d g:i:s A');
-        
-        $stmt = $pdo->prepare("
-            INSERT INTO sms_logs 
-            (phone_number, message, status, notification_type, scheduled_at, sent_at)
-            VALUES (?, ?, 'pending', ?, ?, ?)
-        ");
-            $stmt->execute([
-                $parent['phone'],
-                $message,
-                $notification_type,
-                $scheduled_at,
-                $sent_at
-            ]);
+            try {
+                $sent_at = date('Y-m-d g:i:s A');
+            
+                $stmt = $pdo->prepare("
+                    INSERT INTO sms_logs 
+                    (phone_number, message, status, notification_type, scheduled_at, sent_at)
+                    VALUES (?, ?, 'pending', ?, ?, ?)
+                ");
+                $stmt->execute([
+                    $parent['phone'],
+                    $message,
+                    $notification_type,
+                    $scheduled_at,
+                    $sent_at
+                ]);
 
-            return array(
-                'success' => true,
-                'message' => 'SMS scheduled successfully'
-            );
+                error_log("SMS scheduled successfully for student {$student_id} to {$parent['phone']}");
+                return array(
+                    'success' => true,
+                    'message' => 'SMS scheduled successfully'
+                );
+            } catch (PDOException $e) {
+                error_log("SMS Error: Failed to schedule SMS - " . $e->getMessage());
+                return array(
+                    'success' => false,
+                    'message' => 'Failed to schedule SMS: ' . $e->getMessage()
+                );
+            }
         }
 
         // Send SMS using IPROG SMS
+        error_log("Sending SMS to {$parent['phone']} for student {$student_id}: {$message}");
         $sms_result = sendSMSUsingIPROG($parent['phone'], $message, $api_key);
 
-        // Store in database
-        $status = $sms_result['success'] ? 'sent' : 'failed';
-        $stmt = $pdo->prepare("
-            INSERT INTO sms_logs 
-            (phone_number, message, status, notification_type, response, reference_id, sent_at)
-            VALUES (?, ?, ?, ?, ?, ?, NOW())
-        ");
-        $error_message = $sms_result['success'] ? $sms_result['message'] : $sms_result['message'];
-        $reference_id = $sms_result['success'] ? ($sms_result['reference_id'] ?? null) : null;
-        
-        // Format timestamp in 12-hour format for database
-        $sent_at = date('Y-m-d g:i:s A');
-        
-        $stmt = $pdo->prepare("
-            INSERT INTO sms_logs 
-            (phone_number, message, status, notification_type, response, reference_id, sent_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ");
-        $stmt->execute([
-            $parent['phone'],
-            $message,
-            $status,
-            $notification_type,
-            $error_message,
-            $reference_id,
-            $sent_at
-        ]);
+        // Store in database with better error handling
+        try {
+            $status = $sms_result['success'] ? 'sent' : 'failed';
+            $error_message = $sms_result['success'] ? $sms_result['message'] : $sms_result['message'];
+            $reference_id = $sms_result['success'] ? ($sms_result['reference_id'] ?? null) : null;
+            
+            // Format timestamp in 12-hour format for database
+            $sent_at = date('Y-m-d g:i:s A');
+            
+            $stmt = $pdo->prepare("
+                INSERT INTO sms_logs 
+                (phone_number, message, status, notification_type, response, reference_id, sent_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([
+                $parent['phone'],
+                $message,
+                $status,
+                $notification_type,
+                $error_message,
+                $reference_id,
+                $sent_at
+            ]);
+            
+            // Log the result
+            if ($sms_result['success']) {
+                error_log("SMS sent successfully to {$parent['phone']} for student {$student_id}");
+            } else {
+                error_log("SMS sending failed to {$parent['phone']} for student {$student_id}: {$sms_result['message']}");
+            }
+
+        } catch (PDOException $e) {
+            error_log("SMS Error: Failed to log SMS in database - " . $e->getMessage());
+            // Still return the SMS result even if logging failed
+        }
 
         return $sms_result;
 
-    } catch (Exception $e) {
+    } catch (PDOException $e) {
+        error_log("SMS Error (Database): " . $e->getMessage());
         return array(
             'success' => false,
-            'message' => 'Error: ' . $e->getMessage()
+            'message' => 'Database error while sending SMS: ' . $e->getMessage()
+        );
+    } catch (Exception $e) {
+        error_log("SMS Error (General): " . $e->getMessage());
+        return array(
+            'success' => false,
+            'message' => 'Error sending SMS: ' . $e->getMessage()
         );
     }
 }

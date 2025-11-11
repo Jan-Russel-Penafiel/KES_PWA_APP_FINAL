@@ -334,6 +334,14 @@ try {
     $total_students = $total_teachers = $total_parents = $total_sections = 0;
     $today_attendance = $present_today = $absent_today = $late_today = 0;
 }
+
+// Get SMS configuration status
+$sms_config = null;
+try {
+    $sms_config = $pdo->query("SELECT * FROM sms_config WHERE id = 1")->fetch(PDO::FETCH_ASSOC);
+} catch(PDOException $e) {
+    $sms_config = null;
+}
 ?>
 
 <!-- Header Section -->
@@ -790,6 +798,29 @@ try {
                                     <div id="currentTimeDisplay" class="fw-bold"></div>
                                     <div id="attendanceStatusDisplay" class="small mt-1"></div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- SMS Notification Status -->
+                    <div class="alert alert-<?php echo ($sms_config && $sms_config['status'] == 'active') ? 'success' : 'secondary'; ?> mb-3">
+                        <div class="row align-items-center">
+                            <div class="col-12 col-sm-8">
+                                <i class="fas fa-sms me-2"></i>
+                                <strong>SMS Notifications:</strong>
+                                <?php if ($sms_config && $sms_config['status'] == 'active'): ?>
+                                    <span class="text-success">Active</span>
+                                    <small class="d-block mt-1">Your parent will receive SMS notifications for attendance updates.</small>
+                                <?php else: ?>
+                                    <span class="text-muted">Inactive</span>
+                                    <small class="d-block mt-1">SMS notifications are currently not available.</small>
+                                <?php endif; ?>
+                            </div>
+                            <div class="col-12 col-sm-4 text-sm-end mt-2 mt-sm-0">
+                                <span class="badge bg-<?php echo ($sms_config && $sms_config['status'] == 'active') ? 'success' : 'secondary'; ?>">
+                                    <i class="fas fa-<?php echo ($sms_config && $sms_config['status'] == 'active') ? 'check' : 'times'; ?> me-1"></i>
+                                    <?php echo ($sms_config && $sms_config['status'] == 'active') ? 'SMS Ready' : 'SMS Disabled'; ?>
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -2317,10 +2348,28 @@ function processTeacherQRCode(qrData) {
             
             if (data.success) {
                 console.log('QR Scan Success Response:', data); // Debug log
+                
+                // Log SMS status for debugging
+                if (data.sms_sent !== undefined) {
+                    console.log('SMS Status:', {
+                        sent: data.sms_sent,
+                        status: data.sms_status,
+                        message: data.sms_message
+                    });
+                }
+                
                 showStudentScanResult(data, 'success');
             } else {
                 console.log('QR Scan Error Response:', data); // Debug log
-                showStudentScanResult(data, 'danger');
+                
+                // Check if this is an SMS-related error but attendance was recorded
+                if (data.attendance_recorded === true && data.sms_sent === false) {
+                    // Attendance was successful but SMS failed
+                    data.message = (data.message || 'Attendance recorded successfully') + ' (SMS notification failed)';
+                    showStudentScanResult(data, 'warning'); // Use warning instead of danger
+                } else {
+                    showStudentScanResult(data, 'danger');
+                }
             }
             
             // Resume scanning after delay
@@ -2357,8 +2406,12 @@ function processTeacherQRCode(qrData) {
 
 // Show student scan result
 function showStudentScanResult(data, type) {
-    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
-    const icon = type === 'success' ? 'fa-check-circle' : 'fa-times-circle';
+    const alertClass = type === 'success' ? 'alert-success' : 
+                      (type === 'warning' ? 'alert-warning' : 'alert-danger');
+    const icon = type === 'success' ? 'fa-check-circle' : 
+                 (type === 'warning' ? 'fa-exclamation-triangle' : 'fa-times-circle');
+    const titleText = type === 'success' ? 'Success!' : 
+                     (type === 'warning' ? 'Partial Success!' : 'Error!');
     
     // Build detailed message with attendance type information
     let detailedMessage = data.message;
@@ -2374,25 +2427,36 @@ function showStudentScanResult(data, type) {
     if (data.sms_message) {
         let smsIcon = '';
         let smsClass = '';
+        let smsLabel = '';
         
         if (data.sms_sent === true || data.sms_status === 'sent' || data.sms_status === 'checkout_sent') {
             smsIcon = '<i class="fas fa-check text-success me-1"></i>';
             smsClass = 'text-success';
+            smsLabel = 'SMS Sent';
         } else if (data.sms_status === 'already_sent') {
             smsIcon = '<i class="fas fa-info-circle text-info me-1"></i>';
             smsClass = 'text-info';
+            smsLabel = 'SMS Already Sent Today';
+        } else if (data.sms_status === 'failed') {
+            smsIcon = '<i class="fas fa-times text-danger me-1"></i>';
+            smsClass = 'text-danger';
+            smsLabel = 'SMS Failed';
         } else {
             smsIcon = '<i class="fas fa-exclamation-triangle text-warning me-1"></i>';
             smsClass = 'text-warning';
+            smsLabel = 'SMS Status';
         }
         
-        detailedMessage += `<br><small class="${smsClass}">${smsIcon}SMS: ${data.sms_message}</small>`;
+        detailedMessage += `<br><small class="${smsClass}">${smsIcon}${smsLabel}: ${data.sms_message}</small>`;
+    } else if (data.sms_sent === false) {
+        // Show SMS not sent status even if no message is provided
+        detailedMessage += `<br><small class="text-muted"><i class="fas fa-mobile-alt me-1"></i>SMS: Not configured or unavailable</small>`;
     }
     
     const alertHtml = `
         <div class="alert ${alertClass} alert-dismissible fade show">
             <i class="fas ${icon} me-2"></i>
-            <strong>${data.success ? 'Success!' : 'Error!'}</strong> ${detailedMessage}
+            <strong>${titleText}</strong> ${detailedMessage}
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     `;
@@ -2411,11 +2475,37 @@ function showStudentScanResult(data, type) {
     const basicMessage = data.attendance_action ? `${data.attendance_action}: ${data.message}` : data.message;
     showToast(basicMessage, type);
     
-    // Show separate SMS notification if SMS was sent successfully
+    // Show enhanced SMS notification feedback
     if (data.sms_sent === true && (data.sms_status === 'sent' || data.sms_status === 'checkout_sent')) {
+        // Success notification with more details
         setTimeout(() => {
-            showToast('📱 SMS notification sent to parent', 'info');
+            const parentMsg = data.student_name ? `📱 SMS notification sent to ${data.student_name}'s parent` : '📱 SMS notification sent to parent';
+            showToast(parentMsg, 'info');
         }, 1000);
+    } else if (data.sms_status === 'already_sent') {
+        // Already sent notification
+        setTimeout(() => {
+            showToast('📱 SMS already sent today - no duplicate message sent', 'info');
+        }, 1000);
+    } else if (data.sms_sent === false && data.sms_message) {
+        // Failed notification with reason
+        setTimeout(() => {
+            const errorMsg = data.sms_message.includes('not configured') ? 
+                '📱 SMS not configured - parent not notified' : 
+                '📱 SMS notification failed - ' + data.sms_message;
+            showToast(errorMsg, 'warning');
+        }, 1000);
+    }
+    
+    // Auto-hide alert after 10 seconds for better UX
+    if (scannerContainer) {
+        setTimeout(() => {
+            const alert = scannerContainer.querySelector('.alert');
+            if (alert) {
+                alert.classList.remove('show');
+                setTimeout(() => alert.remove(), 300);
+            }
+        }, 10000);
     }
 }
 
