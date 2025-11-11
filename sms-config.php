@@ -72,33 +72,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             } catch(PDOException $e) {
                 $_SESSION['error'] = 'Error accessing SMS configuration: ' . $e->getMessage();
             }
-            
-        } elseif ($action == 'add_template') {
-            $template_name = sanitize_input($_POST['template_name']);
-            $template_message = sanitize_input($_POST['template_message']);
-            $template_type = sanitize_input($_POST['template_type']);
-            
-            // For simplicity, store templates in a JSON file
-            $templates_file = 'sms_templates.json';
-            $templates = [];
-            
-            if (file_exists($templates_file)) {
-                $templates = json_decode(file_get_contents($templates_file), true) ?: [];
-            }
-            
-            $templates[] = [
-                'id' => uniqid(),
-                'name' => $template_name,
-                'message' => $template_message,
-                'type' => $template_type,
-                'created_at' => date('Y-m-d H:i:s')
-            ];
-            
-            if (file_put_contents($templates_file, json_encode($templates, JSON_PRETTY_PRINT))) {
-                $_SESSION['success'] = 'SMS template added successfully!';
-            } else {
-                $_SESSION['error'] = 'Failed to add SMS template.';
-            }
         }
     }
     
@@ -113,20 +86,20 @@ try {
     $sms_config = $pdo->query("SELECT * FROM sms_config WHERE id = 1")->fetch(PDO::FETCH_ASSOC);
     if (!$sms_config) {
         $sms_config = [
-            'provider_name' => 'PhilSMS',
-            'api_url' => 'https://app.philsms.com/api/v3/sms/send',
-            'api_key' => '2100|J9BVGEx9FFOJAbHV0xfn6SMOkKBt80HTLjHb6zZX',
+            'provider_name' => 'IPROG SMS',
+            'api_url' => 'https://sms.iprogtech.com/api/v1/sms_messages',
+            'api_key' => '1ef3b27ea753780a90cbdf07d027fb7b52791004',
             'sender_name' => 'KES-SMART',
-            'status' => 'inactive'
+            'status' => 'active'
         ];
     }
 } catch(PDOException $e) {
     $sms_config = [
-        'provider_name' => 'PhilSMS',
-        'api_url' => 'https://app.philsms.com/api/v3/sms/send',
-        'api_key' => '2100|J9BVGEx9FFOJAbHV0xfn6SMOkKBt80HTLjHb6zZX',
+        'provider_name' => 'IPROG SMS',
+        'api_url' => 'https://sms.iprogtech.com/api/v1/sms_messages',
+        'api_key' => '1ef3b27ea753780a90cbdf07d027fb7b52791004',
         'sender_name' => 'KES-SMART',
-        'status' => 'inactive'
+        'status' => 'active'
     ];
 }
 
@@ -161,37 +134,12 @@ try {
     $recent_sms = [];
 }
 
-// Get SMS templates
-$templates = [];
-if (file_exists('sms_templates.json')) {
-    $templates = json_decode(file_get_contents('sms_templates.json'), true) ?: [];
-}
-
 // Function to send test SMS
 function sendTestSMS($phone, $message, $config, $pdo) {
     try {
-        // Use the new PhilSMS implementation
-        $result = sendSMSUsingPhilSMS($phone, $message, $config['api_key']);
-        
-        // Format phone number for logging (same as in the new implementation)
-        $formatted_phone = str_replace([' ', '-'], '', $phone);
-        if (substr($formatted_phone, 0, 1) === '0') {
-            $formatted_phone = '63' . substr($formatted_phone, 1);
-        } elseif (substr($formatted_phone, 0, 1) === '+') {
-            $formatted_phone = substr($formatted_phone, 1);
-        }
-        
-        // Log SMS attempt with detailed response
-        try {
-            $status = $result['success'] ? 'sent' : 'failed';
-            $stmt = $pdo->prepare("INSERT INTO sms_logs (phone_number, message, response, status, sent_at) VALUES (?, ?, ?, ?, NOW())");
-            $log_response = $result['message'];
-            $stmt->execute([$formatted_phone, $message, $log_response, $status]);
-        } catch(PDOException $db_e) {
-            // Ignore database errors in error handling
-        }
-        
-        return $result['success'];
+        // Use the existing SMS function from config.php
+        $result = sendSMS($phone, $message, $pdo);
+        return $result;
     } catch(Exception $e) {
         // If that fails, log a failed attempt
         try {
@@ -212,13 +160,10 @@ function sendTestSMS($phone, $message, $config, $pdo) {
                 <h1 class="h3 fw-bold text-primary">
                     <i class="fas fa-sms me-2"></i>SMS Configuration
                 </h1>
-                <p class="text-muted mb-0">Configure SMS settings and manage message templates</p>
+                <p class="text-muted mb-0">Configure SMS settings and view message logs</p>
             </div>
             <div class="text-end">
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#templateModal">
-                    <i class="fas fa-plus me-2"></i>Add Template
-                </button>
-                <div class="small text-muted mt-1">
+                <div class="small text-muted">
                     Status: 
                     <span class="badge bg-<?php echo $sms_config['status'] == 'active' ? 'success' : 'danger'; ?>">
                         <?php echo ucfirst($sms_config['status']); ?>
@@ -271,14 +216,6 @@ function sendTestSMS($phone, $message, $config, $pdo) {
             </div>
         </div>
     </div>
-    <div class="col-6 col-lg-2">
-        <div class="card bg-secondary text-white h-100">
-            <div class="card-body text-center p-3">
-                <h4 class="fw-bold mb-1"><?php echo count($templates); ?></h4>
-                <p class="mb-0 small">Templates</p>
-            </div>
-        </div>
-    </div>
 </div>
 
 <!-- Configuration Tabs -->
@@ -290,11 +227,6 @@ function sendTestSMS($phone, $message, $config, $pdo) {
                     <li class="nav-item" role="presentation">
                         <button class="nav-link active" id="config-tab" data-bs-toggle="tab" data-bs-target="#config" type="button" role="tab">
                             <i class="fas fa-cog me-2"></i><span class="d-none d-sm-inline">Configuration</span>
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="templates-tab" data-bs-toggle="tab" data-bs-target="#templates" type="button" role="tab">
-                            <i class="fas fa-file-alt me-2"></i><span class="d-none d-sm-inline">Templates</span>
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
@@ -339,7 +271,7 @@ function sendTestSMS($phone, $message, $config, $pdo) {
                                         </div>
                                         <div class="form-text">
                                             Your SMS provider API key or token<br>
-                                            <small class="text-info"><i class="fas fa-info-circle"></i> For PhilSMS v3 API, use the Bearer token format</small>
+                                            <small class="text-info"><i class="fas fa-info-circle"></i> For IPROG SMS API, use your API token</small>
                                         </div>
                                     </div>
                                     
@@ -367,61 +299,6 @@ function sendTestSMS($phone, $message, $config, $pdo) {
                                 </div>
                             </div>
                         </form>
-                    </div>
-
-                    <!-- Templates Tab -->
-                    <div class="tab-pane fade" id="templates" role="tabpanel">
-                        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-center mb-3 gap-2">
-                            <h6 class="mb-0">SMS Templates</h6>
-                            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#templateModal">
-                                <i class="fas fa-plus me-2"></i>Add Template
-                            </button>
-                        </div>
-                        
-                        <?php if (empty($templates)): ?>
-                            <div class="text-center py-4">
-                                <i class="fas fa-file-alt fa-3x text-muted mb-3"></i>
-                                <h5 class="text-muted mb-2">No Templates Found</h5>
-                                <p class="text-muted small mb-3">Create your first SMS template to get started.</p>
-                                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#templateModal">
-                                    <i class="fas fa-plus me-2"></i>Create Template
-                                </button>
-                            </div>
-                        <?php else: ?>
-                            <div class="row g-3">
-                                <?php foreach ($templates as $template): ?>
-                                    <div class="col-12 col-sm-6 col-lg-4">
-                                        <div class="card h-100">
-                                            <div class="card-body p-3">
-                                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                                    <h6 class="card-title mb-0 text-truncate pe-2"><?php echo htmlspecialchars($template['name']); ?></h6>
-                                                    <span class="badge bg-<?php 
-                                                        echo $template['type'] == 'attendance' ? 'primary' : 
-                                                             ($template['type'] == 'alert' ? 'danger' : 'success'); 
-                                                    ?>">
-                                                        <?php echo ucfirst($template['type']); ?>
-                                                    </span>
-                                                </div>
-                                                <p class="card-text small text-muted mb-3"><?php echo htmlspecialchars($template['message']); ?></p>
-                                                <div class="d-flex justify-content-between align-items-center">
-                                                    <small class="text-muted">
-                                                        <?php echo date('M j, Y', strtotime($template['created_at'])); ?>
-                                                    </small>
-                                                    <div class="btn-group btn-group-sm">
-                                                        <button class="btn btn-outline-primary" onclick="useTemplate('<?php echo addslashes($template['message']); ?>')">
-                                                            <i class="fas fa-copy"></i>
-                                                        </button>
-                                                        <button class="btn btn-outline-danger" onclick="deleteTemplate('<?php echo $template['id']; ?>')">
-                                                            <i class="fas fa-trash"></i>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        <?php endif; ?>
                     </div>
 
                     <!-- SMS Logs Tab -->
@@ -569,61 +446,6 @@ function sendTestSMS($phone, $message, $config, $pdo) {
     </div>
 </div>
 
-<!-- Add Template Modal -->
-<div class="modal fade" id="templateModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-plus me-2"></i>Add SMS Template
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="POST" action="">
-                <div class="modal-body">
-                    <input type="hidden" name="action" value="add_template">
-                    
-                    <div class="mb-3">
-                        <label for="template_name" class="form-label">Template Name</label>
-                        <input type="text" class="form-control" id="template_name" name="template_name" 
-                               placeholder="e.g., Student Arrival" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="template_type" class="form-label">Template Type</label>
-                        <select class="form-select" id="template_type" name="template_type" required>
-                            <option value="">Select Type</option>
-                            <option value="attendance">Attendance</option>
-                            <option value="alert">Alert</option>
-                            <option value="notification">Notification</option>
-                            <option value="reminder">Reminder</option>
-                        </select>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="template_message" class="form-label">Message Template</label>
-                        <textarea class="form-control" id="template_message" name="template_message" rows="4" required 
-                                  maxlength="160" placeholder="Hi {parent_name}, your child {student_name} has arrived at school at {time}."></textarea>
-                        <div class="form-text">
-                            Use placeholders: {parent_name}, {student_name}, {time}, {date}, {school_name}
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <small class="text-muted">Maximum 160 characters</small>
-                            <small class="text-muted"><span id="template-char-count">0</span>/160</small>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save me-2"></i>Save Template
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
 <!-- SMS Details Modal -->
 <div class="modal fade" id="smsDetailsModal" tabindex="-1">
     <div class="modal-dialog">
@@ -682,26 +504,6 @@ document.getElementById('test_message')?.addEventListener('input', function() {
     }
 });
 
-document.getElementById('template_message')?.addEventListener('input', function() {
-    const count = this.value.length;
-    document.getElementById('template-char-count').textContent = count;
-    
-    if (count > 160) {
-        this.classList.add('is-invalid');
-    } else {
-        this.classList.remove('is-invalid');
-    }
-});
-
-// Use template function
-function useTemplate(message) {
-    document.getElementById('test_message').value = message;
-    document.getElementById('char-count').textContent = message.length;
-    
-    // Show test SMS modal
-    new bootstrap.Modal(document.getElementById('testSmsModal')).show();
-}
-
 // View SMS details
 function viewSmsDetails(message, phone, sentAt) {
     document.getElementById('sms-phone').textContent = phone;
@@ -730,14 +532,6 @@ document.querySelectorAll('[data-filter]').forEach(button => {
         });
     });
 });
-
-// Delete template function (placeholder)
-function deleteTemplate(templateId) {
-    if (confirm('Are you sure you want to delete this template?')) {
-        // In a real implementation, you would make an AJAX call to delete the template
-        alert('Template deletion would be implemented here');
-    }
-}
 
 // Auto-populate common phone format
 document.getElementById('test_phone')?.addEventListener('blur', function() {
@@ -773,14 +567,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize character counts
     const testMessage = document.getElementById('test_message');
-    const templateMessage = document.getElementById('template_message');
     
     if (testMessage) {
         document.getElementById('char-count').textContent = testMessage.value.length;
-    }
-    
-    if (templateMessage) {
-        document.getElementById('template-char-count').textContent = templateMessage.value.length;
     }
 });
 </script>

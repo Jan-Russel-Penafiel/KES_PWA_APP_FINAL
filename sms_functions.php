@@ -3,19 +3,14 @@
 require_once "config.php";
 
 /**
- * Send SMS using PhilSMS API
+ * Send SMS using IPROG SMS API
  * @param string $phone_number Recipient phone number
  * @param string $message SMS message content
- * @param string $api_key PhilSMS API key
+ * @param string $api_key IPROG SMS API token
  * @return array Response with status and message
  */
-function sendSMSUsingPhilSMS($phone_number, $message, $api_key) {
-    // Get sender ID from system settings or SMS config
-    global $pdo;
-    $sms_config = getSMSConfig($pdo);
-    $sender_id = $sms_config['sender_name'] ?? 'KES-SMART';
-
-    // Prepare the phone number (remove any spaces and ensure +63 format)
+function sendSMSUsingIPROG($phone_number, $message, $api_key) {
+    // Prepare the phone number (remove any spaces and ensure 63 format for IPROG)
     $phone_number = str_replace([' ', '-'], '', $phone_number);
     if (substr($phone_number, 0, 1) === '0') {
         $phone_number = '63' . substr($phone_number, 1);
@@ -31,29 +26,27 @@ function sendSMSUsingPhilSMS($phone_number, $message, $api_key) {
         );
     }
 
-    // Prepare the request data
+    // Prepare the request data for IPROG SMS API
     $data = array(
-        'sender_id' => $sender_id,
-        'recipient' => '+' . $phone_number,
-        'message' => $message
+        'api_token' => $api_key,
+        'message' => $message,
+        'phone_number' => $phone_number
     );
 
     // Initialize cURL session
-    $ch = curl_init("https://app.philsms.com/api/v3/sms/send");
+    $ch = curl_init("https://sms.iprogtech.com/api/v1/sms_messages");
 
-    // Set cURL options
+    // Set cURL options for IPROG SMS
     curl_setopt_array($ch, array(
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => json_encode($data),
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => http_build_query($data),
         CURLOPT_HTTPHEADER => array(
-            'Content-Type: application/json',
-            'Accept: application/json',
-            'Authorization: Bearer ' . $api_key
+            'Content-Type: application/x-www-form-urlencoded'
         ),
         CURLOPT_TIMEOUT => 30,
-        CURLOPT_CONNECTTIMEOUT => 10
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_SSL_VERIFYPEER => true
     ));
 
     // Execute cURL request
@@ -67,7 +60,7 @@ function sendSMSUsingPhilSMS($phone_number, $message, $api_key) {
 
     // Log the API request for debugging
     error_log(sprintf(
-        "PhilSMS API Request - Number: %s, Status: %d, Response: %s, Error: %s",
+        "IPROG SMS API Request - Number: %s, Status: %d, Response: %s, Error: %s",
         $phone_number,
         $http_code,
         $response,
@@ -86,13 +79,18 @@ function sendSMSUsingPhilSMS($phone_number, $message, $api_key) {
     // Parse response
     $result = json_decode($response, true);
 
-    // Handle API response
+    // Handle API response for IPROG SMS
     if ($http_code === 200 || $http_code === 201) {
-        if (isset($result['status']) && $result['status'] === 'success') {
+        // IPROG SMS typically returns success in different formats
+        // Check for common success indicators
+        if ((isset($result['status']) && $result['status'] === 'success') ||
+            (isset($result['success']) && $result['success'] === true) ||
+            (isset($result['message']) && stripos($result['message'], 'sent') !== false) ||
+            (!isset($result['error']) && !isset($result['errors']))) {
             return array(
                 'success' => true,
                 'message' => 'SMS sent successfully',
-                'reference_id' => $result['message_id'] ?? $result['id'] ?? null,
+                'reference_id' => $result['message_id'] ?? $result['id'] ?? $result['reference'] ?? null,
                 'delivery_status' => $result['status'] ?? 'Sent',
                 'timestamp' => $result['timestamp'] ?? date('Y-m-d g:i A')
             );
@@ -101,7 +99,8 @@ function sendSMSUsingPhilSMS($phone_number, $message, $api_key) {
 
     // Handle error responses
     $error_message = isset($result['message']) ? $result['message'] : 
-                    (isset($result['error']) ? $result['error'] : 'Unknown error occurred');
+                    (isset($result['error']) ? $result['error'] : 
+                    (isset($result['errors']) ? (is_array($result['errors']) ? implode(', ', $result['errors']) : $result['errors']) : 'Unknown error occurred'));
     
     return array(
         'success' => false,
@@ -181,8 +180,8 @@ function sendSMSNotificationToParent($student_id, $message, $notification_type =
             );
         }
 
-        // Send SMS using PhilSMS
-        $sms_result = sendSMSUsingPhilSMS($parent['phone'], $message, $api_key);
+        // Send SMS using IPROG SMS
+        $sms_result = sendSMSUsingIPROG($parent['phone'], $message, $api_key);
 
         // Store in database
         $status = $sms_result['success'] ? 'sent' : 'failed';
@@ -252,8 +251,8 @@ function processScheduledSMS() {
         $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($result as $sms) {
-            // Send SMS using PhilSMS
-            $sms_result = sendSMSUsingPhilSMS($sms['phone_number'], $sms['message'], $api_key);
+            // Send SMS using IPROG SMS
+            $sms_result = sendSMSUsingIPROG($sms['phone_number'], $sms['message'], $api_key);
 
             // Update status
             $status = $sms_result['success'] ? 'sent' : 'failed';

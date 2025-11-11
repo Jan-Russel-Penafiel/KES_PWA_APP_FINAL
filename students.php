@@ -84,9 +84,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $stmt = $pdo->prepare("UPDATE users SET full_name = ?, email = ?, phone = ?, lrn = ?, section_id = ? WHERE id = ? AND role = 'student'");
                 $stmt->execute([$full_name, $email, $phone, $lrn ?: null, $section_id, $student_id]);
                 
+                // Handle subject enrollments
+                if (isset($_POST['enrolled_subjects']) && is_array($_POST['enrolled_subjects'])) {
+                    // First, remove all existing enrollments for this student
+                    $delete_stmt = $pdo->prepare("DELETE FROM student_subjects WHERE student_id = ?");
+                    $delete_stmt->execute([$student_id]);
+                    
+                    // Then add the new enrollments
+                    $insert_stmt = $pdo->prepare("INSERT INTO student_subjects (student_id, subject_id, enrolled_date, status) VALUES (?, ?, CURDATE(), 'enrolled')");
+                    foreach ($_POST['enrolled_subjects'] as $subject_id) {
+                        $subject_id = intval($subject_id);
+                        if ($subject_id > 0) {
+                            $insert_stmt->execute([$student_id, $subject_id]);
+                        }
+                    }
+                }
+                
                 $_SESSION['success'] = 'Student updated successfully!';
             } catch(PDOException $e) {
-                $_SESSION['error'] = 'Failed to update student.';
+                $_SESSION['error'] = 'Failed to update student: ' . $e->getMessage();
             }
             
         } elseif ($action == 'link_parent' && ($user_role == 'admin' || $user_role == 'teacher')) {
@@ -116,6 +132,139 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 }
 
 $page_title = 'Students';
+
+// Add DataTables CSS and consistent styling
+$additional_css = '
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+<style>
+    .student-card .card {
+        transition: all 0.3s ease;
+        overflow: hidden;
+        min-height: auto;
+    }
+    
+    .student-card .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
+    }
+    
+    .student-card .card-header {
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .student-card .card-header::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255,255,255,0.1);
+        transform: translateX(-100%);
+        transition: transform 0.5s ease;
+    }
+    
+    .student-card .card:hover .card-header::before {
+        transform: translateX(100%);
+    }
+    
+    .filter-btn.active {
+        background-color: var(--primary-color);
+        color: white;
+        border-color: var(--primary-color);
+    }
+    
+    .student-card {
+        margin-bottom: 0.75rem;
+    }
+    
+    .student-card .card-body {
+        padding: 1rem !important;
+    }
+    
+    .student-info {
+        margin-top: 0.5rem !important;
+    }
+    
+    .student-info .d-flex {
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* Mobile-specific styles */
+    @media (max-width: 576px) {
+        .btn-group {
+            display: flex !important;
+            width: 100%;
+        }
+        
+        .btn-group .btn {
+            flex: 1;
+            font-size: 0.875rem;
+            padding: 0.75rem 0.5rem;
+            white-space: nowrap;
+            min-height: 44px; /* Touch-friendly height */
+        }
+        
+        .btn-group .btn i {
+            font-size: 0.875rem;
+        }
+        
+        /* Ensure header content stacks properly */
+        .d-flex.flex-column.flex-md-row {
+            gap: 1rem !important;
+        }
+        
+        /* Make sure buttons do not overflow */
+        .btn {
+            min-width: 0;
+            text-overflow: ellipsis;
+            overflow: hidden;
+        }
+        
+        /* Success button full width on mobile */
+        .btn-primary {
+            min-height: 44px;
+            padding: 0.75rem 1rem;
+        }
+        
+        /* Adjust card spacing for mobile */
+        .card {
+            margin-bottom: 1rem;
+        }
+        
+        /* Responsive font sizes */
+        .h3 {
+            font-size: 1.5rem !important;
+        }
+        
+        .text-muted {
+            font-size: 0.875rem;
+        }
+        
+        /* Improve touch targets */
+        .dropdown-item {
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .btn-group .btn {
+            font-size: 0.9rem;
+            padding: 0.6rem 1rem;
+            min-height: 42px;
+        }
+        
+        .btn-primary {
+            min-height: 42px;
+        }
+    }
+</style>
+';
+
 include 'header.php';
 
 // Get students based on user role
@@ -123,11 +272,13 @@ try {
     if ($user_role == 'admin') {
         $students_query = "
             SELECT u.*, s.section_name, s.grade_level,
-                   GROUP_CONCAT(CONCAT(p.full_name, ' (', sp.relationship, ')') SEPARATOR ', ') as parents
+                   GROUP_CONCAT(CONCAT(p.full_name, ' (', sp.relationship, ')') SEPARATOR ', ') as parents,
+                   COUNT(DISTINCT ss.id) as enrolled_subjects_count
             FROM users u 
             LEFT JOIN sections s ON u.section_id = s.id 
             LEFT JOIN student_parents sp ON u.id = sp.student_id
             LEFT JOIN users p ON sp.parent_id = p.id
+            LEFT JOIN student_subjects ss ON u.id = ss.student_id AND ss.status = 'enrolled'
             WHERE u.role = 'student' AND u.status = 'active'
             GROUP BY u.id
             ORDER BY u.full_name
@@ -137,11 +288,13 @@ try {
     } elseif ($user_role == 'teacher') {
         $students_query = "
             SELECT u.*, s.section_name, s.grade_level,
-                   GROUP_CONCAT(CONCAT(p.full_name, ' (', sp.relationship, ')') SEPARATOR ', ') as parents
+                   GROUP_CONCAT(CONCAT(p.full_name, ' (', sp.relationship, ')') SEPARATOR ', ') as parents,
+                   COUNT(DISTINCT ss.id) as enrolled_subjects_count
             FROM users u 
             LEFT JOIN sections s ON u.section_id = s.id 
             LEFT JOIN student_parents sp ON u.id = sp.student_id
             LEFT JOIN users p ON sp.parent_id = p.id
+            LEFT JOIN student_subjects ss ON u.id = ss.student_id AND ss.status = 'enrolled'
             WHERE u.role = 'student' AND u.status = 'active' 
             AND u.section_id IN (SELECT id FROM sections WHERE teacher_id = ?)
             GROUP BY u.id
@@ -155,11 +308,13 @@ try {
         if ($user_role == 'student') {
             $students_query = "
                 SELECT u.*, s.section_name, s.grade_level,
-                       GROUP_CONCAT(CONCAT(p.full_name, ' (', sp.relationship, ')') SEPARATOR ', ') as parents
+                       GROUP_CONCAT(CONCAT(p.full_name, ' (', sp.relationship, ')') SEPARATOR ', ') as parents,
+                       COUNT(DISTINCT ss.id) as enrolled_subjects_count
                 FROM users u 
                 LEFT JOIN sections s ON u.section_id = s.id 
                 LEFT JOIN student_parents sp ON u.id = sp.student_id
                 LEFT JOIN users p ON sp.parent_id = p.id
+                LEFT JOIN student_subjects ss ON u.id = ss.student_id AND ss.status = 'enrolled'
                 WHERE u.id = ?
                 GROUP BY u.id
             ";
@@ -168,11 +323,13 @@ try {
         } else { // parent
             $students_query = "
                 SELECT u.*, s.section_name, s.grade_level,
-                       GROUP_CONCAT(CONCAT(p.full_name, ' (', sp.relationship, ')') SEPARATOR ', ') as parents
+                       GROUP_CONCAT(CONCAT(p.full_name, ' (', sp.relationship, ')') SEPARATOR ', ') as parents,
+                       COUNT(DISTINCT ss.id) as enrolled_subjects_count
                 FROM users u 
                 LEFT JOIN sections s ON u.section_id = s.id 
                 LEFT JOIN student_parents sp ON u.id = sp.student_id
                 LEFT JOIN users p ON sp.parent_id = p.id
+                LEFT JOIN student_subjects ss ON u.id = ss.student_id AND ss.status = 'enrolled'
                 WHERE u.id IN (SELECT student_id FROM student_parents WHERE parent_id = ?)
                 GROUP BY u.id
                 ORDER BY u.full_name
@@ -202,36 +359,51 @@ try {
         $parents = [];
     }
     
+    // Get subjects for enrollment (with section info for filtering)
+    if ($user_role == 'admin' || $user_role == 'teacher') {
+        if ($user_role == 'admin') {
+            // Admins can see all subjects
+            $subjects = $pdo->query("SELECT s.*, sec.section_name FROM subjects s LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.status = 'active' ORDER BY s.subject_name")->fetchAll(PDO::FETCH_ASSOC);
+        } else {
+            // Teachers can only see subjects they own
+            $stmt = $pdo->prepare("SELECT s.*, sec.section_name FROM subjects s LEFT JOIN sections sec ON s.section_id = sec.id WHERE s.status = 'active' AND s.teacher_id = ? ORDER BY s.subject_name");
+            $stmt->execute([$_SESSION['user_id']]);
+            $subjects = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    } else {
+        $subjects = [];
+    }
+    
 } catch(PDOException $e) {
     $students = [];
     $sections = [];
     $parents = [];
+    $subjects = [];
 }
 ?>
 
 <div class="row">
     <div class="col-12">
-        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-3 mb-4">
-            <div>
-                <h1 class="h3 fw-bold text-primary">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+            <div class="flex-grow-1">
+                <h1 class="h3 fw-bold text-primary mb-1">
                     <i class="fas fa-users me-2"></i>Students
                 </h1>
                 <p class="text-muted mb-0">
                     <?php 
-                    if ($user_role == 'admin') echo 'Manage all students';
-                    elseif ($user_role == 'teacher') echo 'Manage your students';
-                    elseif ($user_role == 'student') echo 'Your information';
-                    else echo 'Your children';
+                    if ($user_role == 'admin') echo 'Manage all students in the system';
+                    elseif ($user_role == 'teacher') echo 'Manage students in your sections';
+                    elseif ($user_role == 'student') echo 'View your information and records';
+                    else echo 'View your children\'s information';
                     ?>
                 </p>
             </div>
-            <div class="text-sm-end">
+            <div class="d-flex flex-column flex-sm-row gap-2 w-100 w-md-auto">
                 <?php if ($user_role == 'admin' || $user_role == 'teacher'): ?>
-                    <button class="btn btn-primary w-100 w-sm-auto" data-bs-toggle="modal" data-bs-target="#addStudentModal">
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addStudentModal">
                         <i class="fas fa-plus me-2"></i>Add Student
                     </button>
                 <?php endif; ?>
-                <div class="small text-muted mt-1">Total: <?php echo count($students); ?></div>
             </div>
         </div>
     </div>
@@ -298,14 +470,14 @@ try {
                  data-section="<?php echo $student['section_id']; ?>">
                 <div class="card border-0 shadow-sm h-100 animate__animated animate__fadeIn">
                     <div class="card-body p-3">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
                             <div class="d-flex align-items-center w-100">
-                                <div class="profile-avatar me-2 flex-shrink-0" style="width: 45px; height: 45px; background: linear-gradient(45deg, #007bff, #0056b3); display: flex; align-items: center; justify-content: center; border-radius: 50%; color: white; font-weight: bold;">
+                                <div class="profile-avatar me-2 flex-shrink-0" style="width: 40px; height: 40px; background: linear-gradient(45deg, #007bff, #0056b3); display: flex; align-items: center; justify-content: center; border-radius: 50%; color: white; font-weight: bold; font-size: 0.9rem;">
                                     <?php echo strtoupper(substr($student['full_name'], 0, 1)); ?>
                                 </div>
                                 <div class="flex-grow-1 min-w-0 me-2">
-                                    <h6 class="fw-bold mb-1 text-truncate"><?php echo $student['full_name']; ?></h6>
-                                    <p class="text-muted small mb-0 text-truncate"><?php echo $student['username']; ?></p>
+                                    <h6 class="fw-bold mb-0 text-truncate" style="font-size: 0.95rem;"><?php echo $student['full_name']; ?></h6>
+                                    <p class="text-muted small mb-0 text-truncate" style="font-size: 0.8rem;"><?php echo $student['username']; ?></p>
                                 </div>
                                 <div class="dropdown me-2">
                                     <button class="btn btn-sm btn-link text-muted p-2 rounded-circle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -319,7 +491,6 @@ try {
                                             <i class="fas fa-calendar-check me-2 text-success"></i>View Attendance
                                         </a></li>
                                         <?php if ($user_role == 'admin' || $user_role == 'teacher'): ?>
-                                            <li><hr class="dropdown-divider"></li>
                                             <li><a class="dropdown-item d-flex align-items-center py-2" href="#" onclick="editStudent(<?php echo htmlspecialchars(json_encode($student)); ?>)">
                                                 <i class="fas fa-edit me-2 text-info"></i>Edit
                                             </a></li>
@@ -377,28 +548,36 @@ try {
                         <?php 
                         $attendance_summary = evaluateAttendance($pdo, $student['id']);
                         ?>
-                        <div class="mt-3 pt-3 border-top">
-                            <div class="row g-2 text-center">
-                                <div class="col-6">
-                                    <div class="p-2 rounded-3 bg-light">
+                        <div class="mt-2 pt-2 border-top">
+                            <div class="row g-1 text-center">
+                                <div class="col-4">
+                                    <div class="p-1 rounded-3 bg-light">
                                         <div class="text-<?php echo $attendance_summary['evaluation'] == 'Excellent' ? 'success' : ($attendance_summary['evaluation'] == 'Good' ? 'info' : ($attendance_summary['evaluation'] == 'Fair' ? 'warning' : 'danger')); ?>">
-                                            <strong><?php echo $attendance_summary['attendance_rate']; ?>%</strong>
+                                            <small><strong><?php echo $attendance_summary['attendance_rate']; ?>%</strong></small>
                                         </div>
-                                        <small class="text-muted d-block">Attendance</small>
+                                        <small class="text-muted d-block" style="font-size: 0.7rem;">Attendance</small>
                                     </div>
                                 </div>
-                                <div class="col-6">
-                                    <div class="p-2 rounded-3 bg-light">
+                                <div class="col-4">
+                                    <div class="p-1 rounded-3 bg-light">
                                         <div class="text-primary">
-                                            <strong><?php echo $attendance_summary['present_days']; ?>/<?php echo $attendance_summary['total_days']; ?></strong>
+                                            <small><strong><?php echo $attendance_summary['present_days']; ?>/<?php echo $attendance_summary['total_days']; ?></strong></small>
                                         </div>
-                                        <small class="text-muted d-block">Present Days</small>
+                                        <small class="text-muted d-block" style="font-size: 0.7rem;">Present Days</small>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="p-1 rounded-3 bg-light">
+                                        <div class="text-info">
+                                            <small><strong><?php echo $student['enrolled_subjects_count'] ?? 0; ?></strong></small>
+                                        </div>
+                                        <small class="text-muted d-block" style="font-size: 0.7rem;">Subjects</small>
                                     </div>
                                 </div>
                             </div>
                             
-                            <div class="mt-2">
-                                <span class="badge bg-<?php echo $attendance_summary['evaluation'] == 'Excellent' ? 'success' : ($attendance_summary['evaluation'] == 'Good' ? 'info' : ($attendance_summary['evaluation'] == 'Fair' ? 'warning' : 'danger')); ?> w-100">
+                            <div class="mt-1">
+                                <span class="badge bg-<?php echo $attendance_summary['evaluation'] == 'Excellent' ? 'success' : ($attendance_summary['evaluation'] == 'Good' ? 'info' : ($attendance_summary['evaluation'] == 'Fair' ? 'warning' : 'danger')); ?> w-100 py-1" style="font-size: 0.7rem;">
                                     <?php echo $attendance_summary['evaluation']; ?>
                                 </span>
                             </div>
@@ -412,11 +591,11 @@ try {
 
 <?php if ($user_role == 'admin' || $user_role == 'teacher'): ?>
     <!-- Add Student Modal -->
-    <div class="modal fade" id="addStudentModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+    <div class="modal fade" id="addStudentModal" tabindex="-1" aria-labelledby="addStudentModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="addStudentModalLabel">
                         <i class="fas fa-user-plus me-2"></i>Add New Student
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -425,64 +604,64 @@ try {
                     <div class="modal-body">
                         <input type="hidden" name="action" value="add_student">
                         
-                        <div class="mb-3">
-                            <label for="username" class="form-label">Username *</label>
-                            <input type="text" class="form-control form-control-lg" id="username" name="username" required>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="full_name" class="form-label">Full Name *</label>
-                            <input type="text" class="form-control form-control-lg" id="full_name" name="full_name" required>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="lrn" class="form-label">LRN (Learner Reference Number)</label>
-                            <div class="input-group input-group-lg">
-                                <input type="text" class="form-control" id="lrn" name="lrn" 
-                                       pattern="[0-9]{12}" maxlength="12" placeholder="Auto-generate or enter manually"
-                                       title="LRN must be exactly 12 digits">
-                                <button type="button" class="btn btn-outline-secondary" id="generate-lrn">
-                                    <i class="fas fa-sync-alt"></i> Generate
-                                </button>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="username" class="form-label">Username *</label>
+                                    <input type="text" class="form-control" id="username" name="username" required>
+                                </div>
                             </div>
-                            <div class="form-text">Optional. Must be exactly 12 digits if provided.</div>
-                            <script>
-                                document.getElementById('generate-lrn').addEventListener('click', function() {
-                                    // Generate random 12-digit number
-                                    let randomLRN = '';
-                                    for (let i = 0; i < 12; i++) {
-                                        randomLRN += Math.floor(Math.random() * 10);
-                                    }
-                                    document.getElementById('lrn').value = randomLRN;
-                                });
-                            </script>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="full_name" class="form-label">Full Name *</label>
+                                    <input type="text" class="form-control" id="full_name" name="full_name" required>
+                                </div>
+                            </div>
                         </div>
                         
-                        <div class="mb-3">
-                            <label for="email" class="form-label">Email</label>
-                            <input type="email" class="form-control form-control-lg" id="email" name="email">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="lrn" class="form-label">LRN (12 digits)</label>
+                                    <input type="text" class="form-control" id="lrn" name="lrn" maxlength="12" placeholder="123456789012">
+                                    <div class="form-text">Learner Reference Number (optional)</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="section_id" class="form-label">Section *</label>
+                                    <select class="form-select" id="section_id" name="section_id" required>
+                                        <option value="">Select Section</option>
+                                        <?php foreach ($sections as $section): ?>
+                                            <option value="<?php echo $section['id']; ?>">
+                                                <?php echo $section['section_name'] . ' - ' . $section['grade_level']; ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                         
-                        <div class="mb-3">
-                            <label for="phone" class="form-label">Phone</label>
-                            <input type="text" class="form-control form-control-lg" id="phone" name="phone">
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="section_id" class="form-label">Section</label>
-                            <select class="form-select form-select-lg select2" id="section_id" name="section_id">
-                                <option value="">Select Section</option>
-                                <?php foreach ($sections as $section): ?>
-                                    <option value="<?php echo $section['id']; ?>">
-                                        <?php echo $section['section_name']; ?> - <?php echo $section['grade_level']; ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="email" class="form-label">Email</label>
+                                    <input type="email" class="form-control" id="email" name="email">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="phone" class="form-label">Phone</label>
+                                    <input type="text" class="form-control" id="phone" name="phone">
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="modal-footer d-flex justify-content-between">
-                        <button type="button" class="btn btn-lg btn-secondary flex-fill me-2" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-lg btn-primary flex-fill">
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="fas fa-times me-2"></i>Cancel
+                        </button>
+                        <button type="submit" class="btn btn-success">
                             <i class="fas fa-save me-2"></i>Add Student
                         </button>
                     </div>
@@ -492,14 +671,14 @@ try {
     </div>
 
     <!-- Edit Student Modal -->
-    <div class="modal fade" id="editStudentModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+    <div class="modal fade" id="editStudentModal" tabindex="-1" aria-labelledby="editStudentModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header bg-info text-white">
-                    <h5 class="modal-title">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title" id="editStudentModalLabel">
                         <i class="fas fa-edit me-2"></i>Edit Student
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <form method="POST" action="">
                     <div class="modal-body">
@@ -531,7 +710,7 @@ try {
                         
                         <div class="mb-3">
                             <label for="edit_section_id" class="form-label">Section</label>
-                            <select class="form-select form-select-lg select2" id="edit_section_id" name="section_id">
+                            <select class="form-select form-select-lg select2" id="edit_section_id" name="section_id" onchange="updateSubjectsList()">
                                 <option value="">Select Section</option>
                                 <?php foreach ($sections as $section): ?>
                                     <option value="<?php echo $section['id']; ?>">
@@ -539,6 +718,43 @@ try {
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">
+                                <i class="fas fa-book me-2"></i>Subject Enrollment
+                            </label>
+                            <div class="card border-light bg-light">
+                                <div class="card-header bg-primary text-white py-2">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-graduation-cap me-2"></i>Select Subjects to Enroll
+                                    </h6>
+                                </div>
+                                <div class="card-body p-3">
+                                    <div class="row" id="edit_subjects_list">
+                                        <div class="col-12">
+                                            <div class="alert alert-info mb-0">
+                                                <i class="fas fa-info-circle me-2"></i>
+                                                Please select a section first to see available subjects.
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2">
+                                        <small class="text-muted">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            Select the subjects this student should be enrolled in from their assigned section. Teachers can only enroll students in subjects they teach.
+                                        </small>
+                                    </div>
+                                    <div class="mt-2">
+                                        <button type="button" class="btn btn-sm btn-outline-primary me-2" onclick="selectAllSubjects(true)">
+                                            <i class="fas fa-check-square me-1"></i>Select All
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="selectAllSubjects(false)">
+                                            <i class="fas fa-square me-1"></i>Clear All
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="modal-footer d-flex justify-content-between">
@@ -553,14 +769,14 @@ try {
     </div>
 
     <!-- Link Parent Modal -->
-    <div class="modal fade" id="linkParentModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+    <div class="modal fade" id="linkParentModal" tabindex="-1" aria-labelledby="linkParentModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header bg-warning text-dark">
-                    <h5 class="modal-title">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title" id="linkParentModalLabel">
                         <i class="fas fa-link me-2"></i>Link Parent
                     </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <form method="POST" action="">
                     <div class="modal-body">
@@ -612,6 +828,10 @@ try {
         </div>
     </div>
 <?php endif; ?>
+
+<!-- Add custom scripts to prevent jQuery loading twice -->
+<script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap5.min.js"></script>
 
 <script>
 // Search and filter functionality
@@ -676,7 +896,147 @@ function editStudent(student) {
     document.getElementById('edit_phone').value = student.phone || '';
     document.getElementById('edit_section_id').value = student.section_id || '';
     
+    // Update subjects list based on selected section
+    updateSubjectsList();
+    
     new bootstrap.Modal(document.getElementById('editStudentModal')).show();
+}
+
+// Load student's current subject enrollments
+async function loadStudentSubjects(studentId) {
+    try {
+        const response = await fetch(`api/get-student-subjects.php?student_id=${studentId}`);
+        const data = await response.json();
+        
+        if (data.success && data.subjects) {
+            // Check the subjects the student is enrolled in
+            data.subjects.forEach(function(subjectId) {
+                const checkbox = document.getElementById('edit_subject_' + subjectId);
+                if (checkbox) {
+                    checkbox.checked = true;
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Error loading student subjects:', error);
+    }
+}
+
+// Update subjects list based on selected section
+async function updateSubjectsList() {
+    const sectionId = document.getElementById('edit_section_id').value;
+    const subjectsList = document.getElementById('edit_subjects_list');
+    
+    if (!sectionId) {
+        // If no section selected, show message
+        subjectsList.innerHTML = `
+            <div class="col-12">
+                <div class="alert alert-info mb-0">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Please select a section first to see available subjects.
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    // Show loading spinner
+    subjectsList.innerHTML = `
+        <div class="col-12 text-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2 mb-0">Loading subjects for this section...</p>
+        </div>
+    `;
+    
+    try {
+        const response = await fetch(`api/get-subjects-by-section.php?section_id=${sectionId}`);
+        const data = await response.json();
+        
+        if (data.success && data.subjects) {
+            if (data.subjects.length > 0) {
+                let html = '';
+                data.subjects.forEach(function(subject) {
+                    html += `
+                        <div class="col-12 col-md-6 mb-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" 
+                                       value="${subject.id}" 
+                                       id="edit_subject_${subject.id}"
+                                       name="enrolled_subjects[]">
+                                <label class="form-check-label" for="edit_subject_${subject.id}">
+                                    <strong>${subject.subject_name}</strong>
+                                    ${subject.subject_code ? `<span class="text-muted small">(${subject.subject_code})</span>` : ''}
+                                    ${subject.grade_level ? `<br><span class="text-muted small">Grade ${subject.grade_level}</span>` : ''}
+                                </label>
+                            </div>
+                        </div>
+                    `;
+                });
+                subjectsList.innerHTML = html;
+                
+                // Show filter info if teacher is logged in
+                if (data.filter_info && data.filter_info.teacher_filtered) {
+                    subjectsList.innerHTML += `
+                        <div class="col-12 mt-2">
+                            <div class="alert alert-info mb-0 small">
+                                <i class="fas fa-user-tie me-1"></i>
+                                Showing only subjects you teach in this section.
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // Reload student's current enrollments if we have a student ID
+                const studentId = document.getElementById('edit_student_id').value;
+                if (studentId) {
+                    loadStudentSubjects(studentId);
+                }
+            } else {
+                let message = 'No subjects found for this section.';
+                if (data.filter_info && data.filter_info.teacher_filtered) {
+                    message = 'No subjects found that you teach in this section.';
+                }
+                
+                subjectsList.innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-warning mb-0">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            ${message}
+                        </div>
+                    </div>
+                `;
+            }
+        } else {
+            subjectsList.innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-danger mb-0">
+                        <i class="fas fa-exclamation-circle me-2"></i>
+                        Error loading subjects: ${data.message || 'Unknown error'}
+                    </div>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading subjects:', error);
+        subjectsList.innerHTML = `
+            <div class="col-12">
+                <div class="alert alert-danger mb-0">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    Error loading subjects. Please try again.
+                </div>
+            </div>
+        `;
+    }
+}
+
+// Select or deselect all subjects
+function selectAllSubjects(selectAll) {
+    const checkboxes = document.querySelectorAll('#edit_subjects_list input[type="checkbox"]');
+    checkboxes.forEach(function(checkbox) {
+        checkbox.checked = selectAll;
+    });
 }
 
 // Link parent function
@@ -727,102 +1087,6 @@ document.addEventListener('shown.bs.modal', function(event) {
 <?php include 'footer.php'; ?>
 
 <style>
-/* Enhanced mobile responsiveness */
-@media (max-width: 576px) {
-    .profile-avatar {
-        width: 40px !important;
-        height: 40px !important;
-    }
-    
-    .card-body {
-        padding: 0.75rem !important;
-    }
-    
-    .student-info {
-        font-size: 0.8125rem;
-    }
-    
-    .dropdown-menu {
-        font-size: 0.875rem;
-        width: 200px;
-        max-width: 95vw;
-    }
-    
-    .btn-sm {
-        padding: 0.25rem 0.5rem;
-        font-size: 0.75rem;
-    }
-    
-    .form-control, .form-select {
-        font-size: 0.875rem;
-    }
-    
-    .modal-dialog {
-        margin: 0.5rem;
-    }
-    
-    .modal-title {
-        font-size: 1.1rem;
-    }
-    
-    .student-card {
-        transition: none !important;
-    }
-    
-    /* Improve touch targets on mobile */
-    .btn, .nav-link {
-        min-height: 42px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-    }
-    
-    .dropdown-item {
-        padding-top: 0.65rem;
-        padding-bottom: 0.65rem;
-        white-space: normal;
-    }
-    
-    /* Better search on mobile */
-    .input-group {
-        margin-bottom: 0.75rem;
-    }
-    
-    /* Improve ellipsis button for touch */
-    .btn-link.rounded-circle {
-        width: 40px;
-        height: 40px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-}
-
-/* Animation styles */
-.fade-in {
-    animation: fadeIn 0.3s ease-in;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-.student-card {
-    transition: transform 0.2s;
-}
-
-.student-card .card {
-    transition: all 0.3s ease;
-    border-top: 3px solid transparent;
-}
-
-.student-card .card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
-    border-top: 3px solid #007bff;
-}
-
 /* Fix Select2 in modals */
 .select2-container--bootstrap-5 {
     width: 100% !important;
@@ -853,6 +1117,16 @@ document.addEventListener('shown.bs.modal', function(event) {
     
     .form-text {
         font-size: 0.7rem;
+    }
+    
+    .profile-avatar {
+        width: 40px !important;
+        height: 40px !important;
+    }
+    
+    .btn-sm {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
     }
 }
 </style>

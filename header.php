@@ -1,20 +1,29 @@
 <?php
 // Page access validation
 $current_page = basename($_SERVER['PHP_SELF']);
-$public_pages = ['index.php', 'login.php', 'logout.php'];
+$public_pages = ['index.php', 'login.php', 'logout.php', 'offline-auth.php'];
 
 // Check if current page requires authentication
 if (!in_array($current_page, $public_pages)) {
     if (!isLoggedIn()) {
-        header('Location: login.php');
-        exit();
-    }
-    
-    // Check role-based page access
-    if (!checkPageAccess($current_page)) {
-        $_SESSION['error'] = 'Access denied. You do not have permission to access this page.';
-        header('Location: dashboard.php');
-        exit();
+        // Clear any invalid session data
+        session_unset();
+        
+        // Don't redirect if already on login page (prevent infinite redirect)
+        if ($current_page !== 'login.php') {
+            header('Location: login.php');
+            exit();
+        }
+    } else {
+        // User is logged in, update their session activity
+        updateSessionActivity();
+        
+        // Check role-based page access
+        if (!checkPageAccess($current_page)) {
+            $_SESSION['error'] = 'Access denied. You do not have permission to access this page.';
+            header('Location: dashboard.php');
+            exit();
+        }
     }
 }
 ?>
@@ -613,22 +622,17 @@ if (!in_array($current_page, $public_pages)) {
                     </span>
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
-                    <?php if (hasRole('student')): ?>
-                        <li><a class="dropdown-item" href="profile.php"><i class="fas fa-user-graduate me-2"></i>My Profile</a></li>
-                    <?php else: ?>
-                        <li><a class="dropdown-item" href="profile.php"><i class="fas fa-user me-2"></i>Profile</a></li>
-                    <?php endif; ?>
                     <?php if (hasRole('admin')): ?>
                         <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2"></i>Settings</a></li>
                         <li><a class="dropdown-item" href="sms-config.php"><i class="fas fa-sms me-2"></i>SMS Config</a></li>
                         <li><a class="dropdown-item" href="users.php"><i class="fas fa-users me-2"></i>Users</a></li>
                         <li><a class="dropdown-item" href="sections.php"><i class="fas fa-layer-group me-2"></i>Sections & Subjects</a></li>
-                        <li><a class="dropdown-item" href="cache-management.php"><i class="fas fa-database me-2"></i>Cache Management</a></li>
+                        <li><a class="dropdown-item" href="reports.php"><i class="fas fa-chart-bar me-2"></i>Reports</a></li>
                     <?php endif; ?>
                     <?php if (hasRole('teacher')): ?>
                         <li><a class="dropdown-item" href="sections.php"><i class="fas fa-layer-group me-2"></i>Sections & Subjects</a></li>
+                        <li><a class="dropdown-item" href="reports.php"><i class="fas fa-chart-bar me-2"></i>Reports</a></li>
                     <?php endif; ?>
-                    <li><hr class="dropdown-divider"></li>
                     <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
                 </ul>
             </div>

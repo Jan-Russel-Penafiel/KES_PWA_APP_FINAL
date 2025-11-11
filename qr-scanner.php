@@ -188,7 +188,7 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $su
     
     // Define time boundaries
     $late_threshold = '07:15:00';  // 7:15 AM
-    $absent_cutoff = '16:15:00';   // 4:15 PM
+    $absent_cutoff = '16:30:00';   // 4:30 PM
     $checkin_start = '06:00:00';   // 6:00 AM - earliest check-in time
     
     // Check if current time is within allowed scanning hours
@@ -197,7 +197,7 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $su
     }
     
     if ($current_time > $absent_cutoff) {
-        throw new Exception('Attendance scanning is closed. School hours end at 4:15 PM. Students who haven\'t checked in will be marked as absent.');
+        throw new Exception('Attendance scanning is closed. School hours end at 4:30 PM. Students who haven\'t checked in will be marked as absent.');
     }
     
     $check_attendance = $pdo->prepare("SELECT id, status, time_in, time_out FROM attendance WHERE student_id = ? AND subject_id = ? AND attendance_date = ?");
@@ -225,7 +225,7 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $su
                 $update_stmt->execute([$current_user['id'], $scan_location . ($scan_notes ? ' - ' . $scan_notes : ''), $existing_attendance['id']]);
                 $attendance_status = 'out';
             } else {
-                // Normal checkout after 4:15 PM
+                // Normal checkout after 4:30 PM
                 $update_stmt = $pdo->prepare("UPDATE attendance SET time_out = NOW(), teacher_id = ?, remarks = CONCAT(IFNULL(remarks, ''), ' | Checkout: ', ?) WHERE id = ?");
                 $update_stmt->execute([$current_user['id'], $scan_location . ($scan_notes ? ' - ' . $scan_notes : ''), $existing_attendance['id']]);
                 $attendance_status = $existing_attendance['status']; // Keep original status
@@ -740,6 +740,72 @@ try {
     </div>
 </div>
 
+<!-- Manual Auto-Absent Trigger -->
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card bg-light border-warning">
+            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-user-times me-2"></i>Manual Auto-Absent Trigger
+                    </h6>
+                </div>
+                <small class="text-muted">For students who haven't signed attendance</small>
+            </div>
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-12 col-md-8">
+                        <div class="d-flex align-items-center mb-2">
+                            <div class="me-3">
+                                <i class="fas fa-clock text-warning" style="font-size: 1.2rem;"></i>
+                            </div>
+                            <div>
+                                <p class="mb-1">
+                                    <strong>Mark absent students who haven't checked in</strong>
+                                </p>
+                                <small class="text-muted">
+                                    This will mark all students as absent if they don't have attendance records for today across all their subjects.
+                                </small>
+                            </div>
+                        </div>
+                        <div id="manualTriggerStatus" class="alert alert-info py-2 mb-0" style="display: none;">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <span id="manualTriggerStatusText">Ready to trigger...</span>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-4 text-md-end mt-2 mt-md-0">
+                        <button 
+                            type="button" 
+                            id="manualAutoAbsentBtn" 
+                            class="btn btn-warning btn-lg w-100"
+                            onclick="showManualTriggerConfirmation()"
+                        >
+                            <i class="fas fa-user-times me-2"></i>
+                            <span class="d-inline d-sm-none">Mark Absent</span>
+                            <span class="d-none d-sm-inline">Mark Absent Students</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Progress indicator (hidden by default) -->
+                <div id="manualTriggerProgress" class="mt-3" style="display: none;">
+                    <div class="progress">
+                        <div 
+                            class="progress-bar progress-bar-striped progress-bar-animated" 
+                            role="progressbar" 
+                            style="width: 0%"
+                            id="manualTriggerProgressBar"
+                        ></div>
+                    </div>
+                    <small class="text-muted mt-1 d-block" id="manualTriggerProgressText">
+                        Processing...
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Scanner Interface -->
 <div class="row g-3">
     <div class="col-12 col-lg-8">
@@ -794,17 +860,7 @@ try {
                     </div>
                 </div>
                 
-                <!-- Scanner Controls -->
-                <div class="mb-3 d-flex justify-content-center">
-                    <div class="btn-group">
-                        <button id="flash-toggle" class="btn btn-outline-secondary">
-                            <i class="fas fa-bolt me-1"></i>Flash
-                        </button>
-                        <button id="debug-qr" class="btn btn-outline-info" onclick="testQRCode()">
-                            <i class="fas fa-bug me-1"></i>Test QR
-                        </button>
-                    </div>
-                </div>
+
             </div>
         </div>
                 
@@ -1334,10 +1390,9 @@ try {
             }
             
             const camList = document.getElementById('cam-list');
-            const flashToggle = document.getElementById('flash-toggle');
             const camSwitch = document.getElementById('cam-switch');
             
-            if (!camList || !flashToggle || !camSwitch) {
+            if (!camList || !camSwitch) {
                 console.error('One or more scanner control elements not found');
             }
             
@@ -1416,29 +1471,6 @@ try {
                         if (selectedCamera === -1) selectedCamera = 0;
                         startScanner();
                     }, 300); // 300ms debounce
-                });
-            }
-            
-            // Flash toggle - HTML5QrCode handles this differently
-            if (flashToggle) {
-                flashToggle.addEventListener('click', () => {
-                    try {
-                        scanner.toggleFlash()
-                            .then(() => {
-                                const icon = flashToggle.querySelector('i');
-                                if (icon) {
-                                    icon.classList.toggle('fa-bolt');
-                                    icon.classList.toggle('fa-bolt-slash');
-                                }
-                            })
-                            .catch(err => {
-                                console.error('Flash error:', err);
-                                showToast('Flash not available on this device', 'warning');
-                            });
-                    } catch (err) {
-                        console.error('Flash toggle error:', err);
-                        showToast('Flash not available on this device', 'warning');
-                    }
                 });
             }
             
@@ -1793,9 +1825,9 @@ function startScanner() {
             return;
         }
         
-        // Check if after 4:15 PM
-        if (currentHour > 16 || (currentHour === 16 && currentMinute > 15)) {
-            showToast('Attendance scanning is closed. School hours end at 4:15 PM. Students who haven\'t checked in will be marked as absent.', 'danger');
+        // Check if after 4:30 PM
+        if (currentHour > 16 || (currentHour === 16 && currentMinute > 30)) {
+            showToast('Attendance scanning is closed. School hours end at 4:30 PM. Students who haven\'t checked in will be marked as absent.', 'danger');
             setTimeout(() => {
                 if (scanner && scanner.isPaused) {
                     scanner.resume();
@@ -2380,9 +2412,9 @@ function startScanner() {
                 return;
             }
             
-            // Check if after 4:15 PM (16:15)
-            if (currentHour > 16 || (currentHour === 16 && currentMinute > 15)) {
-                showToast('Attendance recording is closed. School hours end at 4:15 PM. Students who haven\'t checked in will be marked as absent.', 'danger');
+            // Check if after 4:30 PM (16:30)
+            if (currentHour > 16 || (currentHour === 16 && currentMinute > 30)) {
+                showToast('Attendance recording is closed. School hours end at 4:30 PM. Students who haven\'t checked in will be marked as absent.', 'danger');
                 return;
             }
             
@@ -4099,7 +4131,7 @@ function updateTimeStatus() {
     const startScannerBtn = document.getElementById('startScannerBtn');
     const lrnSubmitBtn = document.querySelector('#lrn-form button[type="submit"]');
     
-    // Use the same logic as server-side (allow 6:00 AM to 4:15 PM)
+    // Use the same logic as server-side (allow 6:00 AM to 4:30 PM)
     const isTimeRestricted = currentHour < 6 || currentHour > 16 || (currentHour === 16 && currentMinute > 15);
     
     if (startScannerBtn) {
@@ -4116,7 +4148,7 @@ function updateTimeStatus() {
         console.log(`[Button Status] Manual selection button disabled: ${isTimeRestricted} (time: ${currentHour}:${currentMinute})`);
         if (isTimeRestricted) {
             lrnSubmitBtn.innerHTML = '<i class="fas fa-times me-2"></i>Recording Disabled';
-            lrnSubmitBtn.title = 'Attendance recording is only available from 6:00 AM to 4:15 PM';
+            lrnSubmitBtn.title = 'Attendance recording is only available from 6:00 AM to 4:30 PM';
         } else {
             lrnSubmitBtn.innerHTML = '<i class="fas fa-user-check me-2"></i>Record Attendance';
             lrnSubmitBtn.title = 'Record student attendance';
@@ -4615,6 +4647,15 @@ console.log('   - window.cleanCorruptedAttendanceRecords()');
 console.log('   - window.resetEnhancedCacheDB()');
 console.log('   - Or just refresh the page (auto-fix enabled)');
 
+// Auto-check for 4:30 PM every minute to trigger auto-absent
+setInterval(checkAutoAbsent, 60000); // Check every minute
+
+// Also check immediately when page loads (after delay)
+setTimeout(() => {
+    checkAutoAbsent();
+    console.log('Auto-absent check initialized - will trigger at 4:30 PM');
+}, 2000);
+
 // Function to test time restrictions manually
 window.testTimeRestriction = function(testHour, testMinute) {
     console.log(`Testing time restriction for ${testHour}:${testMinute}`);
@@ -4629,7 +4670,7 @@ window.checkCurrentTime = function() {
     const hour = now.getHours();
     const minute = now.getMinutes();
     const timeString = now.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hour12: true});
-    const isRestricted = hour < 6 || hour > 16 || (hour === 16 && minute > 15);
+    const isRestricted = hour < 6 || hour > 16 || (hour === 16 && minute > 30);
     
     console.log('=== CURRENT TIME STATUS ===');
     console.log(`Current time: ${timeString} (${hour}:${minute})`);
@@ -4643,6 +4684,309 @@ window.checkCurrentTime = function() {
     } else {
         console.log('Button not found!');
     }
+    
+    // Check if we should trigger auto-absent
+    checkAutoAbsent();
+    
     return !isRestricted;
 };
+
+// Function to check and trigger auto-absent after 4:30 PM
+function checkAutoAbsent() {
+    const now = new Date();
+    const currentTime = now.getHours() * 100 + now.getMinutes();
+    const absentCutoff = 1630; // 4:30 PM
+    const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    
+    // Only trigger auto-absent after 4:30 PM on weekdays (Monday to Friday)
+    if (currentTime >= absentCutoff && dayOfWeek >= 1 && dayOfWeek <= 5) {
+        // Check if we haven't already triggered it today
+        const today = now.toISOString().split('T')[0];
+        const lastAutoAbsentDate = localStorage.getItem('lastAutoAbsentDate');
+        
+        if (lastAutoAbsentDate !== today) {
+            console.log('Triggering auto-absent marking after 4:30 PM...');
+            triggerAutoAbsent();
+            localStorage.setItem('lastAutoAbsentDate', today);
+        }
+    }
+}
+
+// Function to trigger auto-absent API
+async function triggerAutoAbsent() {
+    try {
+        console.log('QR Scanner: Calling auto-absent API...');
+        
+        const response = await fetch('api/auto-absent.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                trigger_source: 'qr_scanner'
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            console.log('QR Scanner: Auto-absent completed:', data);
+            
+            // Show notification if students were marked absent
+            if (data.data && data.data.total_students_marked > 0) {
+                const studentsCount = data.data.total_students_marked;
+                const recordsCount = data.data.total_attendance_records;
+                const message = `Auto-absent completed: ${studentsCount} student${studentsCount > 1 ? 's' : ''} marked absent across ${recordsCount} subject record${recordsCount > 1 ? 's' : ''} after 4:30 PM`;
+                
+                showToast(message, 'info');
+                
+                // Show details of processed students in console
+                if (data.data.processed_students && data.data.processed_students.length > 0) {
+                    console.log('QR Scanner: Students marked absent:');
+                    data.data.processed_students.forEach(student => {
+                        const subjectsText = student.absent_subjects ? 
+                            student.absent_subjects.map(s => s.subject_name).join(', ') : 
+                            'Unknown subjects';
+                        console.log(`- ${student.name} (${student.username}) from ${student.section}: ${subjectsText}`);
+                    });
+                }
+            } else {
+                console.log('QR Scanner: Auto-absent check completed - no students to mark absent');
+            }
+        } else {
+            console.log('QR Scanner: Auto-absent API response:', data.message);
+            
+            // Only show error toast for actual errors, not expected scenarios
+            if (!data.data || (!data.data.already_processed && !data.data.is_weekend)) {
+                showToast('Auto-absent check failed: ' + data.message, 'warning');
+            }
+        }
+    } catch (error) {
+        console.error('QR Scanner: Error calling auto-absent API:', error);
+        showToast('Failed to check auto-absent status', 'danger');
+    }
+}
+
+// Manual Auto-Absent Trigger Functions
+function showManualTriggerConfirmation() {
+    // Create confirmation modal
+    const modalHtml = `
+        <div class="modal fade" id="manualTriggerModal" tabindex="-1" aria-labelledby="manualTriggerModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning">
+                        <h5 class="modal-title text-dark" id="manualTriggerModalLabel">
+                            <i class="fas fa-exclamation-triangle me-2"></i>Manual Auto-Absent Confirmation
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-warning">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>This action will:</strong>
+                        </div>
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-check text-success me-2"></i>Mark all students as <strong>absent</strong> who haven't checked in today</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Create absent records for <strong>all subjects</strong> they should attend</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Send <strong>SMS notifications</strong> to parents</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Apply only to <strong>weekdays</strong> (Monday-Friday)</li>
+                        </ul>
+                        <div class="alert alert-info">
+                            <i class="fas fa-calendar-check me-2"></i>
+                            <strong>Today:</strong> <span id="confirmationDate">${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                        </div>
+                        <p class="text-muted mb-0">
+                            <small>This process cannot be undone. Please make sure this is the correct action to take.</small>
+                        </p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="fas fa-times me-2"></i>Cancel
+                        </button>
+                        <button type="button" class="btn btn-warning" onclick="executeManualTrigger()">
+                            <i class="fas fa-user-times me-2"></i>Mark Students Absent
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if present
+    const existingModal = document.getElementById('manualTriggerModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('manualTriggerModal'));
+    modal.show();
+    
+    // Remove modal from DOM when hidden
+    document.getElementById('manualTriggerModal').addEventListener('hidden.bs.modal', function() {
+        this.remove();
+    });
+}
+
+async function executeManualTrigger() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('manualTriggerModal'));
+    const btn = document.getElementById('manualAutoAbsentBtn');
+    const statusDiv = document.getElementById('manualTriggerStatus');
+    const statusText = document.getElementById('manualTriggerStatusText');
+    const progressDiv = document.getElementById('manualTriggerProgress');
+    const progressBar = document.getElementById('manualTriggerProgressBar');
+    const progressText = document.getElementById('manualTriggerProgressText');
+    
+    try {
+        // Close modal
+        modal.hide();
+        
+        // Disable button and show progress
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+        
+        // Show status
+        statusDiv.style.display = 'block';
+        statusDiv.className = 'alert alert-info py-2 mb-0';
+        statusText.textContent = 'Initiating manual auto-absent process...';
+        
+        // Show progress bar
+        progressDiv.style.display = 'block';
+        progressBar.style.width = '25%';
+        progressText.textContent = 'Calling auto-absent API...';
+        
+        console.log('QR Scanner: Manual auto-absent trigger initiated...');
+        
+        // Call the auto-absent API
+        const response = await fetch('api/auto-absent.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                trigger_source: 'manual_qr_scanner',
+                manual_trigger: true
+            })
+        });
+        
+        // Update progress
+        progressBar.style.width = '75%';
+        progressText.textContent = 'Processing response...';
+        
+        const data = await response.json();
+        
+        // Complete progress
+        progressBar.style.width = '100%';
+        progressText.textContent = 'Complete!';
+        
+        if (data.success) {
+            console.log('QR Scanner: Manual auto-absent completed:', data);
+            
+            // Show success status
+            statusDiv.className = 'alert alert-success py-2 mb-0';
+            
+            if (data.data && data.data.total_students_marked > 0) {
+                const studentsCount = data.data.total_students_marked;
+                const recordsCount = data.data.total_attendance_records;
+                const smsCount = data.data.sms_sent;
+                
+                statusText.innerHTML = `
+                    <strong>✅ Success!</strong> ${studentsCount} student${studentsCount > 1 ? 's' : ''} marked absent 
+                    across ${recordsCount} subject record${recordsCount > 1 ? 's' : ''}. 
+                    ${smsCount} SMS notification${smsCount > 1 ? 's' : ''} sent.
+                `;
+                
+                // Show detailed results in console
+                console.log('Manual auto-absent results:', {
+                    students_marked: studentsCount,
+                    attendance_records: recordsCount,
+                    sms_sent: smsCount,
+                    processed_students: data.data.processed_students
+                });
+                
+                // Show detailed student list
+                if (data.data.processed_students && data.data.processed_students.length > 0) {
+                    console.log('Students marked absent:');
+                    data.data.processed_students.forEach(student => {
+                        const subjectsText = student.absent_subjects ? 
+                            student.absent_subjects.map(s => s.subject_name).join(', ') : 
+                            'Unknown subjects';
+                        console.log(`- ${student.name} (${student.username}): ${subjectsText}`);
+                    });
+                }
+                
+                // Show success toast
+                showToast(`Manual auto-absent completed! ${studentsCount} students marked absent.`, 'success');
+                
+                // Auto-hide status after 10 seconds
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                    progressDiv.style.display = 'none';
+                }, 10000);
+            } else {
+                // No students to mark absent
+                statusText.innerHTML = `<strong>ℹ️ No Action Needed:</strong> ${data.message}`;
+                
+                if (data.data && data.data.already_processed) {
+                    statusText.innerHTML += ' Auto-absent has already been processed today.';
+                }
+                
+                console.log('QR Scanner: Manual auto-absent - no students to process');
+                
+                // Auto-hide status after 5 seconds
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                    progressDiv.style.display = 'none';
+                }, 5000);
+            }
+        } else {
+            // Handle API errors
+            statusDiv.className = 'alert alert-warning py-2 mb-0';
+            statusText.innerHTML = `<strong>⚠️ Notice:</strong> ${data.message}`;
+            
+            console.log('QR Scanner: Manual auto-absent API response:', data.message);
+            
+            // Don't show error toast for expected scenarios (weekend, already processed, too early)
+            if (data.data && (data.data.is_weekend || data.data.already_processed)) {
+                // These are expected scenarios, not errors
+                statusText.innerHTML += ' This is normal.';
+            } else {
+                // Show warning for other issues
+                showToast('Auto-absent notice: ' + data.message, 'warning');
+            }
+            
+            // Auto-hide status after 7 seconds
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+                progressDiv.style.display = 'none';
+            }, 7000);
+        }
+    } catch (error) {
+        console.error('QR Scanner: Manual auto-absent error:', error);
+        
+        // Show error status
+        statusDiv.className = 'alert alert-danger py-2 mb-0';
+        statusText.innerHTML = `<strong>❌ Error:</strong> Failed to process manual auto-absent. Please try again.`;
+        
+        showToast('Failed to execute manual auto-absent', 'danger');
+        
+        // Auto-hide status after 7 seconds
+        setTimeout(() => {
+            statusDiv.style.display = 'none';
+            progressDiv.style.display = 'none';
+        }, 7000);
+    } finally {
+        // Re-enable button
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-user-times me-2"></i><span class="d-none d-sm-inline">Mark Absent </span>Students';
+        
+        // Hide progress after delay
+        setTimeout(() => {
+            progressDiv.style.display = 'none';
+        }, 3000);
+    }
+}
 </script>

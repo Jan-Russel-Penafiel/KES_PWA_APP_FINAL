@@ -8,6 +8,8 @@ $current_user = [];
 
 // Check if user is logged in through PHP session (online mode)
 if (isLoggedIn() && isset($_SESSION['user_id']) && !empty($_SESSION['user_id'])) {
+    // Simply update session activity without forced timeout check
+    updateSessionActivity();
     $current_user = getCurrentUser($pdo);
     $user_role = $_SESSION['role'];
 } else {
@@ -551,7 +553,7 @@ try {
                     <div class="alert alert-info mb-3">
                         <i class="fas fa-info-circle me-2"></i>
                         <strong>Generate QR Code for Attendance</strong><br>
-                        Create a QR code that students can scan to record their attendance for a specific subject and section.
+                        Create separate QR codes for Time In and Time Out. Students must scan the appropriate QR code based on their attendance action. Once a student scans a Time In QR code, they must scan a Time Out QR code to complete their attendance record.
                     </div>
                     
                     <!-- Subject and Section Selection -->
@@ -612,11 +614,30 @@ try {
                         <div class="col-12 col-lg-8">
                             <!-- QR Code Display -->
                             <div class="text-center">
-                                <div id="teacher-qr-container" class="border rounded-3 p-4 bg-light" style="min-height: 300px;">
+                                <div id="teacher-qr-container" class="border rounded-3 p-4 bg-light" style="min-height: 350px;">
                                     <div class="py-4">
                                         <i class="fas fa-qrcode fa-3x text-muted mb-3"></i>
                                         <h5 class="text-muted">Select Subject & Section</h5>
-                                        <p class="text-muted small">Choose subject and section above to generate QR code</p>
+                                        <p class="text-muted small">Choose subject and section above, then select attendance type to generate QR code</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Attendance Type Selection -->
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Attendance Type</label>
+                                    <div class="d-flex justify-content-center gap-3">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="attendanceType" id="attendanceTypeIn" value="in" checked>
+                                            <label class="form-check-label" for="attendanceTypeIn">
+                                                <i class="fas fa-sign-in-alt text-success me-1"></i>Time In
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="attendanceType" id="attendanceTypeOut" value="out">
+                                            <label class="form-check-label" for="attendanceTypeOut">
+                                                <i class="fas fa-sign-out-alt text-danger me-1"></i>Time Out
+                                            </label>
+                                        </div>
                                     </div>
                                 </div>
                                 
@@ -759,8 +780,8 @@ try {
                                 <strong>Attendance Time Rules:</strong>
                                 <ul class="mb-0 mt-1 small">
                                     <li><span class="text-success">Before 7:15 AM:</span> Present</li>
-                                    <li><span class="text-warning">7:15 AM - 4:15 PM:</span> Late</li>
-                                    <li><span class="text-danger">After 4:15 PM:</span> Cannot scan (Absent)</li>
+                                    <li><span class="text-warning">7:15 AM - 4:31 PM:</span> Late</li>
+                                    <li><span class="text-danger">After 4:31 PM:</span> Cannot scan (Absent)</li>
                                 </ul>
                             </div>
                             <div class="col-12 col-md-4 text-end">
@@ -1060,119 +1081,6 @@ try {
     </div>
 <?php endif; ?>
 
-<?php if ($user_role != 'student'): ?>
-<!-- Quick Actions -->
-<div class="row g-3 mb-4">
-    <div class="col-12">
-        <div class="card shadow-sm rounded-3">
-            <div class="card-header bg-transparent py-3">
-                <h5 class="card-title h6 fw-bold mb-0">
-                    <i class="fas fa-bolt me-2"></i>Quick Actions
-                </h5>
-            </div>
-            <div class="card-body p-3">
-                <div class="row g-2">
-                    <?php if ($user_role == 'admin'): ?>
-                        <div class="col-6 col-md-3">
-                            <a href="users.php" class="card h-100 text-decoration-none border-0 shadow-sm rounded-3">
-                                <div class="card-body p-3 text-center">
-                                    <div class="icon-bg rounded-circle bg-primary bg-opacity-10 p-2 mx-auto mb-2" style="width: fit-content;">
-                                        <i class="fas fa-users text-primary"></i>
-                                    </div>
-                                    <span class="small fw-medium text-dark">Manage Users</span>
-                                </div>
-                            </a>
-                        </div>
-                        <div class="col-6 col-md-3">
-                            <a href="sections.php" class="card h-100 text-decoration-none border-0 shadow-sm rounded-3">
-                                <div class="card-body p-3 text-center">
-                                    <div class="icon-bg rounded-circle bg-success bg-opacity-10 p-2 mx-auto mb-2" style="width: fit-content;">
-                                        <i class="fas fa-school text-success"></i>
-                                    </div>
-                                    <span class="small fw-medium text-dark">Manage Sections</span>
-                                </div>
-                            </a>
-                        </div>
-                        <div class="col-6 col-md-3">
-                            <a href="sms-config.php" class="card h-100 text-decoration-none border-0 shadow-sm rounded-3">
-                                <div class="card-body p-3 text-center">
-                                    <div class="icon-bg rounded-circle bg-info bg-opacity-10 p-2 mx-auto mb-2" style="width: fit-content;">
-                                        <i class="fas fa-sms text-info"></i>
-                                    </div>
-                                    <span class="small fw-medium text-dark">SMS Config</span>
-                                </div>
-                            </a>
-                        </div>
-                        <div class="col-6 col-md-3">
-                            <a href="reports.php" class="card h-100 text-decoration-none border-0 shadow-sm rounded-3">
-                                <div class="card-body p-3 text-center">
-                                    <div class="icon-bg rounded-circle bg-warning bg-opacity-10 p-2 mx-auto mb-2" style="width: fit-content;">
-                                        <i class="fas fa-chart-bar text-warning"></i>
-                                    </div>
-                                    <span class="small fw-medium text-dark">Reports</span>
-                                </div>
-                            </a>
-                        </div>
-                    <?php elseif ($user_role == 'teacher'): ?>
-                        <div class="col-6 col-md-4">
-                            <a href="qr-scanner.php" class="card h-100 text-decoration-none border-0 shadow-sm rounded-3">
-                                <div class="card-body p-3 text-center">
-                                    <div class="icon-bg rounded-circle bg-primary bg-opacity-10 p-2 mx-auto mb-2" style="width: fit-content;">
-                                        <i class="fas fa-qrcode text-primary"></i>
-                                    </div>
-                                    <span class="small fw-medium text-dark">QR Scanner</span>
-                                </div>
-                            </a>
-                        </div>
-                        <div class="col-6 col-md-4">
-                            <a href="students.php" class="card h-100 text-decoration-none border-0 shadow-sm rounded-3">
-                                <div class="card-body p-3 text-center">
-                                    <div class="icon-bg rounded-circle bg-success bg-opacity-10 p-2 mx-auto mb-2" style="width: fit-content;">
-                                        <i class="fas fa-users text-success"></i>
-                                    </div>
-                                    <span class="small fw-medium text-dark">My Students</span>
-                                </div>
-                            </a>
-                        </div>
-                        <div class="col-12 col-md-4">
-                            <a href="reports.php" class="card h-100 text-decoration-none border-0 shadow-sm rounded-3">
-                                <div class="card-body p-3 text-center">
-                                    <div class="icon-bg rounded-circle bg-info bg-opacity-10 p-2 mx-auto mb-2" style="width: fit-content;">
-                                        <i class="fas fa-chart-bar text-info"></i>
-                                    </div>
-                                    <span class="small fw-medium text-dark">Reports</span>
-                                </div>
-                            </a>
-                        </div>
-                    <?php elseif ($user_role == 'parent'): ?>
-                        <div class="col-6">
-                            <a href="attendance.php" class="card h-100 text-decoration-none border-0 shadow-sm rounded-3">
-                                <div class="card-body p-3 text-center">
-                                    <div class="icon-bg rounded-circle bg-primary bg-opacity-10 p-2 mx-auto mb-2" style="width: fit-content;">
-                                        <i class="fas fa-calendar-check text-primary"></i>
-                                    </div>
-                                    <span class="small fw-medium text-dark">Children's Attendance</span>
-                                </div>
-                            </a>
-                        </div>
-                        <div class="col-6">
-                            <a href="reports.php" class="card h-100 text-decoration-none border-0 shadow-sm rounded-3">
-                                <div class="card-body p-3 text-center">
-                                    <div class="icon-bg rounded-circle bg-success bg-opacity-10 p-2 mx-auto mb-2" style="width: fit-content;">
-                                        <i class="fas fa-chart-bar text-success"></i>
-                                    </div>
-                                    <span class="small fw-medium text-dark">Reports</span>
-                                </div>
-                            </a>
-                        </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-<?php endif; ?>
-
 <!-- Recent Activity -->
 <div class="row g-3">
     <div class="col-12">
@@ -1305,7 +1213,9 @@ function updateDateTime() {
         month: 'short', 
         day: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12: true,
+        timeZone: 'Asia/Manila'
     };
     document.getElementById('current-datetime').textContent = now.toLocaleString('en-US', options);
 }
@@ -1973,14 +1883,30 @@ function updateTimeDisplay() {
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
-            hour12: true
+            hour12: true,
+            timeZone: 'Asia/Manila'
         });
         timeDisplay.textContent = timeString;
         
-        // Calculate attendance status
-        const currentTime = now.getHours() * 100 + now.getMinutes();
+        // Calculate attendance status using Manila timezone
+        const manilaTimeString = now.toLocaleString("en-US", {timeZone: "Asia/Manila", hour12: false});
+        const manilaDateParts = manilaTimeString.split(', ');
+        const manilaTimePart = manilaDateParts[1]; // Gets "HH:MM:SS"
+        const [hours, minutes] = manilaTimePart.split(':').map(Number);
+        const currentTime = hours * 100 + minutes;
+        
+        // Debug log to verify correct time calculation
+        console.log('Manila Time Debug:', {
+            manilaTimeString: manilaTimeString,
+            manilaTimePart: manilaTimePart,
+            hours: hours,
+            minutes: minutes,
+            currentTime: currentTime,
+            formattedTime: `${hours}:${minutes.toString().padStart(2, '0')}`
+        });
+        
         const lateThreshold = 715; // 7:15 AM
-        const absentCutoff = 1615; // 4:15 PM
+        const absentCutoff = 1631; // 4:31 PM
         
         let statusText = '';
         let statusClass = '';
@@ -1992,12 +1918,77 @@ function updateTimeDisplay() {
             statusText = '⚠ Late Period';
             statusClass = 'text-warning';
         } else {
-            statusText = '✗ Too Late (Absent)';
+            statusText = '✗ Too Late (Auto-Absent)';
             statusClass = 'text-danger';
         }
         
         statusDisplay.textContent = statusText;
         statusDisplay.className = `small mt-1 fw-bold ${statusClass}`;
+        
+        // Check if scanner should be disabled and disable it if running
+        checkAndDisableScanner(currentTime, absentCutoff);
+    }
+}
+
+// Check and disable scanner if past cutoff time
+function checkAndDisableScanner(currentTime, absentCutoff) {
+    const startBtn = document.getElementById('startStudentScanBtn');
+    const stopBtn = document.getElementById('stopStudentScanBtn');
+    const switchBtn = document.getElementById('switchStudentCameraBtn');
+    const cameraInfo = document.getElementById('studentCameraInfo');
+    const scanRegion = document.getElementById('student-scan-region');
+    
+    if (currentTime > absentCutoff) {
+        // Time has passed 4:31 PM, disable scanner
+        if (studentScanner && studentScanner.isScanning) {
+            // Stop the scanner if it's running
+            stopStudentScanner();
+            console.log('Scanner automatically stopped at 4:31 PM');
+        }
+        
+        // Hide scanner controls and show disabled message
+        if (startBtn) {
+            startBtn.style.display = 'none';
+            startBtn.disabled = true;
+        }
+        if (stopBtn) {
+            stopBtn.style.display = 'none';
+        }
+        if (switchBtn) {
+            switchBtn.style.display = 'none';
+        }
+        if (cameraInfo) {
+            cameraInfo.style.display = 'none';
+        }
+        
+        // Show disabled scanner message
+        if (scanRegion) {
+            scanRegion.innerHTML = `
+                <div class="py-4">
+                    <i class="fas fa-clock fa-3x text-danger mb-3"></i>
+                    <h5 class="text-danger">Scanner Disabled</h5>
+                    <p class="text-muted small">QR code scanning is no longer available after 4:31 PM.<br>Students who haven't scanned will be marked absent.</p>
+                </div>
+            `;
+        }
+    } else {
+        // Before cutoff time, ensure scanner is available
+        if (startBtn && startBtn.disabled) {
+            startBtn.disabled = false;
+            startBtn.style.display = 'inline-block';
+            
+            // Restore original scanner interface if it was disabled
+            if (scanRegion && scanRegion.innerHTML.includes('Scanner Disabled')) {
+                scanRegion.innerHTML = `
+                    <div id="student-qr-reader" style="width: 100%"></div>
+                    <div class="py-4">
+                        <i class="fas fa-camera fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">QR Scanner Ready</h5>
+                        <p class="text-muted small">Click "Start Scanner" to scan teacher's QR code</p>
+                    </div>
+                `;
+            }
+        }
     }
 }
 
@@ -2023,13 +2014,17 @@ function initStudentQRScanner() {
             startBtn.addEventListener('click', function() {
                 // Check time restrictions before starting scanner
                 const now = new Date();
-                const currentTime = now.getHours() * 100 + now.getMinutes();
-                const absentCutoff = 1615; // 4:15 PM
+                const manilaTimeString = now.toLocaleString("en-US", {timeZone: "Asia/Manila", hour12: false});
+                const manilaDateParts = manilaTimeString.split(', ');
+                const manilaTimePart = manilaDateParts[1]; // Gets "HH:MM:SS"
+                const [hours, minutes] = manilaTimePart.split(':').map(Number);
+                const currentTime = hours * 100 + minutes;
+                const absentCutoff = 1631; // 4:31 PM
                 const lateThreshold = 715; // 7:15 AM
                 
                 // Prevent scanning after cutoff time
                 if (currentTime > absentCutoff) {
-                    showToast('Cannot scan QR code after 4:15 PM. This time will be marked as absent.', 'danger');
+                    showToast('Cannot scan QR code after 4:31 PM. This time will be marked as absent.', 'danger');
                     return;
                 }
                 
@@ -2254,25 +2249,38 @@ function processTeacherQRCode(qrData) {
             throw new Error('Invalid teacher QR code - missing required data');
         }
         
-        // Check time restrictions on client side
-        const now = new Date();
-        const currentTime = now.getHours() * 100 + now.getMinutes(); // Convert to HHMM format
-        const lateThreshold = 715; // 7:15 AM
-        const absentCutoff = 1615; // 4:15 PM (16:15)
-        
-        // Check if it's past the attendance cutoff time
-        if (currentTime > absentCutoff) {
-            throw new Error('Attendance recording period has ended. Students cannot scan QR codes after 4:15 PM. This will be marked as absent.');
+        // Check if attendance_type is specified (new QR codes will have this)
+        if (!teacherData.attendance_type) {
+            throw new Error('This QR code is outdated. Please ask your teacher to generate a new QR code with attendance type (IN/OUT).');
         }
         
-        // Show time-based warning messages
+        // Check time restrictions on client side
+        const now = new Date();
+        const manilaTimeString = now.toLocaleString("en-US", {timeZone: "Asia/Manila", hour12: false});
+        const manilaDateParts = manilaTimeString.split(', ');
+        const manilaTimePart = manilaDateParts[1]; // Gets "HH:MM:SS"
+        const [hours, minutes] = manilaTimePart.split(':').map(Number);
+        const currentTime = hours * 100 + minutes; // Convert to HHMM format
+        const lateThreshold = 715; // 7:15 AM
+        const absentCutoff = 1631; // 4:31 PM (16:31)
+        
+        // Check if it's past the attendance cutoff time for TIME IN
+        if (teacherData.attendance_type === 'in' && currentTime > absentCutoff) {
+            throw new Error('Time IN recording period has ended. Students cannot scan Time IN QR codes after 4:31 PM.');
+        }
+        
+        // Show time-based warning messages for TIME IN
         let timeWarning = '';
-        if (currentTime > lateThreshold && currentTime <= absentCutoff) {
-            timeWarning = 'Warning: You are scanning after 7:15 AM. This will be marked as LATE.';
-            showToast(timeWarning, 'warning');
-        } else if (currentTime <= lateThreshold) {
-            timeWarning = 'Good! You are on time. This will be marked as PRESENT.';
-            showToast(timeWarning, 'success');
+        if (teacherData.attendance_type === 'in') {
+            if (currentTime > lateThreshold && currentTime <= absentCutoff) {
+                timeWarning = 'Warning: You are scanning after 7:15 AM. This will be marked as LATE.';
+                showToast(timeWarning, 'warning');
+            } else if (currentTime <= lateThreshold) {
+                timeWarning = 'Good! You are on time. This will be marked as PRESENT.';
+                showToast(timeWarning, 'success');
+            }
+        } else if (teacherData.attendance_type === 'out') {
+            showToast('Scanning TIME OUT QR code...', 'info');
         }
         
         // Send attendance request
@@ -2282,6 +2290,7 @@ function processTeacherQRCode(qrData) {
         formData.append('subject_id', teacherData.subject_id);
         formData.append('section_id', teacherData.section_id);
         formData.append('attendance_session_id', teacherData.session_id || '');
+        formData.append('attendance_type', teacherData.attendance_type); // Include attendance type
         
         fetch('api/student-scan-attendance.php', {
             method: 'POST',
@@ -2307,8 +2316,10 @@ function processTeacherQRCode(qrData) {
             }
             
             if (data.success) {
+                console.log('QR Scan Success Response:', data); // Debug log
                 showStudentScanResult(data, 'success');
             } else {
+                console.log('QR Scan Error Response:', data); // Debug log
                 showStudentScanResult(data, 'danger');
             }
             
@@ -2349,10 +2360,39 @@ function showStudentScanResult(data, type) {
     const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
     const icon = type === 'success' ? 'fa-check-circle' : 'fa-times-circle';
     
+    // Build detailed message with attendance type information
+    let detailedMessage = data.message;
+    
+    // Add attendance type context if available
+    if (data.attendance_type && data.attendance_action) {
+        const typeIcon = data.attendance_type === 'in' ? '→' : '←';
+        const typeColor = data.attendance_type === 'in' ? 'success' : 'primary';
+        detailedMessage += `<br><span class="badge bg-${typeColor} mt-2"><i class="fas fa-${data.attendance_type === 'in' ? 'sign-in-alt' : 'sign-out-alt'} me-1"></i>${typeIcon} ${data.attendance_action}</span>`;
+    }
+    
+    // Add SMS status information if available
+    if (data.sms_message) {
+        let smsIcon = '';
+        let smsClass = '';
+        
+        if (data.sms_sent === true || data.sms_status === 'sent' || data.sms_status === 'checkout_sent') {
+            smsIcon = '<i class="fas fa-check text-success me-1"></i>';
+            smsClass = 'text-success';
+        } else if (data.sms_status === 'already_sent') {
+            smsIcon = '<i class="fas fa-info-circle text-info me-1"></i>';
+            smsClass = 'text-info';
+        } else {
+            smsIcon = '<i class="fas fa-exclamation-triangle text-warning me-1"></i>';
+            smsClass = 'text-warning';
+        }
+        
+        detailedMessage += `<br><small class="${smsClass}">${smsIcon}SMS: ${data.sms_message}</small>`;
+    }
+    
     const alertHtml = `
         <div class="alert ${alertClass} alert-dismissible fade show">
             <i class="fas ${icon} me-2"></i>
-            <strong>${data.success ? 'Success!' : 'Error!'}</strong> ${data.message}
+            <strong>${data.success ? 'Success!' : 'Error!'}</strong> ${detailedMessage}
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     `;
@@ -2367,7 +2407,101 @@ function showStudentScanResult(data, type) {
         scannerContainer.insertAdjacentHTML('afterbegin', alertHtml);
     }
     
-    showToast(data.message, type);
+    // Show basic message in toast
+    const basicMessage = data.attendance_action ? `${data.attendance_action}: ${data.message}` : data.message;
+    showToast(basicMessage, type);
+    
+    // Show separate SMS notification if SMS was sent successfully
+    if (data.sms_sent === true && (data.sms_status === 'sent' || data.sms_status === 'checkout_sent')) {
+        setTimeout(() => {
+            showToast('📱 SMS notification sent to parent', 'info');
+        }, 1000);
+    }
+}
+
+// Function to check and trigger auto-absent at 4:31 PM
+// Function to check and trigger auto-absent after 4:31 PM
+function checkAutoAbsent() {
+    const now = new Date();
+    const manilaTimeString = now.toLocaleString("en-US", {timeZone: "Asia/Manila", hour12: false});
+    const manilaDateParts = manilaTimeString.split(', ');
+    const manilaTimePart = manilaDateParts[1]; // Gets "HH:MM:SS"
+    const [hours, minutes] = manilaTimePart.split(':').map(Number);
+    const currentTime = hours * 100 + minutes;
+    const absentCutoff = 1631; // 4:31 PM
+    
+    // Get day of week for Manila time
+    const manilaDateString = now.toLocaleDateString("en-US", {timeZone: "Asia/Manila"});
+    const manilaDate = new Date(manilaDateString);
+    const dayOfWeek = manilaDate.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    
+    // Only trigger auto-absent after 4:31 PM on weekdays (Monday to Friday)
+    if (currentTime >= absentCutoff && dayOfWeek >= 1 && dayOfWeek <= 5) {
+        // Check if we haven't already triggered it today
+        const today = now.toISOString().split('T')[0];
+        const lastAutoAbsentDate = localStorage.getItem('lastAutoAbsentDate');
+        
+        if (lastAutoAbsentDate !== today) {
+            console.log('Dashboard: Triggering auto-absent marking after 4:31 PM...');
+            triggerAutoAbsent();
+            localStorage.setItem('lastAutoAbsentDate', today);
+        }
+    }
+}
+
+// Function to trigger auto-absent API
+async function triggerAutoAbsent() {
+    try {
+        console.log('Dashboard: Calling auto-absent API...');
+        
+        const response = await fetch('api/auto-absent.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                trigger_source: 'dashboard'
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            console.log('Dashboard: Auto-absent completed:', data);
+            
+            // Show notification if students were marked absent
+            if (data.data && data.data.total_students_marked > 0) {
+                const studentsCount = data.data.total_students_marked;
+                const recordsCount = data.data.total_attendance_records;
+                const message = `Auto-absent completed: ${studentsCount} student${studentsCount > 1 ? 's' : ''} marked absent across ${recordsCount} subject record${recordsCount > 1 ? 's' : ''} after 4:30 PM`;
+                
+                showToast(message, 'info');
+                
+                // Show details of processed students in console
+                if (data.data.processed_students && data.data.processed_students.length > 0) {
+                    console.log('Dashboard: Students marked absent:');
+                    data.data.processed_students.forEach(student => {
+                        const subjectsText = student.absent_subjects ? 
+                            student.absent_subjects.map(s => s.subject_name).join(', ') : 
+                            'Unknown subjects';
+                        console.log(`- ${student.name} (${student.username}) from ${student.section}: ${subjectsText}`);
+                    });
+                }
+            } else {
+                console.log('Dashboard: Auto-absent check completed - no students to mark absent');
+            }
+        } else {
+            console.log('Dashboard: Auto-absent API response:', data.message);
+            
+            // Only show error toast for actual errors, not expected scenarios
+            if (!data.data || (!data.data.already_processed && !data.data.is_weekend)) {
+                showToast('Auto-absent check failed: ' + data.message, 'warning');
+            }
+        }
+    } catch (error) {
+        console.error('Dashboard: Error calling auto-absent API:', error);
+        showToast('Failed to check auto-absent status', 'danger');
+    }
 }
 <?php endif; ?>
 
@@ -2379,11 +2513,13 @@ let currentTeacherQRData = null;
 function initTeacherQRGenerator() {
     const subjectSelect = document.getElementById('teacher-subject-select');
     const sectionSelect = document.getElementById('teacher-section-select');
+    const attendanceTypeIn = document.getElementById('attendanceTypeIn');
+    const attendanceTypeOut = document.getElementById('attendanceTypeOut');
     const generateBtn = document.getElementById('generateTeacherQRBtn');
     const downloadBtn = document.getElementById('downloadTeacherQRBtn');
     const printBtn = document.getElementById('printTeacherQRBtn');
     
-    if (subjectSelect && sectionSelect && generateBtn) {
+    if (subjectSelect && sectionSelect && generateBtn && attendanceTypeIn && attendanceTypeOut) {
         // Enable generate button when both subject and section are selected
         function checkSelection() {
             const canGenerate = subjectSelect.value && sectionSelect.value;
@@ -2397,7 +2533,7 @@ function initTeacherQRGenerator() {
                         <div class="py-4">
                             <i class="fas fa-qrcode fa-3x text-muted mb-3"></i>
                             <h5 class="text-muted">Select Subject & Section</h5>
-                            <p class="text-muted small">Choose subject and section above to generate QR code</p>
+                            <p class="text-muted small">Choose subject and section above, then select attendance type to generate QR code</p>
                         </div>
                     `;
                 }
@@ -2413,6 +2549,45 @@ function initTeacherQRGenerator() {
         
         subjectSelect.addEventListener('change', checkSelection);
         sectionSelect.addEventListener('change', checkSelection);
+        
+        // Listen for attendance type changes to reset QR code when switched
+        attendanceTypeIn.addEventListener('change', function() {
+            if (this.checked && currentTeacherQRData) {
+                // Clear current QR when switching types
+                const container = document.getElementById('teacher-qr-container');
+                if (container) {
+                    container.innerHTML = `
+                        <div class="py-4">
+                            <i class="fas fa-qrcode fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">Ready to Generate TIME IN QR</h5>
+                            <p class="text-muted small">Click "Generate QR Code" to create Time In QR code</p>
+                        </div>
+                    `;
+                }
+                updateTeacherQRInfo(null);
+                if (downloadBtn) downloadBtn.style.display = 'none';
+                if (printBtn) printBtn.style.display = 'none';
+            }
+        });
+        
+        attendanceTypeOut.addEventListener('change', function() {
+            if (this.checked && currentTeacherQRData) {
+                // Clear current QR when switching types
+                const container = document.getElementById('teacher-qr-container');
+                if (container) {
+                    container.innerHTML = `
+                        <div class="py-4">
+                            <i class="fas fa-qrcode fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">Ready to Generate TIME OUT QR</h5>
+                            <p class="text-muted small">Click "Generate QR Code" to create Time Out QR code</p>
+                        </div>
+                    `;
+                }
+                updateTeacherQRInfo(null);
+                if (downloadBtn) downloadBtn.style.display = 'none';
+                if (printBtn) printBtn.style.display = 'none';
+            }
+        });
         
         // Generate QR code
         generateBtn.addEventListener('click', generateTeacherQRCode);
@@ -2433,13 +2608,18 @@ function initTeacherQRGenerator() {
 function generateTeacherQRCode() {
     const subjectSelect = document.getElementById('teacher-subject-select');
     const sectionSelect = document.getElementById('teacher-section-select');
+    const attendanceTypeIn = document.getElementById('attendanceTypeIn');
+    const attendanceTypeOut = document.getElementById('attendanceTypeOut');
     
     if (!subjectSelect.value || !sectionSelect.value) {
         showToast('Please select both subject and section', 'warning');
         return;
     }
     
-    // Create QR data
+    // Get selected attendance type
+    const attendanceType = attendanceTypeIn.checked ? 'in' : 'out';
+    
+    // Create QR data with attendance type
     const sessionId = 'session_' + Date.now();
     const qrData = {
         teacher_id: <?php echo $current_user['id']; ?>,
@@ -2449,13 +2629,14 @@ function generateTeacherQRCode() {
         section_id: parseInt(sectionSelect.value),
         section_name: sectionSelect.options[sectionSelect.selectedIndex].text,
         session_id: sessionId,
+        attendance_type: attendanceType, // Add attendance type
         created_at: new Date().toISOString(),
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
     };
     
     currentTeacherQRData = qrData;
     
-    // Generate QR code
+    // Generate QR code with visual distinction for type
     const qrDataString = JSON.stringify(qrData);
     const qrContainer = document.getElementById('teacher-qr-container');
     
@@ -2463,12 +2644,22 @@ function generateTeacherQRCode() {
         // Use QR Server API to generate QR code
         const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrDataString)}&format=png&margin=10`;
         
+        // Color coding for attendance type
+        const typeColor = attendanceType === 'in' ? '#28a745' : '#dc3545'; // Green for IN, Red for OUT
+        const typeIcon = attendanceType === 'in' ? 'sign-in-alt' : 'sign-out-alt';
+        const typeText = attendanceType === 'in' ? 'TIME IN' : 'TIME OUT';
+        
         qrContainer.innerHTML = `
             <div class="qr-display-container">
+                <div class="text-center mb-3">
+                    <span class="badge fs-6 px-3 py-2" style="background-color: ${typeColor}; color: white;">
+                        <i class="fas fa-${typeIcon} me-2"></i>${typeText}
+                    </span>
+                </div>
                 <img src="${qrUrl}" 
-                     alt="Teacher QR Code" 
+                     alt="Teacher QR Code - ${typeText}" 
                      class="img-fluid border rounded shadow" 
-                     style="max-width: 300px; height: auto;"
+                     style="max-width: 300px; height: auto; border: 3px solid ${typeColor} !important;"
                      onload="this.style.opacity=1" 
                      style="opacity: 0; transition: opacity 0.3s;"
                      onerror="handleQRGenerationError(this)">
@@ -2522,8 +2713,17 @@ function updateTeacherQRInfo(qrData) {
         return;
     }
     
+    const typeColor = qrData.attendance_type === 'in' ? '#28a745' : '#dc3545';
+    const typeIcon = qrData.attendance_type === 'in' ? 'sign-in-alt' : 'sign-out-alt';
+    const typeText = qrData.attendance_type === 'in' ? 'TIME IN' : 'TIME OUT';
+    
     infoContainer.innerHTML = `
         <div class="qr-info">
+            <div class="info-item mb-3">
+                <span class="badge fs-6 px-3 py-2" style="background-color: ${typeColor}; color: white;">
+                    <i class="fas fa-${typeIcon} me-2"></i>${typeText}
+                </span>
+            </div>
             <div class="info-item mb-2">
                 <small class="text-muted">Subject</small>
                 <div class="fw-semibold">${qrData.subject_name}</div>
@@ -2538,11 +2738,11 @@ function updateTeacherQRInfo(qrData) {
             </div>
             <div class="info-item mb-2">
                 <small class="text-muted">Created</small>
-                <div class="small">${new Date(qrData.created_at).toLocaleString()}</div>
+                <div class="small">${new Date(qrData.created_at).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Manila' })}</div>
             </div>
             <div class="info-item">
                 <small class="text-muted">Expires</small>
-                <div class="small">${new Date(qrData.expires_at).toLocaleString()}</div>
+                <div class="small">${new Date(qrData.expires_at).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Manila' })}</div>
             </div>
         </div>
     `;
@@ -2559,16 +2759,26 @@ function addToActiveSessions(qrData) {
         sessionsContainer.innerHTML = '';
     }
     
+    const typeColor = qrData.attendance_type === 'in' ? '#28a745' : '#dc3545';
+    const typeIcon = qrData.attendance_type === 'in' ? 'sign-in-alt' : 'sign-out-alt';
+    const typeText = qrData.attendance_type === 'in' ? 'IN' : 'OUT';
+    
     // Create session item
     const sessionItem = document.createElement('div');
-    sessionItem.className = 'session-item border-start border-4 border-primary ps-2 mb-2';
+    sessionItem.className = 'session-item border-start border-4 ps-2 mb-2';
+    sessionItem.style.borderColor = typeColor + ' !important';
     sessionItem.id = 'session-' + qrData.session_id;
     sessionItem.innerHTML = `
         <div class="d-flex justify-content-between align-items-start">
             <div>
-                <strong class="small">${qrData.subject_name}</strong>
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <strong class="small">${qrData.subject_name}</strong>
+                    <span class="badge badge-sm" style="background-color: ${typeColor}; color: white; font-size: 0.7rem;">
+                        <i class="fas fa-${typeIcon} me-1"></i>${typeText}
+                    </span>
+                </div>
                 <div class="text-muted small">${qrData.section_name}</div>
-                <div class="text-muted small">${new Date(qrData.created_at).toLocaleTimeString()}</div>
+                <div class="text-muted small">${new Date(qrData.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Manila' })}</div>
             </div>
             <button class="btn btn-sm btn-outline-danger" onclick="endSession('${qrData.session_id}')">
                 <i class="fas fa-times"></i>
@@ -2609,8 +2819,9 @@ function downloadTeacherQRCode() {
     
     const img = document.querySelector('#teacher-qr-container img');
     if (img) {
+        const typeText = currentTeacherQRData.attendance_type === 'in' ? 'TimeIn' : 'TimeOut';
         const link = document.createElement('a');
-        link.download = `attendance_qr_${currentTeacherQRData.subject_name}_${currentTeacherQRData.section_name}.png`;
+        link.download = `attendance_qr_${typeText}_${currentTeacherQRData.subject_name}_${currentTeacherQRData.section_name}.png`;
         link.href = img.src;
         link.target = '_blank';
         link.click();
@@ -2627,21 +2838,28 @@ function printTeacherQRCode() {
     
     const img = document.querySelector('#teacher-qr-container img');
     if (img) {
+        const typeColor = currentTeacherQRData.attendance_type === 'in' ? '#28a745' : '#dc3545';
+        const typeText = currentTeacherQRData.attendance_type === 'in' ? 'TIME IN' : 'TIME OUT';
+        const typeIcon = currentTeacherQRData.attendance_type === 'in' ? '→' : '←';
+        
         const printWindow = window.open('', '_blank');
         const qrInfo = `
             <div style="text-align: center; padding: 20px; font-family: Arial, sans-serif;">
                 <h1 style="color: #007bff; margin-bottom: 10px;">KES-SMART Attendance</h1>
-                <h2 style="margin-bottom: 20px;">${currentTeacherQRData.subject_name}</h2>
+                <div style="background-color: ${typeColor}; color: white; padding: 10px 20px; border-radius: 15px; display: inline-block; margin-bottom: 20px; font-size: 18px; font-weight: bold;">
+                    ${typeIcon} ${typeText}
+                </div>
+                <h2 style="margin-bottom: 10px;">${currentTeacherQRData.subject_name}</h2>
                 <h3 style="margin-bottom: 20px; color: #666;">${currentTeacherQRData.section_name}</h3>
                 <div style="margin: 20px 0;">
-                    <img src="${img.src}" style="border: 2px solid #007bff; border-radius: 10px; max-width: 300px;">
+                    <img src="${img.src}" style="border: 3px solid ${typeColor}; border-radius: 10px; max-width: 300px;">
                 </div>
                 <p style="margin-top: 20px; font-size: 14px; color: #666;">
-                    Students: Scan this QR code to record your attendance
+                    Students: Scan this QR code to record your ${typeText.toLowerCase()}
                 </p>
                 <p style="font-size: 12px; color: #999;">
                     Session ID: ${currentTeacherQRData.session_id}<br>
-                    Generated: ${new Date(currentTeacherQRData.created_at).toLocaleString()}<br>
+                    Generated: ${new Date(currentTeacherQRData.created_at).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Manila' })}<br>
                     Teacher: ${currentTeacherQRData.teacher_name}
                 </p>
             </div>
@@ -2650,11 +2868,11 @@ function printTeacherQRCode() {
         printWindow.document.write(`
             <html>
                 <head>
-                    <title>Attendance QR Code - ${currentTeacherQRData.subject_name}</title>
+                    <title>Attendance QR Code - ${typeText} - ${currentTeacherQRData.subject_name}</title>
                     <style>
                         @media print {
                             body { margin: 0; }
-                            img { border: 2px solid #000; border-radius: 10px; }
+                            img { border: 3px solid ${typeColor}; border-radius: 10px; }
                         }
                     </style>
                 </head>
@@ -2728,6 +2946,15 @@ document.addEventListener('DOMContentLoaded', function() {
     updateTimeDisplay();
     // Update time every second
     setInterval(updateTimeDisplay, 1000);
+    
+    // Auto-check for 4:31 PM every minute to trigger auto-absent
+    setInterval(checkAutoAbsent, 60000);
+    
+    // Also check immediately after page loads (with delay)
+    setTimeout(() => {
+        checkAutoAbsent();
+        console.log('Dashboard auto-absent check initialized - will trigger at 4:31 PM');
+    }, 3000);
     <?php endif; ?>
     
     <?php if ($user_role == 'teacher'): ?>

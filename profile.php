@@ -6,6 +6,9 @@ if (!isLoggedIn()) {
     redirect('login.php');
 }
 
+// Update session activity
+updateSessionActivity();
+
 $current_user = getCurrentUser($pdo);
 
 // Handle form submissions
@@ -28,42 +31,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
             
         } elseif ($action == 'change_password') {
-            $current_password = sanitize_input($_POST['current_password']);
-            $new_password = sanitize_input($_POST['new_password']);
-            $confirm_password = sanitize_input($_POST['confirm_password']);
-            
-            // Note: Since this is a demo system without passwords, 
-            // we'll simulate password change functionality
-            if ($new_password !== $confirm_password) {
-                $_SESSION['error'] = 'New passwords do not match.';
-            } elseif (strlen($new_password) < 6) {
-                $_SESSION['error'] = 'Password must be at least 6 characters long.';
-            } else {
-                // In a real system, you would hash the password and update the database
-                $_SESSION['success'] = 'Password changed successfully! (Demo mode - no actual password set)';
-            }
+            // Remove password change functionality since it was in removed tabs
+            $_SESSION['error'] = 'Password change functionality not available.';
             
         } elseif ($action == 'update_preferences') {
-            $timezone = sanitize_input($_POST['timezone']);
-            $date_format = sanitize_input($_POST['date_format']);
-            $time_format = sanitize_input($_POST['time_format']);
-            $theme = sanitize_input($_POST['theme']);
-            $notifications = isset($_POST['notifications']) ? 1 : 0;
-            $email_alerts = isset($_POST['email_alerts']) ? 1 : 0;
-            $sms_alerts = isset($_POST['sms_alerts']) ? 1 : 0;
-            
-            // Store preferences in session or database
-            $_SESSION['user_preferences'] = [
-                'timezone' => $timezone,
-                'date_format' => $date_format,
-                'time_format' => $time_format,
-                'theme' => $theme,
-                'notifications' => $notifications,
-                'email_alerts' => $email_alerts,
-                'sms_alerts' => $sms_alerts
-            ];
-            
-            $_SESSION['success'] = 'Preferences updated successfully!';
+            // Remove preferences update functionality since it was in removed tabs
+            $_SESSION['error'] = 'Preferences update functionality not available.';
         }
     }
     
@@ -73,78 +46,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 $page_title = 'My Profile';
 include 'header.php';
 
-// Get user statistics based on role
-$user_stats = [];
-try {
-    if ($current_user['role'] == 'admin') {
-        $user_stats = [
-            'total_users' => $pdo->query("SELECT COUNT(*) FROM users WHERE status = 'active'")->fetchColumn(),
-            'total_students' => $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'active'")->fetchColumn(),
-            'total_sections' => $pdo->query("SELECT COUNT(*) FROM sections WHERE status = 'active'")->fetchColumn(),
-            'recent_activity' => 'System administration and monitoring'
-        ];
-    } elseif ($current_user['role'] == 'teacher') {
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM sections WHERE teacher_id = ?");
-        $stmt->execute([$current_user['id']]);
-        $assigned_sections = $stmt->fetchColumn();
-        
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE section_id IN (SELECT id FROM sections WHERE teacher_id = ?)");
-        $stmt->execute([$current_user['id']]);
-        $total_students = $stmt->fetchColumn();
-        
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM attendance WHERE teacher_id = ? AND attendance_date = CURDATE()");
-        $stmt->execute([$current_user['id']]);
-        $today_attendance = $stmt->fetchColumn();
-        
-        $user_stats = [
-            'assigned_sections' => $assigned_sections,
-            'total_students' => $total_students,
-            'today_attendance' => $today_attendance,
-            'recent_activity' => 'Teaching and student monitoring'
-        ];
-    } elseif ($current_user['role'] == 'student') {
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM attendance WHERE student_id = ? AND MONTH(attendance_date) = MONTH(CURDATE())");
-        $stmt->execute([$current_user['id']]);
-        $attendance_this_month = $stmt->fetchColumn();
-        
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM attendance WHERE student_id = ?");
-        $stmt->execute([$current_user['id']]);
-        $total_attendance = $stmt->fetchColumn();
-        
-        $section_name = '';
-        if ($current_user['section_id']) {
-            $stmt = $pdo->prepare("SELECT section_name FROM sections WHERE id = ?");
-            $stmt->execute([$current_user['section_id']]);
-            $section_name = $stmt->fetchColumn() ?: '';
-        }
-        
-        $user_stats = [
-            'attendance_this_month' => $attendance_this_month,
-            'total_attendance' => $total_attendance,
-            'section_name' => $section_name,
-            'recent_activity' => 'Attending classes and activities'
-        ];
-    } elseif ($current_user['role'] == 'parent') {
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM student_parents WHERE parent_id = ?");
-        $stmt->execute([$current_user['id']]);
-        $children = $stmt->fetchColumn();
-        
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM sms_logs WHERE phone_number = ?");
-        $stmt->execute([$current_user['phone']]);
-        $notifications_received = $stmt->fetchColumn();
-        
-        $user_stats = [
-            'children_count' => $children,
-            'notifications_received' => $notifications_received,
-            'last_notification' => 'Recent attendance updates',
-            'recent_activity' => 'Monitoring children attendance'
-        ];
-    }
-} catch(PDOException $e) {
-    $user_stats = [];
-}
+// Remove user statistics functionality
 
-// Get user preferences
+// Get user preferences (minimal for simplified profile)
 $preferences = $_SESSION['user_preferences'] ?? [
     'timezone' => 'Asia/Manila',
     'date_format' => 'Y-m-d',
@@ -228,56 +132,16 @@ $preferences = $_SESSION['user_preferences'] ?? [
     </div>
 </div>
 
-<!-- Statistics Row -->
-<?php if (!empty($user_stats)): ?>
-<div class="row g-3 mb-4">
-    <?php foreach ($user_stats as $key => $value): ?>
-        <div class="col-6 col-lg-3">
-            <div class="card text-center border-0 shadow-sm h-100">
-                <div class="card-body p-3">
-                    <div class="mb-2">
-                        <i class="fas fa-<?php 
-                            echo $key == 'total_users' || $key == 'children_count' ? 'users' : 
-                                 ($key == 'total_students' || $key == 'assigned_sections' ? 'graduation-cap' : 
-                                  ($key == 'attendance_this_month' || $key == 'today_attendance' ? 'calendar-check' : 'chart-line')); 
-                        ?> fa-2x text-primary"></i>
-                    </div>
-                    <h4 class="fw-bold text-primary mb-1"><?php echo is_numeric($value) ? number_format($value) : $value; ?></h4>
-                    <p class="text-muted mb-0 small"><?php echo ucwords(str_replace('_', ' ', $key)); ?></p>
-                </div>
-            </div>
-        </div>
-    <?php endforeach; ?>
-</div>
-<?php endif; ?>
+
 
 <!-- Profile Tabs -->
 <div class="row">
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <ul class="nav nav-tabs card-header-tabs flex-nowrap overflow-auto" id="profileTabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="info-tab" data-bs-toggle="tab" data-bs-target="#info" type="button" role="tab">
-                            <i class="fas fa-user me-2"></i><span class="d-none d-sm-inline">Personal Info</span>
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="security-tab" data-bs-toggle="tab" data-bs-target="#security" type="button" role="tab">
-                            <i class="fas fa-shield-alt me-2"></i><span class="d-none d-sm-inline">Security</span>
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="preferences-tab" data-bs-toggle="tab" data-bs-target="#preferences" type="button" role="tab">
-                            <i class="fas fa-cog me-2"></i><span class="d-none d-sm-inline">Preferences</span>
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="activity-tab" data-bs-toggle="tab" data-bs-target="#activity" type="button" role="tab">
-                            <i class="fas fa-history me-2"></i><span class="d-none d-sm-inline">Activity</span>
-                        </button>
-                    </li>
-                </ul>
+                <h5 class="mb-0">
+                    <i class="fas fa-user me-2"></i>Personal Information
+                </h5>
             </div>
             <div class="card-body p-0 p-sm-3">
                 <div class="tab-content" id="profileTabsContent">
@@ -348,256 +212,6 @@ $preferences = $_SESSION['user_preferences'] ?? [
                             </div>
                         </form>
                     </div>
-
-                    <!-- Security Tab -->
-                    <div class="tab-pane fade" id="security" role="tabpanel">
-                        <!-- Offline Mode Message -->
-                        <div class="offline-message alert alert-warning" style="display: none;">
-                            <i class="fas fa-wifi-slash me-2"></i>
-                            <strong>Offline Mode:</strong> Password changes are not available while offline.
-                        </div>
-                        
-                        <div class="row g-3">
-                            <div class="col-12 col-lg-8">
-                                <form method="POST" action="" class="online-only">
-                                    <input type="hidden" name="action" value="change_password">
-                                    
-                                    <div class="alert alert-info">
-                                        <i class="fas fa-info-circle me-2"></i>
-                                        <strong>Demo Mode:</strong> Password functionality is simulated in demo mode.
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label for="current_password" class="form-label">Current Password</label>
-                                        <input type="password" class="form-control" id="current_password" name="current_password">
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label for="new_password" class="form-label">New Password</label>
-                                        <input type="password" class="form-control" id="new_password" name="new_password" minlength="6">
-                                        <div class="form-text">Minimum 6 characters</div>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label for="confirm_password" class="form-label">Confirm New Password</label>
-                                        <input type="password" class="form-control" id="confirm_password" name="confirm_password" minlength="6">
-                                    </div>
-                                    
-                                    <div class="text-end">
-                                        <button type="submit" class="btn btn-warning">
-                                            <i class="fas fa-key me-2"></i>Change Password
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                            
-                            <div class="col-12 col-lg-4">
-                                <div class="card bg-light h-100">
-                                    <div class="card-body">
-                                        <h6 class="card-title">
-                                            <i class="fas fa-shield-alt me-2"></i>Security Tips
-                                        </h6>
-                                        <ul class="list-unstyled mb-0 small">
-                                            <li class="mb-2">
-                                                <i class="fas fa-check text-success me-2"></i>
-                                                Use a strong, unique password
-                                            </li>
-                                            <li class="mb-2">
-                                                <i class="fas fa-check text-success me-2"></i>
-                                                Enable two-factor authentication
-                                            </li>
-                                            <li class="mb-2">
-                                                <i class="fas fa-check text-success me-2"></i>
-                                                Keep your contact info updated
-                                            </li>
-                                            <li class="mb-0">
-                                                <i class="fas fa-check text-success me-2"></i>
-                                                Log out from shared devices
-                                            </li>
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Preferences Tab -->
-                    <div class="tab-pane fade" id="preferences" role="tabpanel">
-                        <!-- Offline Mode Message -->
-                        <div class="offline-message alert alert-warning" style="display: none;">
-                            <i class="fas fa-wifi-slash me-2"></i>
-                            <strong>Offline Mode:</strong> Preference changes are not available while offline.
-                        </div>
-                        
-                        <form method="POST" action="" class="online-only">
-                            <input type="hidden" name="action" value="update_preferences">
-                            
-                            <div class="row g-3">
-                                <div class="col-12 col-sm-6">
-                                    <label for="timezone" class="form-label">Timezone</label>
-                                    <select class="form-select" id="timezone" name="timezone">
-                                        <option value="Asia/Manila" <?php echo $preferences['timezone'] == 'Asia/Manila' ? 'selected' : ''; ?>>Asia/Manila (GMT+8)</option>
-                                        <option value="UTC" <?php echo $preferences['timezone'] == 'UTC' ? 'selected' : ''; ?>>UTC (GMT+0)</option>
-                                        <option value="America/New_York" <?php echo $preferences['timezone'] == 'America/New_York' ? 'selected' : ''; ?>>America/New_York (GMT-5)</option>
-                                        <option value="Europe/London" <?php echo $preferences['timezone'] == 'Europe/London' ? 'selected' : ''; ?>>Europe/London (GMT+0)</option>
-                                    </select>
-                                </div>
-                                
-                                <div class="col-12 col-sm-6">
-                                    <label for="date_format" class="form-label">Date Format</label>
-                                    <select class="form-select" id="date_format" name="date_format">
-                                        <option value="Y-m-d" <?php echo $preferences['date_format'] == 'Y-m-d' ? 'selected' : ''; ?>>YYYY-MM-DD</option>
-                                        <option value="m/d/Y" <?php echo $preferences['date_format'] == 'm/d/Y' ? 'selected' : ''; ?>>MM/DD/YYYY</option>
-                                        <option value="d/m/Y" <?php echo $preferences['date_format'] == 'd/m/Y' ? 'selected' : ''; ?>>DD/MM/YYYY</option>
-                                        <option value="M j, Y" <?php echo $preferences['date_format'] == 'M j, Y' ? 'selected' : ''; ?>>Month DD, YYYY</option>
-                                    </select>
-                                </div>
-                                
-                                <div class="col-12 col-sm-6">
-                                    <label for="time_format" class="form-label">Time Format</label>
-                                    <select class="form-select" id="time_format" name="time_format">
-                                        <option value="H:i:s" <?php echo $preferences['time_format'] == 'H:i:s' ? 'selected' : ''; ?>>24 Hour (HH:MM:SS)</option>
-                                        <option value="h:i A" <?php echo $preferences['time_format'] == 'h:i A' ? 'selected' : ''; ?>>12 Hour (HH:MM AM/PM)</option>
-                                    </select>
-                                </div>
-                                
-                                <div class="col-12 col-sm-6">
-                                    <label for="theme" class="form-label">Theme</label>
-                                    <select class="form-select" id="theme" name="theme">
-                                        <option value="light" <?php echo $preferences['theme'] == 'light' ? 'selected' : ''; ?>>Light Theme</option>
-                                        <option value="dark" <?php echo $preferences['theme'] == 'dark' ? 'selected' : ''; ?>>Dark Theme</option>
-                                        <option value="auto" <?php echo $preferences['theme'] == 'auto' ? 'selected' : ''; ?>>Auto (System)</option>
-                                    </select>
-                                </div>
-                            </div>
-                            
-                            <hr class="my-4">
-                            
-                            <h6 class="mb-3">Notification Preferences</h6>
-                            
-                            <div class="row g-3">
-                                <div class="col-12 col-sm-4">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="notifications" name="notifications" 
-                                               <?php echo $preferences['notifications'] ? 'checked' : ''; ?>>
-                                        <label class="form-check-label" for="notifications">
-                                            <i class="fas fa-bell me-2"></i>Push Notifications
-                                        </label>
-                                    </div>
-                                </div>
-                                
-                                <div class="col-12 col-sm-4">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="email_alerts" name="email_alerts" 
-                                               <?php echo $preferences['email_alerts'] ? 'checked' : ''; ?>>
-                                        <label class="form-check-label" for="email_alerts">
-                                            <i class="fas fa-envelope me-2"></i>Email Alerts
-                                        </label>
-                                    </div>
-                                </div>
-                                
-                                <div class="col-12 col-sm-4">
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" id="sms_alerts" name="sms_alerts" 
-                                               <?php echo $preferences['sms_alerts'] ? 'checked' : ''; ?>>
-                                        <label class="form-check-label" for="sms_alerts">
-                                            <i class="fas fa-sms me-2"></i>SMS Alerts
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="text-end mt-3">
-                                <button type="submit" class="btn btn-success">
-                                    <i class="fas fa-save me-2"></i>Update Preferences
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-
-                    <!-- Activity Log Tab -->
-                    <div class="tab-pane fade" id="activity" role="tabpanel">
-                        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-center mb-3 gap-2">
-                            <h6 class="mb-0">Recent Activity</h6>
-                            <div class="btn-group btn-group-sm">
-                                <button class="btn btn-outline-secondary active" data-filter="all">All</button>
-                                <button class="btn btn-outline-secondary" data-filter="login">Logins</button>
-                                <button class="btn btn-outline-secondary" data-filter="profile">Profile</button>
-                                <button class="btn btn-outline-secondary" data-filter="system">System</button>
-                            </div>
-                        </div>
-                        
-                        <div class="activity-log">
-                            <!-- Sample activity log entries -->
-                            <div class="activity-item d-flex align-items-start mb-3 pb-3 border-bottom" data-type="login">
-                                <div class="activity-icon me-3">
-                                    <div class="bg-success rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                        <i class="fas fa-sign-in-alt text-white"></i>
-                                    </div>
-                                </div>
-                                <div class="activity-content flex-grow-1">
-                                    <h6 class="mb-1">Logged in successfully</h6>
-                                    <p class="text-muted mb-1 small">Accessed the system dashboard</p>
-                                    <small class="text-muted">
-                                        <i class="fas fa-clock me-1"></i><?php echo date('M j, Y \a\t g:i A'); ?>
-                                    </small>
-                                </div>
-                            </div>
-                            
-                            <div class="activity-item d-flex align-items-start mb-3 pb-3 border-bottom" data-type="profile">
-                                <div class="activity-icon me-3">
-                                    <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                        <i class="fas fa-user-edit text-white"></i>
-                                    </div>
-                                </div>
-                                <div class="activity-content flex-grow-1">
-                                    <h6 class="mb-1">Profile updated</h6>
-                                    <p class="text-muted mb-1 small">Updated contact information</p>
-                                    <small class="text-muted">
-                                        <i class="fas fa-clock me-1"></i><?php echo date('M j, Y \a\t g:i A', strtotime('-2 hours')); ?>
-                                    </small>
-                                </div>
-                            </div>
-                            
-                            <?php if ($current_user['role'] == 'admin'): ?>
-                            <div class="activity-item d-flex align-items-start mb-3 pb-3 border-bottom" data-type="system">
-                                <div class="activity-icon me-3">
-                                    <div class="bg-warning rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                        <i class="fas fa-cogs text-white"></i>
-                                    </div>
-                                </div>
-                                <div class="activity-content flex-grow-1">
-                                    <h6 class="mb-1">System settings updated</h6>
-                                    <p class="text-muted mb-1 small">Modified SMS configuration</p>
-                                    <small class="text-muted">
-                                        <i class="fas fa-clock me-1"></i><?php echo date('M j, Y \a\t g:i A', strtotime('-1 day')); ?>
-                                    </small>
-                                </div>
-                            </div>
-                            <?php endif; ?>
-                            
-                            <div class="activity-item d-flex align-items-start mb-3" data-type="system">
-                                <div class="activity-icon me-3">
-                                    <div class="bg-info rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                        <i class="fas fa-mobile-alt text-white"></i>
-                                    </div>
-                                </div>
-                                <div class="activity-content flex-grow-1">
-                                    <h6 class="mb-1">Accessed from mobile device</h6>
-                                    <p class="text-muted mb-1 small">Used PWA on mobile browser</p>
-                                    <small class="text-muted">
-                                        <i class="fas fa-clock me-1"></i><?php echo date('M j, Y \a\t g:i A', strtotime('-2 days')); ?>
-                                    </small>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="text-center mt-4">
-                            <button class="btn btn-outline-primary btn-sm">
-                                <i class="fas fa-history me-2"></i>Load More Activity
-                            </button>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -615,93 +229,6 @@ document.getElementById('confirm_password')?.addEventListener('input', function(
     } else {
         this.setCustomValidity('');
     }
-});
-
-// Activity log filtering
-document.querySelectorAll('[data-filter]').forEach(button => {
-    button.addEventListener('click', function() {
-        const filter = this.dataset.filter;
-        
-        // Update active button
-        document.querySelectorAll('[data-filter]').forEach(btn => btn.classList.remove('active'));
-        this.classList.add('active');
-        
-        // Filter activity items
-        document.querySelectorAll('.activity-item').forEach(item => {
-            if (filter === 'all' || item.dataset.type === filter) {
-                item.style.display = 'flex';
-            } else {
-                item.style.display = 'none';
-            }
-        });
-    });
-});
-
-// Theme switching preview
-document.getElementById('theme')?.addEventListener('change', function() {
-    const theme = this.value;
-    const body = document.body;
-    
-    // Remove existing theme classes
-    body.classList.remove('theme-light', 'theme-dark');
-    
-    if (theme === 'dark') {
-        body.classList.add('theme-dark');
-    } else if (theme === 'light') {
-        body.classList.add('theme-light');
-    } else {
-        // Auto theme - use system preference
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            body.classList.add('theme-dark');
-        } else {
-            body.classList.add('theme-light');
-        }
-    }
-});
-
-// Tab URL handling
-document.addEventListener('DOMContentLoaded', function() {
-    // Show tab based on URL hash
-    const hash = window.location.hash;
-    if (hash) {
-        const tabElement = document.querySelector(`[data-bs-target="${hash}"]`);
-        if (tabElement) {
-            new bootstrap.Tab(tabElement).show();
-        }
-    }
-    
-    // Update URL when tab changes
-    document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
-        tab.addEventListener('shown.bs.tab', function(e) {
-            const target = e.target.getAttribute('data-bs-target');
-            history.replaceState(null, null, window.location.pathname + target);
-        });
-    });
-});
-
-// Auto-save preferences
-let preferencesTimeout;
-document.querySelectorAll('#preferences input, #preferences select').forEach(input => {
-    input.addEventListener('change', function() {
-        clearTimeout(preferencesTimeout);
-        preferencesTimeout = setTimeout(() => {
-            // Show saving indicator
-            const indicator = document.createElement('div');
-            indicator.className = 'alert alert-info alert-dismissible fade show position-fixed top-0 end-0 m-3';
-            indicator.style.zIndex = '9999';
-            indicator.innerHTML = `
-                <i class="fas fa-save me-2"></i>Preferences saved automatically
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
-            document.body.appendChild(indicator);
-            
-            setTimeout(() => {
-                if (indicator.parentNode) {
-                    indicator.remove();
-                }
-            }, 3000);
-        }, 1000);
-    });
 });
 </script>
 
@@ -942,8 +469,8 @@ function storeProfileDataForOffline() {
     localStorage.setItem('kes_smart_user_stats', JSON.stringify(userStats));
     <?php endif; ?>
     
-    // Store preferences
-    const preferences = <?php echo json_encode($preferences); ?>;
+    // Store preferences in localStorage (minimal for simplified profile)
+    const preferences = <?php echo json_encode(['timezone' => $preferences['timezone']]); ?>;
     localStorage.setItem('kes_smart_preferences', JSON.stringify(preferences));
     
     console.log('Profile data stored for offline use');

@@ -1,4 +1,7 @@
 <?php
+// Set timezone to Manila for the entire application
+date_default_timezone_set('Asia/Manila');
+
 // Set a flag to track if we're running in offline mode
 $GLOBALS['is_offline_mode'] = false;
 
@@ -49,7 +52,46 @@ function getSMSConfig($pdo) {
 
 // Session management
 if (session_status() === PHP_SESSION_NONE) {
+    // Set session timeout to 1 hour (3600 seconds)
+    ini_set('session.gc_maxlifetime', 3600);
+    
+    // Set session cookie parameters (compatible format)
+    // Lifetime: 3600 seconds (1 hour), Path: '/', Domain: '', Secure: false, HttpOnly: true
+    session_set_cookie_params(3600, '/', '', false, true);
+    
+    // Start the session
     session_start();
+    
+    // Regenerate session ID periodically to prevent session fixation
+    // But only if we have a valid session and it's been more than 5 minutes
+    if (isset($_SESSION['user_id']) && (!isset($_SESSION['CREATED']) || (time() - $_SESSION['CREATED']) > 300)) {
+        session_regenerate_id(true);
+        $_SESSION['CREATED'] = time();
+    }
+    
+    // Initialize session creation time if not set
+    if (!isset($_SESSION['CREATED'])) {
+        $_SESSION['CREATED'] = time();
+    }
+}
+
+// Simple session activity update function
+function updateSessionActivity() {
+    if (isset($_SESSION['user_id'])) {
+        $_SESSION['LAST_ACTIVITY'] = time();
+    }
+}
+
+// Check session timeout function (only for manual checking)
+function checkSessionTimeout() {
+    // Only check timeout if explicitly called and all conditions are met
+    if (isset($_SESSION['user_id']) && isset($_SESSION['LAST_ACTIVITY'])) {
+        if ((time() - $_SESSION['LAST_ACTIVITY']) > 3600) {
+            // Last request was more than 1 hour ago
+            return false;
+        }
+    }
+    return true;
 }
 
 // Helper functions
@@ -63,25 +105,18 @@ function redirect($url) {
 }
 
 function isLoggedIn() {
-    // Check for PHP session first (when online)
-    if (isset($_SESSION['user_id']) && !empty($_SESSION['user_id'])) {
+    // Simple session check - just verify user_id exists and is valid
+    if (isset($_SESSION['user_id']) && !empty($_SESSION['user_id']) && is_numeric($_SESSION['user_id'])) {
+        // Update last activity on each check to keep session alive
+        if (!isset($_SESSION['LAST_ACTIVITY'])) {
+            $_SESSION['LAST_ACTIVITY'] = time();
+        }
         return true;
     }
     
-    // Check for offline mode login via localStorage
-    if ($GLOBALS['is_offline_mode']) {
-        // In offline mode, we rely on client-side detection of logged in state
-        // The actual check happens in JavaScript by checking localStorage
-        if (isset($_COOKIE['kes_smart_offline_logged_in']) && $_COOKIE['kes_smart_offline_logged_in'] === '1') {
-            return true;
-        }
-    }
-    
-    // If no PHP session, check for client-side session (when offline)
-    if (!headers_sent() && !isset($_COOKIE['kes_smart_check_offline'])) {
-        // Set a cookie to prevent infinite redirects
-        setcookie('kes_smart_check_offline', '1', 0, '/');
-        return false;
+    // Check for offline mode login via cookie (only if database is offline)
+    if ($GLOBALS['is_offline_mode'] && isset($_COOKIE['kes_smart_offline_logged_in']) && $_COOKIE['kes_smart_offline_logged_in'] === '1') {
+        return true;
     }
     
     return false;
@@ -91,6 +126,9 @@ function requireRole($allowed_roles) {
     if (!isLoggedIn()) {
         redirect('login.php');
     }
+    
+    // Simply update session activity without forcing timeout check
+    updateSessionActivity();
     
     $user_role = $_SESSION['role'] ?? '';
     
@@ -125,32 +163,63 @@ function checkPageAccess($page_name) {
 function getCurrentUser($pdo) {
     if (!isLoggedIn()) return false;
     
+    // Always check if we have basic session data first
+    if (!isset($_SESSION['user_id'])) return false;
+    
     if ($GLOBALS['is_offline_mode']) {
-        // For offline mode, we can't fetch from the database
-        // Instead, return a simplified user object based on session data
-        if (isset($_SESSION['user_id'])) {
-            return [
-                'id' => $_SESSION['user_id'],
-                'username' => $_SESSION['username'] ?? '',
-                'full_name' => $_SESSION['full_name'] ?? 'Offline User',
-                'role' => $_SESSION['role'] ?? '',
-                'email' => '',
-                'phone' => '',
-                'status' => 'active',
-                'offline_mode' => true
-            ];
-        }
-        return false;
+        // For offline mode, return session data
+        return [
+            'id' => $_SESSION['user_id'],
+            'username' => $_SESSION['username'] ?? '',
+            'full_name' => $_SESSION['full_name'] ?? 'Offline User',
+            'role' => $_SESSION['role'] ?? '',
+            'email' => '',
+            'phone' => '',
+            'status' => 'active',
+            'offline_mode' => true,
+            'section_id' => $_SESSION['section_id'] ?? null,
+            'created_at' => '',
+            'updated_at' => ''
+        ];
     }
     
     try {
         $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
         $stmt->execute([$_SESSION['user_id']]);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        // If database query fails, fall back to session data
+        if (!$user) {
+            return [
+                'id' => $_SESSION['user_id'],
+                'username' => $_SESSION['username'] ?? '',
+                'full_name' => $_SESSION['full_name'] ?? 'User',
+                'role' => $_SESSION['role'] ?? '',
+                'email' => '',
+                'phone' => '',
+                'status' => 'active',
+                'section_id' => $_SESSION['section_id'] ?? null,
+                'created_at' => '',
+                'updated_at' => ''
+            ];
+        }
+        
+        return $user;
     } catch(PDOException $e) {
-        // In case of database error
+        // In case of database error, return session data
         error_log("Error getting current user: " . $e->getMessage());
-        return false;
+        return [
+            'id' => $_SESSION['user_id'],
+            'username' => $_SESSION['username'] ?? '',
+            'full_name' => $_SESSION['full_name'] ?? 'User',
+            'role' => $_SESSION['role'] ?? '',
+            'email' => '',
+            'phone' => '',
+            'status' => 'active',
+            'section_id' => $_SESSION['section_id'] ?? null,
+            'created_at' => '',
+            'updated_at' => ''
+        ];
     }
 }
 
@@ -188,8 +257,8 @@ function sendSMSNotification($pdo, $phone_number, $message) {
         return false;
     }
 
-    // Use the new PhilSMS implementation
-    $result = sendSMSUsingPhilSMS($phone_number, $message, $api_key);
+    // Use the new IPROG SMS implementation
+    $result = sendSMSUsingIPROG($phone_number, $message, $api_key);
     
     // Log the result in sms_logs table for compatibility
     try {

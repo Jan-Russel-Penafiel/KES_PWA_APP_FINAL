@@ -225,6 +225,7 @@ if (file_exists('config.php')) {
                     $_SESSION['role'] = $user['role'];
                     $_SESSION['section_id'] = $user['section_id'];
                     $_SESSION['offline_mode'] = true;
+                    $_SESSION['LAST_ACTIVITY'] = time(); // Initialize session timeout tracking
                     
                     // Set a flag to indicate offline login
                     $_SESSION['offline_login'] = true;

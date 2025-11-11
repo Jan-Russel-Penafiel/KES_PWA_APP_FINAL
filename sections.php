@@ -94,12 +94,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if ($_POST['action'] == 'add_section') {
             $section_name = trim($_POST['section_name']);
             $grade_level = $_POST['grade_level'];
-            $teacher_id = !empty($_POST['teacher_id']) ? $_POST['teacher_id'] : null;
+            $teacher_id = ($user_role == 'admin' && !empty($_POST['teacher_id'])) ? $_POST['teacher_id'] : $current_user['id'];
             $description = trim($_POST['description']);
             
             try {
-                // Validate teacher_id if provided
-                if ($teacher_id !== null) {
+                // For teachers, they can only create sections for themselves
+                if ($user_role == 'teacher') {
+                    $teacher_id = $current_user['id']; // Force teacher to be themselves
+                }
+                
+                // Validate teacher_id if provided (admin only)
+                if ($user_role == 'admin' && $teacher_id !== null) {
                     $teacher_check = $pdo->prepare("SELECT id FROM users WHERE id = ? AND role = 'teacher' AND status = 'active'");
                     $teacher_check->execute([$teacher_id]);
                     if (!$teacher_check->fetch()) {
@@ -124,13 +129,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $section_id = $_POST['section_id'];
             $section_name = trim($_POST['section_name']);
             $grade_level = $_POST['grade_level'];
-            $teacher_id = !empty($_POST['teacher_id']) ? $_POST['teacher_id'] : null;
+            $teacher_id = ($user_role == 'admin' && !empty($_POST['teacher_id'])) ? $_POST['teacher_id'] : $current_user['id'];
             $description = trim($_POST['description']);
             $status = $_POST['status'];
             
             try {
-                // Validate teacher_id if provided
-                if ($teacher_id !== null) {
+                // For teachers, validate they can only edit their own sections
+                if ($user_role == 'teacher') {
+                    $teacher_id = $current_user['id']; // Force teacher to be themselves
+                    $section_check = $pdo->prepare("SELECT id FROM sections WHERE id = ? AND teacher_id = ?");
+                    $section_check->execute([$section_id, $current_user['id']]);
+                    if (!$section_check->fetch()) {
+                        $_SESSION['error'] = "You can only edit sections you manage.";
+                        redirect('sections.php?view=sections');
+                        exit;
+                    }
+                }
+                
+                // Validate teacher_id if provided (admin only)
+                if ($user_role == 'admin' && $teacher_id !== null) {
                     $teacher_check = $pdo->prepare("SELECT id FROM users WHERE id = ? AND role = 'teacher' AND status = 'active'");
                     $teacher_check->execute([$teacher_id]);
                     if (!$teacher_check->fetch()) {
@@ -155,6 +172,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $section_id = $_POST['section_id'];
             
             try {
+                // For teachers, validate they can only delete their own sections
+                if ($user_role == 'teacher') {
+                    $section_check = $pdo->prepare("SELECT id FROM sections WHERE id = ? AND teacher_id = ?");
+                    $section_check->execute([$section_id, $current_user['id']]);
+                    if (!$section_check->fetch()) {
+                        $_SESSION['error'] = "You can only delete sections you manage.";
+                        redirect('sections.php?view=sections');
+                        exit;
+                    }
+                }
+                
                 // Start transaction for data integrity
                 $pdo->beginTransaction();
                 
@@ -167,25 +195,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $pdo->rollBack();
                     $_SESSION['error'] = "Cannot delete section with assigned students. Please reassign students first.";
                 } else {
-                    // Check if section has attendance records
-                    $attendance_check = $pdo->prepare("SELECT COUNT(*) FROM attendance WHERE section_id = ?");
-                    $attendance_check->execute([$section_id]);
-                    $attendance_count = $attendance_check->fetchColumn();
+                    // Permanent deletion: Delete all related data first for data integrity
                     
-                    if ($attendance_count > 0) {
-                        // If there are attendance records, set status to inactive instead of deleting
-                        $stmt = $pdo->prepare("UPDATE sections SET status = 'inactive' WHERE id = ?");
-                        $stmt->execute([$section_id]);
-                        $pdo->commit();
-                        $_SESSION['success'] = "Section archived successfully (attendance records preserved).";
-                    } else {
-                        // Safe to delete
-                        $delete_section = $pdo->prepare("DELETE FROM sections WHERE id = ?");
-                        $delete_section->execute([$section_id]);
-                        
-                        $pdo->commit();
-                        $_SESSION['success'] = "Section deleted permanently.";
-                    }
+                    // 1. Delete all attendance records for this section
+                    $delete_attendance = $pdo->prepare("DELETE FROM attendance WHERE section_id = ?");
+                    $delete_attendance->execute([$section_id]);
+                    
+                    // 2. Delete all student-subject relationships for subjects in this section
+                    $delete_student_subjects = $pdo->prepare("DELETE FROM student_subjects WHERE subject_id IN (SELECT id FROM subjects WHERE section_id = ?)");
+                    $delete_student_subjects->execute([$section_id]);
+                    
+                    // 3. Delete all subjects in this section
+                    $delete_subjects = $pdo->prepare("DELETE FROM subjects WHERE section_id = ?");
+                    $delete_subjects->execute([$section_id]);
+                    
+                    // 4. Finally delete the section itself
+                    $delete_section = $pdo->prepare("DELETE FROM sections WHERE id = ?");
+                    $delete_section->execute([$section_id]);
+                    
+                    $pdo->commit();
+                    $_SESSION['success'] = "Section and all related data deleted permanently.";
                 }
                 redirect('sections.php?view=sections');
             } catch (PDOException $e) {
@@ -195,19 +224,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
         }
         
-        // Subject actions (existing code)
-        // Add new subject
+        // Subject actions (enhanced for teachers)
+        // Add new subject - Allow teachers to create subjects for their sections
         if ($_POST['action'] == 'add') {
             $subject_name = trim($_POST['subject_name']);
             $subject_code = trim($_POST['subject_code']);
-            $teacher_id = !empty($_POST['teacher_id']) ? $_POST['teacher_id'] : null;
+            $teacher_id = ($user_role == 'admin' && !empty($_POST['teacher_id'])) ? $_POST['teacher_id'] : $current_user['id'];
+            $section_id = !empty($_POST['section_id']) ? $_POST['section_id'] : null;
             $grade_level = $_POST['grade_level'];
             $description = trim($_POST['description']);
             $schedule = trim($_POST['schedule']);
             
             try {
-                // Validate teacher_id if provided
-                if ($teacher_id !== null) {
+                // For teachers, validate they can only assign subjects to their own sections
+                if ($user_role == 'teacher' && $section_id) {
+                    $section_check = $pdo->prepare("SELECT id FROM sections WHERE id = ? AND teacher_id = ?");
+                    $section_check->execute([$section_id, $current_user['id']]);
+                    if (!$section_check->fetch()) {
+                        $_SESSION['error'] = "You can only create subjects for sections you manage.";
+                        redirect('sections.php');
+                        exit;
+                    }
+                }
+                
+                // Validate teacher_id if provided (admin only)
+                if ($user_role == 'admin' && $teacher_id !== null) {
                     $teacher_check = $pdo->prepare("SELECT id FROM users WHERE id = ? AND role = 'teacher' AND status = 'active'");
                     $teacher_check->execute([$teacher_id]);
                     if (!$teacher_check->fetch()) {
@@ -217,8 +258,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     }
                 }
                 
-                $stmt = $pdo->prepare("INSERT INTO subjects (subject_name, subject_code, teacher_id, grade_level, description, schedule, status) VALUES (?, ?, ?, ?, ?, ?, 'active')");
-                $stmt->execute([$subject_name, $subject_code, $teacher_id, $grade_level, $description, $schedule]);
+                $stmt = $pdo->prepare("INSERT INTO subjects (subject_name, subject_code, teacher_id, section_id, grade_level, description, schedule, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'active')");
+                $stmt->execute([$subject_name, $subject_code, $teacher_id, $section_id, $grade_level, $description, $schedule]);
                 
                 $_SESSION['success'] = "Subject added successfully.";
                 redirect('sections.php');
@@ -227,20 +268,43 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
         }
         
-        // Edit subject
+        // Edit subject - Allow teachers to edit their own subjects
         else if ($_POST['action'] == 'edit') {
             $subject_id = $_POST['subject_id'];
             $subject_name = trim($_POST['subject_name']);
             $subject_code = trim($_POST['subject_code']);
-            $teacher_id = !empty($_POST['teacher_id']) ? $_POST['teacher_id'] : null;
+            $teacher_id = ($user_role == 'admin' && !empty($_POST['teacher_id'])) ? $_POST['teacher_id'] : $current_user['id'];
+            $section_id = !empty($_POST['section_id']) ? $_POST['section_id'] : null;
             $grade_level = $_POST['grade_level'];
             $description = trim($_POST['description']);
             $schedule = trim($_POST['schedule']);
             $status = $_POST['status'];
             
             try {
-                // Validate teacher_id if provided
-                if ($teacher_id !== null) {
+                // For teachers, validate they can only edit their own subjects
+                if ($user_role == 'teacher') {
+                    $subject_check = $pdo->prepare("SELECT id FROM subjects WHERE id = ? AND teacher_id = ?");
+                    $subject_check->execute([$subject_id, $current_user['id']]);
+                    if (!$subject_check->fetch()) {
+                        $_SESSION['error'] = "You can only edit subjects you teach.";
+                        redirect('sections.php');
+                        exit;
+                    }
+                    
+                    // Also validate section assignment if provided
+                    if ($section_id) {
+                        $section_check = $pdo->prepare("SELECT id FROM sections WHERE id = ? AND teacher_id = ?");
+                        $section_check->execute([$section_id, $current_user['id']]);
+                        if (!$section_check->fetch()) {
+                            $_SESSION['error'] = "You can only assign subjects to sections you manage.";
+                            redirect('sections.php');
+                            exit;
+                        }
+                    }
+                }
+                
+                // Validate teacher_id if provided (admin only)
+                if ($user_role == 'admin' && $teacher_id !== null) {
                     $teacher_check = $pdo->prepare("SELECT id FROM users WHERE id = ? AND role = 'teacher' AND status = 'active'");
                     $teacher_check->execute([$teacher_id]);
                     if (!$teacher_check->fetch()) {
@@ -250,8 +314,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     }
                 }
                 
-                $stmt = $pdo->prepare("UPDATE subjects SET subject_name = ?, subject_code = ?, teacher_id = ?, grade_level = ?, description = ?, schedule = ?, status = ? WHERE id = ?");
-                $stmt->execute([$subject_name, $subject_code, $teacher_id, $grade_level, $description, $schedule, $status, $subject_id]);
+                $stmt = $pdo->prepare("UPDATE subjects SET subject_name = ?, subject_code = ?, teacher_id = ?, section_id = ?, grade_level = ?, description = ?, schedule = ?, status = ? WHERE id = ?");
+                $stmt->execute([$subject_name, $subject_code, $teacher_id, $section_id, $grade_level, $description, $schedule, $status, $subject_id]);
                 
                 $_SESSION['success'] = "Subject updated successfully.";
                 redirect('sections.php');
@@ -260,26 +324,40 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
         }
         
-        // Delete subject
+        // Delete subject - Allow teachers to delete their own subjects (with restrictions)
         else if ($_POST['action'] == 'delete') {
             $subject_id = $_POST['subject_id'];
             
             try {
+                // For teachers, validate they can only delete their own subjects
+                if ($user_role == 'teacher') {
+                    $subject_check = $pdo->prepare("SELECT subject_name FROM subjects WHERE id = ? AND teacher_id = ?");
+                    $subject_check->execute([$subject_id, $current_user['id']]);
+                    $subject_data = $subject_check->fetch();
+                    
+                    if (!$subject_data) {
+                        $_SESSION['error'] = "You can only delete subjects you teach.";
+                        redirect('sections.php');
+                        exit;
+                    }
+                    $subject_name = $subject_data['subject_name'];
+                } else {
+                    // Get subject info for the success message
+                    $subject_info = $pdo->prepare("SELECT subject_name FROM subjects WHERE id = ?");
+                    $subject_info->execute([$subject_id]);
+                    $subject_name = $subject_info->fetchColumn();
+                }
+                
                 // Start transaction for data integrity
                 $pdo->beginTransaction();
                 
-                // Get subject info for the success message
-                $subject_info = $pdo->prepare("SELECT subject_name FROM subjects WHERE id = ?");
-                $subject_info->execute([$subject_id]);
-                $subject_name = $subject_info->fetchColumn();
-                
-                // Delete all related records in proper order to maintain referential integrity
+                // Permanent deletion: Delete all related data first for data integrity
                 
                 // 1. Delete attendance records for this subject
                 $delete_attendance = $pdo->prepare("DELETE FROM attendance WHERE subject_id = ?");
                 $delete_attendance->execute([$subject_id]);
                 
-                // 2. Delete all student-subject relationships (enrolled or not)
+                // 2. Delete all student-subject relationships
                 $delete_student_subjects = $pdo->prepare("DELETE FROM student_subjects WHERE subject_id = ?");
                 $delete_student_subjects->execute([$subject_id]);
                 
@@ -361,15 +439,16 @@ try {
         ");
         $sections = $section_stmt->fetchAll(PDO::FETCH_ASSOC);
     } else {
-        // Teacher only sees their own sections
+        // Teacher sees their own sections AND sections where they teach subjects
         $section_stmt = $pdo->prepare("
-            SELECT s.*, u.full_name as teacher_name 
+            SELECT DISTINCT s.*, u.full_name as teacher_name 
             FROM sections s 
             LEFT JOIN users u ON s.teacher_id = u.id 
-            WHERE s.teacher_id = ?
+            LEFT JOIN subjects subj ON s.id = subj.section_id
+            WHERE s.teacher_id = ? OR subj.teacher_id = ?
             ORDER BY s.grade_level ASC, s.section_name ASC
         ");
-        $section_stmt->execute([$current_user['id']]);
+        $section_stmt->execute([$current_user['id'], $current_user['id']]);
         $sections = $section_stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 } catch (PDOException $e) {
@@ -792,9 +871,9 @@ include 'header.php';
                         <?php endif; ?>
                     <?php else: ?>
                         <?php if ($view_mode == 'sections'): ?>
-                        View your assigned sections
+                        View sections where you teach or serve as adviser
                         <?php else: ?>
-                        View your assigned subjects
+                        Manage subjects you teach - add, edit, or archive your subjects
                         <?php endif; ?>
                     <?php endif; ?>
                 </p>
@@ -812,7 +891,7 @@ include 'header.php';
                     </a>
                 </div>
                 
-                <?php if ($user_role == 'admin'): ?>
+                <?php if ($user_role == 'admin' || $user_role == 'teacher'): ?>
                 <?php if ($view_mode == 'sections'): ?>
                 <button type="button" class="btn btn-success w-100 w-sm-auto" data-bs-toggle="modal" data-bs-target="#addSectionModal">
                     <i class="fas fa-plus me-1"></i> 
@@ -942,7 +1021,7 @@ include 'header.php';
                                             </span>
                                         </div>
                                         <div>
-                                            <?php if ($user_role == 'admin'): ?>
+                                            <?php if ($user_role == 'admin' || ($user_role == 'teacher' && $section['teacher_id'] == $current_user['id'])): ?>
                                             <button type="button" class="btn btn-sm btn-outline-primary edit-section" 
                                                     data-id="<?php echo $section['id']; ?>"
                                                     data-name="<?php echo htmlspecialchars($section['section_name']); ?>"
@@ -957,11 +1036,10 @@ include 'header.php';
                                                     data-name="<?php echo htmlspecialchars($section['section_name']); ?>">
                                                 <i class="fas fa-trash"></i>
                                             </button>
-                                            <?php else: ?>
+                                            <?php endif; ?>
                                             <a href="students.php?section_id=<?php echo $section['id']; ?>" class="btn btn-sm btn-outline-info">
                                                 <i class="fas fa-users"></i> Students
                                             </a>
-                                            <?php endif; ?>
                                         </div>
                                     </div>
                                 </div>
@@ -1074,7 +1152,7 @@ include 'header.php';
                                         </span>
                                     </div>
                                     <div>
-                                        <?php if ($user_role == 'admin'): ?>
+                                        <?php if ($user_role == 'admin' || $subject['teacher_id'] == $current_user['id']): ?>
                                         <button type="button" class="btn btn-sm btn-outline-primary edit-subject" 
                                                 data-id="<?php echo $subject['id']; ?>"
                                                 data-name="<?php echo htmlspecialchars($subject['subject_name']); ?>"
@@ -1143,6 +1221,7 @@ include 'header.php';
                     
                     <div class="mb-3">
                         <label for="section_teacher_id" class="form-label">Adviser Teacher</label>
+                        <?php if ($user_role == 'admin'): ?>
                         <select class="form-select" id="section_teacher_id" name="teacher_id">
                             <option value="">Select Teacher</option>
                             <?php foreach ($teachers as $teacher): ?>
@@ -1151,6 +1230,11 @@ include 'header.php';
                                 </option>
                             <?php endforeach; ?>
                         </select>
+                        <?php else: ?>
+                        <input type="hidden" name="teacher_id" value="<?php echo $current_user['id']; ?>">
+                        <input type="text" class="form-control" value="<?php echo htmlspecialchars($current_user['full_name']); ?> (You)" readonly>
+                        <small class="text-muted">Teachers can only create sections for themselves.</small>
+                        <?php endif; ?>
                     </div>
                     
                     <div class="mb-3">
@@ -1212,6 +1296,7 @@ include 'header.php';
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="teacher_id" class="form-label">Teacher</label>
+                                <?php if ($user_role == 'admin'): ?>
                                 <select class="form-select" id="teacher_id" name="teacher_id">
                                     <option value="">Select Teacher</option>
                                     <?php foreach ($teachers as $teacher): ?>
@@ -1220,22 +1305,31 @@ include 'header.php';
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
+                                <?php else: ?>
+                                <input type="text" class="form-control" value="<?php echo htmlspecialchars($current_user['full_name']); ?>" readonly>
+                                <div class="form-text">You are automatically assigned as the teacher for subjects you create.</div>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </div>
-                  <div class="mb-3">
-                        <label for="section_id" class="form-label">Section (Optional)</label>
+                    <div class="mb-3">
+                        <label for="section_id" class="form-label">Section</label>
                         <select class="form-select" id="section_id" name="section_id">
                             <option value="">Select Section</option>
                             <?php foreach ($all_sections as $section): ?>
+                                <?php if ($user_role == 'admin' || $section['teacher_id'] == $current_user['id']): ?>
                                 <option value="<?php echo $section['id']; ?>" data-teacher-id="<?php echo $section['teacher_id'] ?? ''; ?>">
-                                    <?php echo htmlspecialchars($section['section_name'] . ' - ' . $section['grade_level']); ?>
-                                    <?php if (!empty($section['teacher_name'])): ?>
+                                    <?php echo htmlspecialchars($section['section_name'] . ' - Grade ' . $section['grade_level']); ?>
+                                    <?php if (!empty($section['teacher_name']) && $user_role == 'admin'): ?>
                                         (<?php echo htmlspecialchars($section['teacher_name']); ?>)
                                     <?php endif; ?>
                                 </option>
+                                <?php endif; ?>
                             <?php endforeach; ?>
                         </select>
+                        <?php if ($user_role == 'teacher'): ?>
+                        <div class="form-text">You can only assign subjects to sections you manage.</div>
+                        <?php endif; ?>
                     </div>
                     
                     <div class="mb-3">
@@ -1300,6 +1394,7 @@ include 'header.php';
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="edit_teacher_id" class="form-label">Teacher</label>
+                                <?php if ($user_role == 'admin'): ?>
                                 <select class="form-select" id="edit_teacher_id" name="teacher_id">
                                     <option value="">Select Teacher</option>
                                     <?php foreach ($teachers as $teacher): ?>
@@ -1308,6 +1403,10 @@ include 'header.php';
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
+                                <?php else: ?>
+                                <input type="text" class="form-control" value="<?php echo htmlspecialchars($current_user['full_name']); ?>" readonly>
+                                <div class="form-text">You can only edit subjects you teach.</div>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </div>
@@ -1317,14 +1416,19 @@ include 'header.php';
                         <select class="form-select" id="edit_section_id" name="section_id">
                             <option value="">Select Section</option>
                             <?php foreach ($all_sections as $section): ?>
+                                <?php if ($user_role == 'admin' || $section['teacher_id'] == $current_user['id']): ?>
                                 <option value="<?php echo $section['id']; ?>" data-teacher-id="<?php echo $section['teacher_id'] ?? ''; ?>">
-                                    <?php echo htmlspecialchars($section['section_name'] . ' - ' . $section['grade_level']); ?>
-                                    <?php if (!empty($section['teacher_name'])): ?>
+                                    <?php echo htmlspecialchars($section['section_name'] . ' - Grade ' . $section['grade_level']); ?>
+                                    <?php if (!empty($section['teacher_name']) && $user_role == 'admin'): ?>
                                         (<?php echo htmlspecialchars($section['teacher_name']); ?>)
                                     <?php endif; ?>
                                 </option>
+                                <?php endif; ?>
                             <?php endforeach; ?>
                         </select>
+                        <?php if ($user_role == 'teacher'): ?>
+                        <div class="form-text">You can only assign subjects to sections you manage.</div>
+                        <?php endif; ?>
                     </div>
                     
                     <div class="mb-3">
@@ -1389,6 +1493,7 @@ include 'header.php';
                     
                     <div class="mb-3">
                         <label for="edit_section_teacher_id" class="form-label">Adviser Teacher</label>
+                        <?php if ($user_role == 'admin'): ?>
                         <select class="form-select" id="edit_section_teacher_id" name="teacher_id">
                             <option value="">Select Teacher</option>
                             <?php foreach ($teachers as $teacher): ?>
@@ -1397,6 +1502,11 @@ include 'header.php';
                                 </option>
                             <?php endforeach; ?>
                         </select>
+                        <?php else: ?>
+                        <input type="hidden" name="teacher_id" value="<?php echo $current_user['id']; ?>">
+                        <input type="text" class="form-control" value="<?php echo htmlspecialchars($current_user['full_name']); ?> (You)" readonly>
+                        <small class="text-muted">Teachers can only edit their own sections.</small>
+                        <?php endif; ?>
                     </div>
                     
                     <div class="mb-3">
@@ -1426,14 +1536,18 @@ include 'header.php';
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title" id="deleteSubjectModalLabel">Permanently Delete Subject</h5>
+                <h5 class="modal-title" id="deleteSubjectModalLabel">
+                    <?php echo $user_role == 'admin' ? 'Permanently Delete Subject' : 'Delete/Archive Subject'; ?>
+                </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p>Are you sure you want to permanently delete the subject: <span id="delete_subject_name" class="fw-bold"></span>?</p>
+                <p>Are you sure you want to delete the subject: <span id="delete_subject_name" class="fw-bold"></span>?</p>
+                
+                <?php if ($user_role == 'admin'): ?>
                 <div class="alert alert-danger">
                     <i class="fas fa-exclamation-triangle me-1"></i>
-                    <strong>WARNING: This action will permanently delete:</strong> 
+                    <strong>ADMIN WARNING: This action will permanently delete:</strong> 
                     <ul class="mb-0 mt-2">
                         <li>The subject and all its information</li>
                         <li>All student enrollments in this subject</li>
@@ -1445,14 +1559,31 @@ include 'header.php';
                     <i class="fas fa-exclamation-triangle me-1"></i>
                     <strong>This action cannot be undone!</strong>
                 </p>
+                <?php else: ?>
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    <strong>TEACHER WARNING: This action will permanently delete:</strong> 
+                    <ul class="mb-0 mt-2">
+                        <li>The subject and all its information</li>
+                        <li>All student enrollments in this subject</li>
+                        <li>All attendance records for this subject</li>
+                        <li>You can only delete subjects you teach</li>
+                    </ul>
+                </div>
+                <p class="text-danger mb-0">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    <strong>This action cannot be undone!</strong>
                 </p>
+                <?php endif; ?>
             </div>
             <form action="sections.php" method="post">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="subject_id" id="delete_subject_id">
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger">Permanently Delete Subject</button>
+                    <button type="submit" class="btn btn-danger">
+                        <?php echo $user_role == 'admin' ? 'Permanently Delete Subject' : 'Delete/Archive Subject'; ?>
+                    </button>
                 </div>
             </form>
         </div>
@@ -1469,18 +1600,20 @@ include 'header.php';
             </div>
             <div class="modal-body">
                 <p>Are you sure you want to delete the section: <span id="delete_section_name" class="fw-bold"></span>?</p>
-                <div class="alert alert-warning">
-                    <i class="fas fa-info-circle me-1"></i>
-                    <strong>Note:</strong> 
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    <strong>WARNING: This action will permanently delete:</strong> 
                     <ul class="mb-0 mt-2">
+                        <li>The section and all its information</li>
+                        <li>All subjects within this section</li>
+                        <li>All attendance records for this section</li>
+                        <li>All student enrollments in subjects within this section</li>
                         <li>If students are currently assigned, deletion will be blocked</li>
-                        <li>If attendance records exist, the section will be archived instead of deleted</li>
-                        <li>If no attendance records exist, the section will be permanently deleted</li>
                     </ul>
                 </div>
                 <p class="text-danger mb-0">
                     <i class="fas fa-exclamation-triangle me-1"></i>
-                    Permanent deletion cannot be undone.
+                    <strong>This action cannot be undone!</strong>
                 </p>
             </div>
             <form action="sections.php?view=sections" method="post">

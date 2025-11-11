@@ -8,6 +8,11 @@ if (isLoggedIn()) {
 
 $error_message = '';
 
+// Check if session expired
+if (isset($_GET['expired']) && $_GET['expired'] == '1') {
+    $error_message = 'Your session has expired after 1 hour of inactivity. Please login again.';
+}
+
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $username = sanitize_input($_POST['username']);
     $role = sanitize_input($_POST['role']);
@@ -30,6 +35,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $_SESSION['full_name'] = $user['full_name'];
                 $_SESSION['role'] = $user['role'];
                 $_SESSION['section_id'] = $user['section_id'];
+                $_SESSION['LAST_ACTIVITY'] = time(); // Initialize session timeout tracking
+                $_SESSION['CREATED'] = time(); // Track when session was created
+                
+                // Ensure session is written before redirect
+                session_write_close();
+                session_start(); // Restart session to ensure it's active
                 
                 // Update last login
                 $stmt = $pdo->prepare("UPDATE users SET updated_at = NOW() WHERE id = ?");

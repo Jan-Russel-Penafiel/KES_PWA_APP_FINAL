@@ -328,6 +328,44 @@
         // Update time every minute
         setInterval(updateDateTime, 60000);
         updateDateTime();
+        
+        // Simple session management (less aggressive)
+        let sessionWarningTimeout;
+        const SESSION_DURATION = 3600000; // 1 hour in milliseconds
+        const WARNING_TIME = 600000; // 10 minutes warning before expiry (less aggressive)
+        
+        function startSessionTimer() {
+            // Clear existing timer
+            clearTimeout(sessionWarningTimeout);
+            
+            // Only set warning timer, no auto-logout
+            sessionWarningTimeout = setTimeout(showSessionWarning, SESSION_DURATION - WARNING_TIME);
+        }
+        
+        function showSessionWarning() {
+            const userConfirmed = confirm('Your session will expire in 10 minutes due to inactivity. Click OK to extend your session.');
+            if (userConfirmed) {
+                // User chose to continue, send a simple keepalive request
+                fetch(window.location.href, { 
+                    method: 'HEAD',
+                    credentials: 'same-origin'
+                }).then(() => {
+                    // Reset the timer after successful keepalive
+                    startSessionTimer();
+                }).catch(() => {
+                    console.log('Keepalive request failed, but not forcing logout');
+                    startSessionTimer(); // Still restart timer
+                });
+            } else {
+                // User didn't respond, just restart timer (don't force logout)
+                startSessionTimer();
+            }
+        }
+        
+        // Initialize session timer for logged-in users (less aggressive)
+        <?php if (isLoggedIn()): ?>
+        startSessionTimer();
+        <?php endif; ?>
     </script>
 </body>
 </html>

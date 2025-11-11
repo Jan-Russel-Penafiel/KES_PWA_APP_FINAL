@@ -113,9 +113,9 @@ CREATE TABLE system_settings (
 INSERT INTO users (username, full_name, email, role) VALUES 
 ('admin', 'System Administrator', 'admin@kes-smart.com', 'admin');
 
--- Insert default SMS configuration for PhilSMS
+-- Insert default SMS configuration for IPROG SMS
 INSERT INTO sms_config (provider_name, api_url, api_key, sender_name, status) VALUES 
-('PhilSMS', 'https://app.philsms.com/api/v3/sms/send', '2100|J9BVGEx9FFOJAbHV0xfn6SMOkKBt80HTLjHb6zZX', 'PhilSMS', 'active');
+('IPROG SMS', 'https://sms.iprogtech.com/api/v1/sms_messages', '1ef3b27ea753780a90cbdf07d027fb7b52791004', 'KES-SMART', 'active');
 
 -- Insert default system settings
 INSERT INTO system_settings (setting_name, setting_value, description) VALUES 

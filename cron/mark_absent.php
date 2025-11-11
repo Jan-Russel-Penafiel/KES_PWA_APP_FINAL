@@ -2,14 +2,14 @@
 /**
  * Automatic Absent Marking Script
  * 
- * This script should be run daily at 4:16 PM to automatically mark students
- * as absent if they haven't checked in by 4:15 PM.
+ * This script should be run daily at 4:31 PM to automatically mark students
+ * as absent if they haven't checked in by 4:30 PM.
  * 
  * Add to crontab:
- * 16 16 * * 1-5 /usr/bin/php /path/to/smart/cron/mark_absent.php
+ * 31 16 * * 1-5 /usr/bin/php /path/to/smart/cron/mark_absent.php
  * 
  * Or for Windows Task Scheduler:
- * Run daily at 4:16 PM on weekdays only
+ * Run daily at 4:31 PM on weekdays only
  */
 
 require_once dirname(__DIR__) . '/config.php';
@@ -26,9 +26,9 @@ try {
         exit;
     }
     
-    // Only run this script after 4:15 PM
-    if ($current_time < '16:15:00') {
-        echo "Script can only run after 4:15 PM\n";
+    // Only run this script after 4:30 PM
+    if ($current_time < '16:30:00') {
+        echo "Script can only run after 4:30 PM\n";
         exit;
     }
     
@@ -48,63 +48,134 @@ try {
         exit;
     }
     
-    // Find all students who don't have attendance records for today
-    $absent_students_query = "
-        SELECT u.id, u.username, u.full_name, u.section_id, s.section_name
+    // Find students and their subjects that don't have attendance records for today
+    // First, get all active students
+    $students_query = "
+        SELECT u.id, u.username, u.full_name, u.section_id, s.section_name, s.grade_level
         FROM users u
         LEFT JOIN sections s ON u.section_id = s.id
-        LEFT JOIN attendance a ON u.id = a.student_id AND a.attendance_date = ?
         WHERE u.role = 'student' 
         AND u.status = 'active'
-        AND a.id IS NULL
     ";
     
-    $stmt = $pdo->prepare($absent_students_query);
-    $stmt->execute([$today]);
-    $absent_students = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $students_stmt = $pdo->prepare($students_query);
+    $students_stmt->execute();
+    $all_students = $students_stmt->fetchAll(PDO::FETCH_ASSOC);
     
     $marked_count = 0;
     $sms_sent_count = 0;
     $sms_failed_count = 0;
+    $total_attendance_records = 0;
     
-    foreach ($absent_students as $student) {
-        // Create absent attendance record
-        $insert_stmt = $pdo->prepare("
-            INSERT INTO attendance 
-            (student_id, teacher_id, section_id, attendance_date, status, remarks, qr_scanned) 
-            VALUES (?, 1, ?, ?, 'absent', 'Auto-marked absent - no check-in by 4:15 PM', 0)
-        ");
+    foreach ($all_students as $student) {
+        // Ensure we have a valid section_id, default to 1 if null
+        $section_id = $student['section_id'] ? $student['section_id'] : 1;
         
-        $insert_stmt->execute([
-            $student['id'],
-            $student['section_id'],
-            $today
-        ]);
+        // Get all active subjects for this student's section/grade
+        $subjects_query = "
+            SELECT s.id, s.subject_name, s.teacher_id
+            FROM subjects s
+            WHERE s.status = 'active'
+            AND (s.section_id = ? OR s.section_id IS NULL)
+            ORDER BY s.subject_name
+        ";
         
-        $marked_count++;
+        $subjects_stmt = $pdo->prepare($subjects_query);
+        $subjects_stmt->execute([$section_id]);
+        $subjects = $subjects_stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        // Send SMS notification to parents about absence
-        $current_date = date('F j, Y');
-        $sms_message = "Hi! Your child {$student['full_name']} was marked absent today ($current_date) as they did not check in by 4:15 PM. Section: {$student['section_name']}. Please contact the school if this is an error. - KES-SMART";
+        // If no subjects found, create a general attendance record
+        if (empty($subjects)) {
+            $subjects = [['id' => null, 'subject_name' => 'General', 'teacher_id' => 1]];
+        }
         
-        $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'absent');
+        $student_absent_subjects = [];
+        $student_attendance_count = 0;
         
-        if ($sms_result['success']) {
-            $sms_sent_count++;
-            echo "Marked {$student['full_name']} (ID: {$student['username']}) as absent - SMS sent\n";
-        } else {
-            $sms_failed_count++;
-            echo "Marked {$student['full_name']} (ID: {$student['username']}) as absent - SMS failed: {$sms_result['message']}\n";
+        foreach ($subjects as $subject) {
+            $subject_id = $subject['id'];
+            $teacher_id = $subject['teacher_id'] ?: 1;
+            
+            // Check if student already has attendance for this subject today
+            $check_attendance = $pdo->prepare("
+                SELECT id FROM attendance 
+                WHERE student_id = ? 
+                AND attendance_date = ? 
+                AND (subject_id = ? OR (subject_id IS NULL AND ? IS NULL))
+            ");
+            $check_attendance->execute([$student['id'], $today, $subject_id, $subject_id]);
+            $existing_attendance = $check_attendance->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$existing_attendance) {
+                // Create absent attendance record for this subject
+                $insert_stmt = $pdo->prepare("
+                    INSERT INTO attendance 
+                    (student_id, teacher_id, section_id, subject_id, attendance_date, time_in, time_out, status, remarks, qr_scanned, attendance_source, created_at) 
+                    VALUES (?, ?, ?, ?, ?, NULL, NULL, 'absent', ?, 0, 'auto', NOW())
+                ");
+                
+                $subject_name = $subject['subject_name'] ?: 'General';
+                $remarks = "Auto-marked absent for $subject_name - no check-in by 4:30 PM (Cron job executed at " . date('Y-m-d H:i:s') . ")";
+                
+                $insert_result = $insert_stmt->execute([
+                    $student['id'],           // student_id
+                    $teacher_id,              // teacher_id
+                    $section_id,              // section_id
+                    $subject_id,              // subject_id
+                    $today,                   // attendance_date
+                    $remarks                  // remarks
+                ]);
+                
+                if ($insert_result) {
+                    $attendance_id = $pdo->lastInsertId();
+                    $student_attendance_count++;
+                    $total_attendance_records++;
+                    
+                    $student_absent_subjects[] = $subject_name;
+                    
+                    echo "Successfully marked {$student['full_name']} (ID: {$student['username']}) as absent for $subject_name. Attendance ID: $attendance_id\n";
+                } else {
+                    $error_info = $insert_stmt->errorInfo();
+                    echo "Failed to mark {$student['full_name']} (ID: {$student['username']}) as absent for $subject_name. Error: " . implode(' - ', $error_info) . "\n";
+                }
+            }
+        }
+        
+        // If student was marked absent for any subjects, send SMS
+        if ($student_attendance_count > 0) {
+            $marked_count++;
+            
+            // Send SMS notification to parents about absence
+            $current_date = date('F j, Y');
+            $section_text = $student['section_name'] ? "{$student['section_name']} (Grade {$student['grade_level']})" : 'Unknown Section';
+            
+            // Create subject list for SMS
+            $subjects_text = count($student_absent_subjects) > 1 ? 
+                implode(', ', array_slice($student_absent_subjects, 0, -1)) . ' and ' . end($student_absent_subjects) :
+                $student_absent_subjects[0];
+            
+            $sms_message = "Hi! Your child {$student['full_name']} was marked absent today ($current_date) for $subjects_text as they did not check in by 4:30 PM. Section: $section_text. Please contact the school if this is an error. - KES-SMART";
+            
+            $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'absent');
+            
+            if ($sms_result['success']) {
+                $sms_sent_count++;
+                echo "SMS sent to parents of {$student['full_name']} (ID: {$student['username']})\n";
+            } else {
+                $sms_failed_count++;
+                echo "SMS failed for {$student['full_name']} (ID: {$student['username']}): {$sms_result['message']}\n";
+            }
         }
     }
     
     echo "Auto-absent marking completed.\n";
     echo "Total students marked absent: $marked_count\n";
+    echo "Total attendance records created: $total_attendance_records\n";
     echo "SMS notifications sent: $sms_sent_count\n";
     echo "SMS notifications failed: $sms_failed_count\n";
     
     // Log the operation
-    $log_message = "Auto-absent script executed on $today at " . date('H:i:s') . ". Marked $marked_count students as absent. SMS sent: $sms_sent_count, SMS failed: $sms_failed_count.";
+    $log_message = "Auto-absent script executed on $today at " . date('H:i:s') . ". Marked $marked_count students as absent across $total_attendance_records subjects. SMS sent: $sms_sent_count, SMS failed: $sms_failed_count.";
     error_log($log_message, 3, dirname(__DIR__) . '/logs/auto_absent.log');
     
 } catch (Exception $e) {
