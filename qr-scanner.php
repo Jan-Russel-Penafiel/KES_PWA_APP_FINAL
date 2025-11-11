@@ -766,6 +766,10 @@ try {
                                 <small class="text-muted">
                                     This will mark all students as absent if they don't have attendance records for today across all their subjects.
                                 </small>
+                                <div class="alert alert-warning py-2 mt-2 mb-0">
+                                    <i class="fas fa-clock me-2"></i>
+                                    <small><strong>Note:</strong> This trigger automatically activates at 4:31 PM when QR scanning is disabled. Students who haven't scanned by this time will be automatically marked absent.</small>
+                                </div>
                             </div>
                         </div>
                         <div id="manualTriggerStatus" class="alert alert-info py-2 mb-0" style="display: none;">
