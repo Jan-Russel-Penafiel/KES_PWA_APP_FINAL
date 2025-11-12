@@ -305,11 +305,10 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $su
             }
             
             // Create new attendance record (check-in only)
-            $insert_stmt = $pdo->prepare("INSERT INTO attendance (student_id, teacher_id, section_id, subject_id, attendance_date, time_in, status, remarks, qr_scanned, attendance_source) VALUES (?, ?, ?, ?, ?, NOW(), ?, ?, ?, 'qr_scan')");
+            $insert_stmt = $pdo->prepare("INSERT INTO attendance (student_id, teacher_id, subject_id, attendance_date, time_in, status, remarks, qr_scanned, attendance_source) VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, 'qr_scan')");
             $insert_stmt->execute([
                 $student['id'], 
                 $current_user['id'], 
-                $student['section_id'], 
                 $subject_id, 
                 $today, 
                 $attendance_status, 
@@ -325,20 +324,7 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $su
     $sms_result = ['success' => true, 'message' => 'SMS not configured'];
     $sms_already_sent = false;
     
-    // Get student's section name
-    $section_name = 'Unknown Section';
-    if ($student['section_id']) {
-        try {
-            $section_stmt = $pdo->prepare("SELECT section_name FROM sections WHERE id = ?");
-            $section_stmt->execute([$student['section_id']]);
-            $section_result = $section_stmt->fetch(PDO::FETCH_ASSOC);
-            if ($section_result) {
-                $section_name = $section_result['section_name'];
-            }
-        } catch (PDOException $e) {
-            error_log("Error getting section name: " . $e->getMessage());
-        }
-    }
+    // Note: Section information removed - attendance is per subject only
     
     // Check if SMS functions are available
     if (function_exists('sendSMSNotificationToParent')) {
@@ -372,9 +358,9 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $su
             if ($is_checkout) {
                 // Checkout SMS - always send regardless of previous SMS
                 if ($attendance_status == 'out') {
-                    $sms_message = "Hi! Your child {$student['full_name']} has left {$subject['subject_name']} class early at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+                    $sms_message = "Hi! Your child {$student['full_name']} has left {$subject['subject_name']} class early at {$current_time_formatted} on {$current_date}. - KES-SMART";
                 } else {
-                    $sms_message = "Hi! Your child {$student['full_name']} has finished {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+                    $sms_message = "Hi! Your child {$student['full_name']} has finished {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. - KES-SMART";
                 }
                 $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'checkout');
                 
@@ -384,7 +370,7 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $su
             } elseif (!$sms_already_sent) {
                 // Check-in SMS - only if not already sent today
                 $status_text = ($attendance_status == 'late') ? 'arrived late to' : 'arrived at';
-                $sms_message = "Hi! Your child {$student['full_name']} has {$status_text} {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+                $sms_message = "Hi! Your child {$student['full_name']} has {$status_text} {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. - KES-SMART";
                 $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'attendance');
                 
                 // Log SMS result for debugging
@@ -428,7 +414,6 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $su
         'student_name' => $student['full_name'],
         'student_id' => $student['username'],
         'student_lrn' => $student['lrn'] ?? null,
-        'section' => $section_name,
         'subject' => $subject['subject_name'],
         'time' => $current_time_formatted,
         'time_in' => $is_checkout ? ($existing_attendance['time_in'] ? date('g:i A', strtotime($existing_attendance['time_in'])) : null) : $current_time_formatted,
@@ -465,20 +450,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET' && isset($_GET['action']) && $_GET['acti
                 a.qr_scanned,
                 u.username,
                 u.full_name as student_name,
-                s.section_name,
+                subj.subject_name,
                 t.full_name as teacher_name
             FROM attendance a
             JOIN users u ON a.student_id = u.id
-            LEFT JOIN sections s ON a.section_id = s.id
+            LEFT JOIN subjects subj ON a.subject_id = subj.id
             LEFT JOIN users t ON a.teacher_id = t.id
             WHERE a.attendance_date = ?
         ";
         
         $params = [$today];
         
-        // Filter by teacher's section if user is a teacher
+        // Filter by teacher's subjects if user is a teacher
         if ($user_role == 'teacher') {
-            $query .= " AND s.teacher_id = ?";
+            $query .= " AND subj.teacher_id = ?";
             $params[] = $current_user['id'];
         }
         
@@ -538,15 +523,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET' && isset($_GET['action']) && $_GET['acti
                     COUNT(CASE WHEN a.status = 'absent' THEN 1 END) as absent_count
                 FROM attendance a
                 JOIN users u ON a.student_id = u.id
-                LEFT JOIN sections s ON a.section_id = s.id
+                LEFT JOIN subjects subj ON a.subject_id = subj.id
                 WHERE YEAR(a.attendance_date) = ? AND MONTH(a.attendance_date) = ?
             ";
             
             $params = [$year, $month];
             
-            // Filter by teacher's section if user is a teacher
+            // Filter by teacher's subjects if user is a teacher
             if ($user_role == 'teacher') {
-                $query .= " AND s.teacher_id = ?";
+                $query .= " AND subj.teacher_id = ?";
                 $params[] = $current_user['id'];
             }
             
@@ -576,20 +561,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'GET' && isset($_GET['action']) && $_GET['acti
                     a.attendance_date,
                     u.username,
                     u.full_name as student_name,
-                    s.section_name,
+                    subj.subject_name,
                     t.full_name as teacher_name
                 FROM attendance a
                 JOIN users u ON a.student_id = u.id
-                LEFT JOIN sections s ON a.section_id = s.id
+                LEFT JOIN subjects subj ON a.subject_id = subj.id
                 LEFT JOIN users t ON a.teacher_id = t.id
                 WHERE a.attendance_date = ?
             ";
             
             $params = [$date];
             
-            // Filter by teacher's section if user is a teacher
+            // Filter by teacher's subjects if user is a teacher
             if ($user_role == 'teacher') {
-                $query .= " AND s.teacher_id = ?";
+                $query .= " AND subj.teacher_id = ?";
                 $params[] = $current_user['id'];
             }
             
@@ -3026,7 +3011,7 @@ function startScanner() {
             const filteredRecords = allAttendanceRecords.filter(record => {
                 return (
                     record.student_name.toLowerCase().includes(searchTerm) || 
-                    (record.section_name && record.section_name.toLowerCase().includes(searchTerm)) ||
+                    (record.subject_name && record.subject_name.toLowerCase().includes(searchTerm)) ||
                     (record.teacher_name && record.teacher_name.toLowerCase().includes(searchTerm)) ||
                     record.status.toLowerCase().includes(searchTerm)
                 );
@@ -3133,7 +3118,7 @@ function startScanner() {
                         <div class="d-flex w-100 justify-content-between align-items-center">
                             <div>
                                 <h6 class="mb-1">${record.student_name}</h6>
-                                <small class="text-muted">${record.section_name || 'No Section'}</small>
+                                <small class="text-muted">${record.subject_name || 'No Subject'}</small>
                             </div>
                             <span class="badge bg-${statusClass}">
                                 <i class="fas fa-${statusIcon} me-1"></i>

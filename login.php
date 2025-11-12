@@ -72,8 +72,8 @@ include 'header.php';
                     <a href="index.php" class="d-inline-block mb-3">
                         <i class="fas fa-graduation-cap fa-3x text-primary"></i>
                     </a>
-                    <h1 class="h3 fw-bold text-primary mb-1">KES-SMART</h1>
-                    <p class="text-muted small">Student Monitoring System</p>
+                    <h1 class="h3 fw-bold text-primary mb-1">TAC-QR</h1>
+                    <p class="text-muted small">QR code with real time SMS Notification</p>
                 </div>
                 
                 <div class="card shadow-sm border-0 rounded-4">
@@ -281,7 +281,7 @@ include 'header.php';
 
 <script>
 // IndexedDB for offline authentication
-const DB_NAME = 'kes-smart-offline-auth';
+const DB_NAME = 'tac-qr-offline-auth';
 const DB_VERSION = 1;
 const STORE_NAME = 'credentials';
 let db;
@@ -457,7 +457,7 @@ async function performOfflineLogin(username, role) {
             localStorage.setItem('offline_login_data', JSON.stringify(sessionData));
             
             // Set offline login cookie (7 days)
-            document.cookie = "kes_smart_offline_logged_in=1; path=/; max-age=604800";
+            document.cookie = "tac_qr_offline_logged_in=1; path=/; max-age=604800";
             
             // Create a form to submit the data for offline login
             const form = document.createElement('form');

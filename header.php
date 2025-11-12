@@ -38,7 +38,7 @@ if (!in_array($current_page, $public_pages)) {
     <!-- PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="KES-SMART">
+    <meta name="apple-mobile-web-app-title" content="TAC-QR">
     <meta name="mobile-web-app-capable" content="yes">
     
     <!-- PWA Icons -->
@@ -607,7 +607,7 @@ if (!in_array($current_page, $public_pages)) {
     <div class="container">
         <a class="navbar-brand" href="index.php">
             <i class="fas fa-graduation-cap me-2"></i>
-            KES-SMART
+            TAC-QR
         </a>
         
         <?php if (isLoggedIn()): ?>

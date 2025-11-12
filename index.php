@@ -6,7 +6,7 @@ if (isLoggedIn()) {
     redirect('dashboard.php');
 }
 
-$page_title = 'Welcome';
+$page_title = 'QR code with real time sms Notification in Tacurong City';
 include 'header.php';
 ?>
 
@@ -16,8 +16,8 @@ include 'header.php';
         <div class="row align-items-center">
             <div class="col-md-8 mx-auto">
                 <i class="fas fa-graduation-cap fa-4x mb-3"></i>
-                <h1 class="display-5 fw-bold mb-2">KES-SMART</h1>
-                <p class="lead mb-3">Student Monitoring with QR & SMS</p>
+                <h1 class="display-5 fw-bold mb-2">TAC-QR</h1>
+                <p class="lead mb-3">QR code with real time SMS Notification in Tacurong City</p>
                 <p class="mb-4 d-none d-md-block">Efficiently monitor student attendance using QR code scanning technology with automated SMS notifications to parents.</p>
                 <div class="d-grid gap-2 d-sm-flex justify-content-center">
                     <a href="login.php" class="btn btn-light btn-lg px-4 py-2">
@@ -246,33 +246,6 @@ include 'header.php';
         </div>
     </div>
     
-    <!-- Quick Access Section - Mobile optimized -->
-    <div class="row mb-4">
-        <div class="col-12 text-center mb-3">
-            <h2 class="h3 fw-bold text-primary">Quick Access</h2>
-            <p class="text-muted small">Get started with KES-SMART</p>
-        </div>
-        
-        <div class="col-12 mx-auto">
-            <div class="card shadow-sm rounded-3 border-0">
-                <div class="card-body text-center p-3">
-                    <i class="fas fa-rocket fa-2x text-primary mb-2"></i>
-                    <h4 class="fw-bold h5 mb-2">Ready to Get Started?</h4>
-                    <p class="text-muted small mb-3">Join KES-SMART today and experience efficient student monitoring.</p>
-                    
-                    <div class="d-grid gap-2 d-sm-flex justify-content-center">
-                        <a href="login.php" class="btn btn-primary">
-                            <i class="fas fa-sign-in-alt me-2"></i>Login Now
-                        </a>
-                        <a href="#" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#demoModal">
-                            <i class="fas fa-play me-2"></i>View Demo
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
     <?php if (!$is_online): ?>
     <!-- Offline Notice -->
     <div class="alert alert-info text-center mb-4">
@@ -288,14 +261,14 @@ include 'header.php';
     <div class="modal-dialog modal-fullscreen-sm-down modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">KES-SMART Demo</h5>
+                <h5 class="modal-title">TAC-QR Demo</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <div class="text-center">
                     <i class="fas fa-mobile-alt fa-4x text-primary mb-3"></i>
                     <h4 class="h5">Mobile-First Design</h4>
-                    <p class="text-muted small">Experience KES-SMART's intuitive mobile interface designed for efficiency.</p>
+                    <p class="text-muted small">Experience TAC-QR's intuitive mobile interface designed for efficiency.</p>
                     
                     <div class="row mt-3">
                         <div class="col-4 text-center mb-3">
@@ -375,7 +348,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             banner.innerHTML = `
                 <div>
-                    <strong>Install KES-SMART</strong>
+                    <strong>Install TAC-QR</strong>
                     <p style="margin: 0; font-size: 14px;">Add to your home screen for offline access</p>
                 </div>
                 <div>

@@ -564,9 +564,9 @@ try {
                         Create separate QR codes for Time In and Time Out. Students must scan the appropriate QR code based on their attendance action. Once a student scans a Time In QR code, they must scan a Time Out QR code to complete their attendance record.
                     </div>
                     
-                    <!-- Subject and Section Selection -->
+                    <!-- Subject Selection -->
                     <div class="row g-3 mb-4">
-                        <div class="col-12 col-md-6">
+                        <div class="col-12">
                             <label for="teacher-subject-select" class="form-label fw-semibold">Subject <span class="text-danger">*</span></label>
                             <select class="form-select" id="teacher-subject-select" required>
                                 <option value="">Choose a subject...</option>
@@ -591,30 +591,6 @@ try {
                                 ?>
                             </select>
                         </div>
-                        <div class="col-12 col-md-6">
-                            <label for="teacher-section-select" class="form-label fw-semibold">Section <span class="text-danger">*</span></label>
-                            <select class="form-select" id="teacher-section-select" required>
-                                <option value="">Choose a section...</option>
-                                <?php
-                                // Get teacher's sections
-                                if ($user_role == 'teacher') {
-                                    try {
-                                        $sections_stmt = $pdo->prepare("SELECT id, section_name, grade_level FROM sections WHERE teacher_id = ? AND status = 'active' ORDER BY section_name");
-                                        $sections_stmt->execute([$current_user['id']]);
-                                        $teacher_sections = $sections_stmt->fetchAll(PDO::FETCH_ASSOC);
-                                        
-                                        foreach ($teacher_sections as $section) {
-                                            echo '<option value="' . $section['id'] . '">' . 
-                                                htmlspecialchars($section['section_name']) . ' - Grade ' . 
-                                                htmlspecialchars($section['grade_level']) . '</option>';
-                                        }
-                                    } catch (PDOException $e) {
-                                        // Handle error silently
-                                    }
-                                }
-                                ?>
-                            </select>
-                        </div>
                     </div>
                     
                     <!-- QR Generation Controls -->
@@ -625,8 +601,8 @@ try {
                                 <div id="teacher-qr-container" class="border rounded-3 p-4 bg-light" style="min-height: 350px;">
                                     <div class="py-4">
                                         <i class="fas fa-qrcode fa-3x text-muted mb-3"></i>
-                                        <h5 class="text-muted">Select Subject & Section</h5>
-                                        <p class="text-muted small">Choose subject and section above, then select attendance type to generate QR code</p>
+                                        <h5 class="text-muted">Select Subject</h5>
+                                        <p class="text-muted small">Choose subject above, then select attendance type to generate QR code</p>
                                     </div>
                                 </div>
                                 
@@ -695,6 +671,43 @@ try {
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Teacher Absent Notification Section -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm rounded-3">
+                <div class="card-header bg-transparent py-3 text-center">
+                    <h5 class="card-title h6 fw-bold mb-0">
+                        <i class="fas fa-user-times me-2"></i>Teacher Absence Notification
+                    </h5>
+                </div>
+                <div class="card-body p-3">
+                    <div class="alert alert-warning mb-3">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Send Absence Notification</strong><br>
+                        Use this feature to notify all parents of your students that you are absent today. This will send SMS notifications to all parents whose children are in your classes.
+                    </div>
+                    
+                    <div class="text-center">
+                        <button id="teacherAbsentBtn" class="btn btn-warning btn-lg">
+                            <i class="fas fa-user-times me-2"></i>Mark Teacher Absent & Notify Parents
+                        </button>
+                        
+                        <!-- Loading state -->
+                        <div id="teacherAbsentLoading" class="d-none">
+                            <div class="spinner-border text-warning me-2" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            Sending notifications...
+                        </div>
+                        
+                        <!-- Result display -->
+                        <div id="teacherAbsentResult" class="mt-3"></div>
                     </div>
                 </div>
             </div>
@@ -2276,13 +2289,15 @@ function processTeacherQRCode(qrData) {
         }
         
         // Validate required fields
-        if (!teacherData.teacher_id || !teacherData.subject_id || !teacherData.section_id) {
+        if (!teacherData.teacher_id || !teacherData.subject_id) {
             throw new Error('Invalid teacher QR code - missing required data');
         }
         
         // Check if attendance_type is specified (new QR codes will have this)
+        // For backward compatibility, default to 'in' if not specified
         if (!teacherData.attendance_type) {
-            throw new Error('This QR code is outdated. Please ask your teacher to generate a new QR code with attendance type (IN/OUT).');
+            teacherData.attendance_type = 'in';
+            console.log('QR code missing attendance_type, defaulting to "in" for backward compatibility');
         }
         
         // Check time restrictions on client side
@@ -2319,7 +2334,6 @@ function processTeacherQRCode(qrData) {
         formData.append('action', 'record_attendance');
         formData.append('teacher_id', teacherData.teacher_id);
         formData.append('subject_id', teacherData.subject_id);
-        formData.append('section_id', teacherData.section_id);
         formData.append('attendance_session_id', teacherData.session_id || '');
         formData.append('attendance_type', teacherData.attendance_type); // Include attendance type
         
@@ -2602,17 +2616,16 @@ let currentTeacherQRData = null;
 // Initialize teacher QR generator
 function initTeacherQRGenerator() {
     const subjectSelect = document.getElementById('teacher-subject-select');
-    const sectionSelect = document.getElementById('teacher-section-select');
     const attendanceTypeIn = document.getElementById('attendanceTypeIn');
     const attendanceTypeOut = document.getElementById('attendanceTypeOut');
     const generateBtn = document.getElementById('generateTeacherQRBtn');
     const downloadBtn = document.getElementById('downloadTeacherQRBtn');
     const printBtn = document.getElementById('printTeacherQRBtn');
     
-    if (subjectSelect && sectionSelect && generateBtn && attendanceTypeIn && attendanceTypeOut) {
-        // Enable generate button when both subject and section are selected
+    if (subjectSelect && generateBtn && attendanceTypeIn && attendanceTypeOut) {
+        // Enable generate button when subject is selected
         function checkSelection() {
-            const canGenerate = subjectSelect.value && sectionSelect.value;
+            const canGenerate = subjectSelect.value;
             generateBtn.disabled = !canGenerate;
             
             if (!canGenerate) {
@@ -2622,8 +2635,8 @@ function initTeacherQRGenerator() {
                     container.innerHTML = `
                         <div class="py-4">
                             <i class="fas fa-qrcode fa-3x text-muted mb-3"></i>
-                            <h5 class="text-muted">Select Subject & Section</h5>
-                            <p class="text-muted small">Choose subject and section above, then select attendance type to generate QR code</p>
+                            <h5 class="text-muted">Select Subject</h5>
+                            <p class="text-muted small">Choose subject above, then select attendance type to generate QR code</p>
                         </div>
                     `;
                 }
@@ -2638,7 +2651,6 @@ function initTeacherQRGenerator() {
         }
         
         subjectSelect.addEventListener('change', checkSelection);
-        sectionSelect.addEventListener('change', checkSelection);
         
         // Listen for attendance type changes to reset QR code when switched
         attendanceTypeIn.addEventListener('change', function() {
@@ -2697,27 +2709,24 @@ function initTeacherQRGenerator() {
 // Generate teacher QR code
 function generateTeacherQRCode() {
     const subjectSelect = document.getElementById('teacher-subject-select');
-    const sectionSelect = document.getElementById('teacher-section-select');
     const attendanceTypeIn = document.getElementById('attendanceTypeIn');
     const attendanceTypeOut = document.getElementById('attendanceTypeOut');
     
-    if (!subjectSelect.value || !sectionSelect.value) {
-        showToast('Please select both subject and section', 'warning');
+    if (!subjectSelect.value) {
+        showToast('Please select a subject', 'warning');
         return;
     }
     
     // Get selected attendance type
     const attendanceType = attendanceTypeIn.checked ? 'in' : 'out';
     
-    // Create QR data with attendance type
+    // Create QR data with attendance type (removed section references)
     const sessionId = 'session_' + Date.now();
     const qrData = {
         teacher_id: <?php echo $current_user['id']; ?>,
         teacher_name: '<?php echo addslashes($current_user['full_name']); ?>',
         subject_id: parseInt(subjectSelect.value),
         subject_name: subjectSelect.options[subjectSelect.selectedIndex].text,
-        section_id: parseInt(sectionSelect.value),
-        section_name: sectionSelect.options[sectionSelect.selectedIndex].text,
         session_id: sessionId,
         attendance_type: attendanceType, // Add attendance type
         created_at: new Date().toISOString(),
@@ -2755,7 +2764,6 @@ function generateTeacherQRCode() {
                      onerror="handleQRGenerationError(this)">
                 <div class="mt-3">
                     <h6 class="text-primary fw-bold">${qrData.subject_name}</h6>
-                    <p class="text-muted mb-0">${qrData.section_name}</p>
                     <small class="text-muted">Session ID: ${sessionId}</small>
                 </div>
             </div>
@@ -2819,10 +2827,6 @@ function updateTeacherQRInfo(qrData) {
                 <div class="fw-semibold">${qrData.subject_name}</div>
             </div>
             <div class="info-item mb-2">
-                <small class="text-muted">Section</small>
-                <div class="fw-semibold">${qrData.section_name}</div>
-            </div>
-            <div class="info-item mb-2">
                 <small class="text-muted">Session ID</small>
                 <div class="fw-semibold small">${qrData.session_id}</div>
             </div>
@@ -2867,7 +2871,6 @@ function addToActiveSessions(qrData) {
                         <i class="fas fa-${typeIcon} me-1"></i>${typeText}
                     </span>
                 </div>
-                <div class="text-muted small">${qrData.section_name}</div>
                 <div class="text-muted small">${new Date(qrData.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Manila' })}</div>
             </div>
             <button class="btn btn-sm btn-outline-danger" onclick="endSession('${qrData.session_id}')">
@@ -2911,7 +2914,7 @@ function downloadTeacherQRCode() {
     if (img) {
         const typeText = currentTeacherQRData.attendance_type === 'in' ? 'TimeIn' : 'TimeOut';
         const link = document.createElement('a');
-        link.download = `attendance_qr_${typeText}_${currentTeacherQRData.subject_name}_${currentTeacherQRData.section_name}.png`;
+        link.download = `attendance_qr_${typeText}_${currentTeacherQRData.subject_name}.png`;
         link.href = img.src;
         link.target = '_blank';
         link.click();
@@ -2939,8 +2942,7 @@ function printTeacherQRCode() {
                 <div style="background-color: ${typeColor}; color: white; padding: 10px 20px; border-radius: 15px; display: inline-block; margin-bottom: 20px; font-size: 18px; font-weight: bold;">
                     ${typeIcon} ${typeText}
                 </div>
-                <h2 style="margin-bottom: 10px;">${currentTeacherQRData.subject_name}</h2>
-                <h3 style="margin-bottom: 20px; color: #666;">${currentTeacherQRData.section_name}</h3>
+                <h2 style="margin-bottom: 20px;">${currentTeacherQRData.subject_name}</h2>
                 <div style="margin: 20px 0;">
                     <img src="${img.src}" style="border: 3px solid ${typeColor}; border-radius: 10px; max-width: 300px;">
                 </div>
@@ -2973,6 +2975,177 @@ function printTeacherQRCode() {
         `);
         printWindow.document.close();
         printWindow.print();
+    }
+}
+
+// Teacher Absent Notification Functionality
+function initTeacherAbsentButton() {
+    const absentBtn = document.getElementById('teacherAbsentBtn');
+    const loadingDiv = document.getElementById('teacherAbsentLoading');
+    const resultDiv = document.getElementById('teacherAbsentResult');
+    
+    if (absentBtn) {
+        absentBtn.addEventListener('click', function() {
+            // Confirm action
+            if (!confirm('Are you sure you want to mark yourself absent today and notify all parents of your students?')) {
+                return;
+            }
+            
+            // Double confirmation for safety
+            if (!confirm('This will send SMS notifications to all parents. This action cannot be undone. Continue?')) {
+                return;
+            }
+            
+            // Show loading state
+            absentBtn.classList.add('d-none');
+            loadingDiv.classList.remove('d-none');
+            resultDiv.innerHTML = '';
+            
+            // Call teacher absent API
+            sendTeacherAbsentNotification();
+        });
+    }
+}
+
+// Send teacher absent notification
+async function sendTeacherAbsentNotification() {
+    try {
+        const response = await fetch('api/teacher-absent.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        // Hide loading state
+        const absentBtn = document.getElementById('teacherAbsentBtn');
+        const loadingDiv = document.getElementById('teacherAbsentLoading');
+        const resultDiv = document.getElementById('teacherAbsentResult');
+        
+        loadingDiv.classList.add('d-none');
+        
+        if (data.success) {
+            // Show success message
+            const result = data.data;
+            let successHtml = `
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <strong>Notification Sent Successfully!</strong><br>
+                    <small>
+                        Teacher: ${result.teacher_name}<br>
+                        Date: ${result.date} at ${result.time}<br>
+                        Students notified: ${result.total_students}<br>
+                        SMS sent: <span class="text-success">${result.sms_sent}</span> | 
+                        SMS failed: <span class="text-danger">${result.sms_failed}</span>
+                    </small>
+                </div>
+            `;
+            
+            // Add details if needed
+            if (result.details && result.details.length > 0) {
+                successHtml += `
+                    <div class="card mt-2">
+                        <div class="card-header bg-transparent">
+                            <h6 class="mb-0">Notification Details</h6>
+                        </div>
+                        <div class="card-body p-2" style="max-height: 200px; overflow-y: auto;">
+                            <div class="row g-2 text-small">
+                `;
+                
+                result.details.forEach((detail, index) => {
+                    const statusColor = detail.sms_status === 'sent' ? 'text-success' : 'text-danger';
+                    const statusIcon = detail.sms_status === 'sent' ? 'fa-check' : 'fa-times';
+                    successHtml += `
+                        <div class="col-12 border-bottom py-1">
+                            <small>
+                                <i class="fas ${statusIcon} ${statusColor} me-1"></i>
+                                <strong>${detail.student_name}</strong> - ${detail.subject}<br>
+                                <span class="${statusColor}">${detail.sms_message}</span>
+                            </small>
+                        </div>
+                    `;
+                });
+                
+                successHtml += `
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            resultDiv.innerHTML = successHtml;
+            
+            // Disable button for today
+            absentBtn.innerHTML = '<i class="fas fa-check me-2"></i>Absent Notification Already Sent Today';
+            absentBtn.classList.add('btn-secondary');
+            absentBtn.classList.remove('btn-warning');
+            absentBtn.disabled = true;
+            
+            console.log('Teacher absent notification sent successfully:', data);
+            showToast(`Teacher absent notification sent to ${result.total_students} parents`, 'success');
+            
+        } else {
+            // Show error message
+            let errorHtml = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Failed to Send Notification</strong><br>
+                    <small>${data.message}</small>
+                </div>
+            `;
+            
+            resultDiv.innerHTML = errorHtml;
+            
+            // Re-enable button if not already sent today
+            if (!data.message.includes('already sent today')) {
+                absentBtn.classList.remove('d-none');
+            } else {
+                // If already sent today, disable button
+                absentBtn.innerHTML = '<i class="fas fa-check me-2"></i>Absent Notification Already Sent Today';
+                absentBtn.classList.add('btn-secondary');
+                absentBtn.classList.remove('btn-warning');
+                absentBtn.disabled = true;
+                absentBtn.classList.remove('d-none');
+            }
+            
+            console.error('Teacher absent notification failed:', data);
+            showToast('Failed to send teacher absent notification: ' + data.message, 'danger');
+        }
+        
+    } catch (error) {
+        // Hide loading state and show error
+        const absentBtn = document.getElementById('teacherAbsentBtn');
+        const loadingDiv = document.getElementById('teacherAbsentLoading');
+        const resultDiv = document.getElementById('teacherAbsentResult');
+        
+        loadingDiv.classList.add('d-none');
+        absentBtn.classList.remove('d-none');
+        
+        resultDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>Connection Error</strong><br>
+                <small>Unable to send notification. Please check your internet connection and try again.</small>
+            </div>
+        `;
+        
+        console.error('Teacher absent notification error:', error);
+        showToast('Connection error while sending teacher absent notification', 'danger');
+    }
+}
+
+// Check if teacher already sent absent notification today
+async function checkTeacherAbsentStatus() {
+    try {
+        const today = new Date().toISOString().split('T')[0];
+        
+        // This would require a separate API endpoint to check status
+        // For now, we'll rely on the POST response to handle "already sent" cases
+        
+    } catch (error) {
+        console.error('Error checking teacher absent status:', error);
     }
 }
 <?php endif; ?>
@@ -3050,6 +3223,12 @@ document.addEventListener('DOMContentLoaded', function() {
     <?php if ($user_role == 'teacher'): ?>
     // Initialize teacher QR generator
     initTeacherQRGenerator();
+    
+    // Initialize teacher absent button
+    initTeacherAbsentButton();
+    
+    // Check if teacher already sent absent notification today
+    checkTeacherAbsentStatus();
     <?php endif; ?>
 });
 </script>

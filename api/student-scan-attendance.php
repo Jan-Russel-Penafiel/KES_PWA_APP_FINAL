@@ -40,7 +40,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         
         $teacher_id = intval($_POST['teacher_id'] ?? 0);
         $subject_id = intval($_POST['subject_id'] ?? 0);
-        $section_id = intval($_POST['section_id'] ?? 0);
         $session_id = isset($_POST['attendance_session_id']) ? sanitize_input($_POST['attendance_session_id']) : '';
         $attendance_type = isset($_POST['attendance_type']) ? sanitize_input($_POST['attendance_type']) : '';
         
@@ -64,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
         
         // Validate required parameters
-        if (!$teacher_id || !$subject_id || !$section_id) {
+        if (!$teacher_id || !$subject_id) {
             throw new Exception('Invalid QR code data - missing required information');
         }
         
@@ -90,15 +89,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             throw new Exception('Teacher is not assigned to this subject');
         }
         
-        // Verify section exists
-        $section_check = $pdo->prepare("SELECT id, section_name, grade_level FROM sections WHERE id = ? AND status = 'active'");
-        $section_check->execute([$section_id]);
-        $section = $section_check->fetch(PDO::FETCH_ASSOC);
-        
-        if (!$section) {
-            throw new Exception('Section not found or inactive');
-        }
-        
         // Check if student is enrolled in this subject
         $enrollment_check = null;
         try {
@@ -116,11 +106,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             } else {
                 throw new Exception('Database error checking enrollment: ' . $e->getMessage());
             }
-        }
-        
-        // Check if student belongs to this section
-        if ($current_user['section_id'] != $section_id) {
-            throw new Exception('You are not assigned to this section');
         }
         
         // Check if attendance already recorded today for this subject
@@ -240,10 +225,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             // Create new attendance record (check-in only)
             $insert_stmt = $pdo->prepare("
                 INSERT INTO attendance 
-                (student_id, teacher_id, section_id, subject_id, attendance_date, time_in, status, remarks, qr_scanned) 
-                VALUES (?, ?, ?, ?, ?, NOW(), ?, 'Student self-scan attendance (TIME IN)', 1)
+                (student_id, teacher_id, subject_id, attendance_date, time_in, status, remarks, qr_scanned) 
+                VALUES (?, ?, ?, ?, NOW(), ?, 'Student self-scan attendance (TIME IN)', 1)
             ");
-            $insert_stmt->execute([$student_id, $teacher_id, $section_id, $subject_id, $today, $attendance_status]);
+            $insert_stmt->execute([$student_id, $teacher_id, $subject_id, $today, $attendance_status]);
             $attendance_id = $pdo->lastInsertId();
             $is_checkout = false;
         }
@@ -253,18 +238,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $sms_result = ['success' => true, 'message' => 'SMS not configured'];
         $sms_already_sent = false;
         
-        // Get section name for SMS
-        $section_name = $section['section_name'];
-        
         // Check if sendSMSNotificationToParent function exists
         if (function_exists('sendSMSNotificationToParent')) {
             // Send SMS based on scan type
             if ($is_checkout) {
                 // Checkout SMS - always send regardless of previous SMS
                 if ($attendance_status == 'out') {
-                    $sms_message = "Hi! Your child {$current_user['full_name']} has left {$subject['subject_name']} class early at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+                    $sms_message = "Hi! Your child {$current_user['full_name']} has left {$subject['subject_name']} class early at {$current_time_formatted} on {$current_date}. - KES-SMART";
                 } else {
-                    $sms_message = "Hi! Your child {$current_user['full_name']} has finished {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+                    $sms_message = "Hi! Your child {$current_user['full_name']} has finished {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. - KES-SMART";
                 }
                 $sms_result = sendSMSNotificationToParent($student_id, $sms_message, 'checkout');
                 
@@ -297,7 +279,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 
                 if (!$sms_already_sent) {
                     $status_text = ($attendance_status == 'late') ? 'arrived late to' : 'arrived at';
-                    $sms_message = "Hi! Your child {$current_user['full_name']} has {$status_text} {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+                    $sms_message = "Hi! Your child {$current_user['full_name']} has {$status_text} {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. - KES-SMART";
                     $sms_result = sendSMSNotificationToParent($student_id, $sms_message, 'attendance');
                     
                     // Log SMS result for debugging
