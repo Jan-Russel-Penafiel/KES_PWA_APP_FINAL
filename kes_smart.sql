@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Nov 11, 2025 at 06:37 AM
+-- Generation Time: Nov 22, 2025 at 06:23 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -31,7 +31,7 @@ CREATE TABLE `attendance` (
   `id` int(11) NOT NULL,
   `student_id` int(11) NOT NULL,
   `teacher_id` int(11) NOT NULL,
-  `section_id` int(11) NOT NULL,
+  `section_id` int(11) DEFAULT NULL,
   `subject_id` int(11) DEFAULT NULL,
   `attendance_date` date NOT NULL,
   `time_in` time DEFAULT NULL,
@@ -43,6 +43,13 @@ CREATE TABLE `attendance` (
   `scan_location` varchar(255) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `attendance`
+--
+
+INSERT INTO `attendance` (`id`, `student_id`, `teacher_id`, `section_id`, `subject_id`, `attendance_date`, `time_in`, `time_out`, `status`, `remarks`, `qr_scanned`, `attendance_source`, `scan_location`, `created_at`) VALUES
+(96, 3, 2, NULL, 16, '2025-11-12', '12:50:32', NULL, 'late', 'Main Gate', 1, 'qr_scan', NULL, '2025-11-12 04:50:32');
 
 -- --------------------------------------------------------
 
@@ -131,7 +138,17 @@ INSERT INTO `qr_scans` (`id`, `student_id`, `teacher_id`, `qr_type`, `scan_resul
 (13, 3, 2, 'attendance', 'success', NULL, '2025-11-11 01:16:26', 'Student Self-Scan', '{\"user_agent\":\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\",\"ip_address\":\"::1\",\"session_id\":\"session_1762823734399\"}'),
 (14, 3, 2, 'attendance', 'success', NULL, '2025-11-11 01:23:56', 'Student Self-Scan', '{\"user_agent\":\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\",\"ip_address\":\"::1\",\"session_id\":\"session_1762824221302_in\"}'),
 (15, 3, 2, 'attendance', 'success', NULL, '2025-11-11 01:24:08', 'Student Self-Scan', '{\"user_agent\":\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\",\"ip_address\":\"::1\",\"session_id\":\"session_1762824221302_in\"}'),
-(16, 3, 2, 'attendance', 'success', NULL, '2025-11-11 01:33:01', 'Student Self-Scan', '{\"user_agent\":\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\",\"ip_address\":\"::1\",\"session_id\":\"session_1762824762078\"}');
+(16, 3, 2, 'attendance', 'success', NULL, '2025-11-11 01:33:01', 'Student Self-Scan', '{\"user_agent\":\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\",\"ip_address\":\"::1\",\"session_id\":\"session_1762824762078\"}'),
+(17, 3, 2, 'attendance', 'success', NULL, '2025-11-11 06:01:04', 'Student Self-Scan', '{\"user_agent\":\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\",\"ip_address\":\"::1\",\"session_id\":\"session_1762840845986\"}'),
+(18, 3, 2, 'attendance', 'success', NULL, '2025-11-11 06:02:37', 'Student Self-Scan', '{\"user_agent\":\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\",\"ip_address\":\"::1\",\"session_id\":\"session_1762840845986\"}'),
+(19, 3, 2, 'attendance', 'success', NULL, '2025-11-11 06:09:35', 'Student Self-Scan', '{\"user_agent\":\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\",\"ip_address\":\"::1\",\"session_id\":\"session_1762841364914\"}'),
+(20, 3, 2, 'attendance', 'success', NULL, '2025-11-11 06:12:56', 'Student Self-Scan', '{\"user_agent\":\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\",\"ip_address\":\"::1\",\"session_id\":\"session_1762841364914\"}'),
+(21, 3, 2, 'attendance', 'success', NULL, '2025-11-11 06:14:02', 'Student Self-Scan', '{\"user_agent\":\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\",\"ip_address\":\"::1\",\"session_id\":\"session_1762841364914\"}'),
+(22, 3, 2, 'attendance', 'success', NULL, '2025-11-11 06:21:40', 'Student Self-Scan', '{\"user_agent\":\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\",\"ip_address\":\"::1\",\"session_id\":\"session_1762842062001\"}'),
+(23, 3, 2, 'attendance', 'success', NULL, '2025-11-11 06:38:37', 'Student Self-Scan', '{\"user_agent\":\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\",\"ip_address\":\"::1\",\"session_id\":\"session_1762843086648\"}'),
+(24, 3, 2, 'attendance', 'success', NULL, '2025-11-11 06:41:17', 'Student Self-Scan', '{\"user_agent\":\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\",\"ip_address\":\"::1\",\"session_id\":\"session_1762843254910\"}'),
+(25, 3, 2, 'attendance', 'success', NULL, '2025-11-11 06:42:46', 'Student Self-Scan', '{\"user_agent\":\"Mozilla\\/5.0 (Linux; Android 10; K) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Mobile Safari\\/537.36\",\"ip_address\":\"::1\",\"session_id\":\"session_1762843356169\"}'),
+(26, 3, 2, 'attendance', 'success', NULL, '2025-11-12 03:43:21', 'Student Self-Scan', '{\"user_agent\":\"Mozilla\\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/142.0.0.0 Safari\\/537.36\",\"ip_address\":\"::1\",\"session_id\":\"session_1762670825544\"}');
 
 -- --------------------------------------------------------
 
@@ -179,7 +196,7 @@ CREATE TABLE `sms_config` (
 --
 
 INSERT INTO `sms_config` (`id`, `provider_name`, `api_url`, `api_key`, `sender_name`, `status`, `created_at`, `updated_at`) VALUES
-(1, 'IprogSMS', 'https://sms.iprogtech.com/api/v1/sms_messages', '1ef3b27ea753780a90cbdf07d027fb7b52791004', 'Ip', 'active', '2025-07-17 09:04:17', '2025-11-11 05:10:01');
+(1, 'PhilSMS', 'https://sms.iprogtech.com/api/v1/sms_messages', '1ef3b27ea753780a90cbdf07d027fb7b52791004', 'Ip', 'active', '2025-07-17 09:04:17', '2025-11-11 06:25:51');
 
 -- --------------------------------------------------------
 
@@ -204,60 +221,7 @@ CREATE TABLE `sms_logs` (
 --
 
 INSERT INTO `sms_logs` (`id`, `phone_number`, `message`, `response`, `status`, `notification_type`, `reference_id`, `scheduled_at`, `sent_at`) VALUES
-(1, '639977542522', 'Hello from KES-SMART! This is a test message to verify SMS configuration.', 'SMS sent successfully', 'sent', 'general', NULL, NULL, '2025-07-17 12:03:29'),
-(2, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived at school at 1:11 AM on July 18, 2025. Section: St. Alpha. - KES-SMART', 'SMS sent successfully', 'sent', 'attendance', NULL, NULL, '2025-07-17 23:11:57'),
-(3, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has left school early at 10:09 AM on July 18, 2025. Section: St. Alpha. - KES-SMART', 'SMS sent successfully', 'sent', 'checkout', NULL, NULL, '2025-07-18 08:09:36'),
-(4, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived at English class at 4:25 AM on November 7, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-06 20:25:03'),
-(5, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has left English class early at 4:27 AM on November 7, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'checkout', NULL, NULL, '2025-11-06 20:27:05'),
-(6, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to English class at 8:48 AM on November 7, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-07 00:48:54'),
-(7, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to English class at 9:01 AM on November 7, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-07 01:01:52'),
-(8, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has left English class early at 9:02 AM on November 7, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'checkout', NULL, NULL, '2025-11-07 01:02:22'),
-(9, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to Literature class at 9:28 AM on November 7, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-07 01:28:04'),
-(10, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to Biology class at 9:31 AM on November 7, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-07 01:31:46'),
-(11, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived at Advanced Mathematics class at 3:12 AM on November 8, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-07 19:12:13'),
-(12, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived at Biology class at 3:14 AM on November 8, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-07 19:14:10'),
-(13, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived at English class at 2:43 AM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-08 18:43:34'),
-(14, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived at English1111 class at 6:56 AM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-08 22:56:36'),
-(15, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has left English1111 class early at 6:56 AM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'checkout', NULL, NULL, '2025-11-08 22:56:47'),
-(16, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to Literature class at 7:19 AM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-08 23:19:35'),
-(17, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has left Literature class early at 7:19 AM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'checkout', NULL, NULL, '2025-11-08 23:19:56'),
-(18, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to Geography class at 7:22 AM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-08 23:22:49'),
-(19, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to Geography class at 7:25 AM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-08 23:25:42'),
-(20, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to Physical Education class at 7:50 AM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-08 23:50:28'),
-(21, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to English1111 class at 2:58 PM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-08 18:58:48'),
-(22, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to English class at 3:14 PM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-08 19:14:19'),
-(23, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has left English class early at 3:14 PM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'checkout', NULL, NULL, '2025-11-08 19:14:49'),
-(24, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to English class at 8:18 AM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-09 00:18:11'),
-(25, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has left English class early at 8:19 AM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'checkout', NULL, NULL, '2025-11-09 00:19:02'),
-(26, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to English1111 class at 8:19 AM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'attendance', NULL, NULL, '2025-11-09 00:19:36'),
-(27, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has left English1111 class early at 8:20 AM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: There is not enough balance available to send this message.You have 0.3 of the 0.35', 'failed', 'checkout', NULL, NULL, '2025-11-09 00:20:40'),
-(28, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to English class at 1:26 PM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: Invalid api token or no load balance', 'failed', 'attendance', NULL, NULL, '2025-11-08 17:26:18'),
-(29, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to English class at 1:33 PM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: Invalid API token or insufficient credit balance. Please check your iProgsms account.', 'failed', 'attendance', NULL, NULL, '2025-11-08 17:33:19'),
-(30, '639171071234', 'Hi John Doe, Welcome to IPROG SMS API from KES Smart System.', '{\"status\":200,\"message\":\"SMS successfully queued for delivery.\",\"message_id\":\"iSms-yEXsnC\",\"message_status_link\":\"https://sms.iprogtech.com/api/v1/sms_messages/status?api_token=12345\\u0026message_id=iSms-yEXsnC\",\"message_status_request_mode\":\"GET\",\"sms_rate\":1.0}', 'sent', 'general', NULL, NULL, '2025-11-09 05:39:14'),
-(31, '639677726912', 'Hi John Doe', '{\"status\":200,\"message\":\"SMS successfully queued for delivery.\",\"message_id\":\"iSms-Tf5cUF\",\"message_status_link\":\"https://sms.iprogtech.com/api/v1/sms_messages/status?api_token=12345\\u0026message_id=iSms-Tf5cUF\",\"message_status_request_mode\":\"GET\",\"sms_rate\":1.0}', 'sent', 'general', NULL, NULL, '2025-11-09 05:40:28'),
-(32, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to English class at 1:46 PM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: Invalid API token or insufficient credit balance. Please check your iProgsms account.', 'failed', 'attendance', NULL, NULL, '2025-11-08 17:46:38'),
-(33, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to English class at 1:48 PM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'API Error: Invalid API token or insufficient credit balance. Please check your iProgsms account.', 'failed', 'attendance', NULL, NULL, '2025-11-08 17:48:45'),
-(34, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to English class at 2:06 PM on November 9, 2025. Section: St. Alpha. - KES-SMART', 'SMS sent successfully', 'sent', 'attendance', 'iSms-qsBaMk', NULL, '2025-11-08 18:06:14'),
-(35, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa was marked absent today (November 10, 2025) as they did not check in by 4:30 PM. Section: St. Alpha (Grade 7). Please contact the school if this is an error. - KES-SMART', 'SMS sent successfully', 'sent', 'absent', 'iSms-dafnPc', NULL, '2025-11-09 20:54:10'),
-(36, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa was marked absent today (November 10, 2025) for English, English1111, Physical Education and Social Studies as they did not check in by 4:30 PM. Section: St. Alpha (Grade 7). Please contact the school if this is an error. - KES-SMART', 'SMS sent successfully', 'sent', 'absent', 'iSms-qK7Mlz', NULL, '2025-11-09 21:00:52'),
-(37, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa was marked absent today (November 11, 2025) for English, English1111, Physical Education and Social Studies as they did not check in by 4:30 PM. Section: St. Alpha (Grade 7). Please contact the school if this is an error. - KES-SMART', 'SMS sent successfully', 'sent', 'absent', 'iSms-KmnKDY', NULL, '2025-11-10 21:01:47'),
-(38, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa was marked absent today (November 11, 2025) for English, English1111, Physical Education and Social Studies as they did not check in by 4:30 PM. Section: St. Alpha (Grade 7). Please contact the school if this is an error. - KES-SMART', 'SMS sent successfully', 'sent', 'absent', 'iSms-N9G3f0', NULL, '2025-11-10 21:02:17'),
-(39, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa was marked absent today (November 10, 2025) for English, English1111, Physical Education and Social Studies as they did not check in by 4:30 PM. Section: St. Alpha (Grade 7). Please contact the school if this is an error. - KES-SMART', 'SMS sent successfully', 'sent', 'absent', 'iSms-WjWhVp', NULL, '2025-11-09 20:50:27'),
-(40, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa was marked absent today (November 10, 2025) for English, English1111, Physical Education and Social Studies as they did not check in by 4:30 PM. Section: St. Alpha (Grade 7). Please contact the school if this is an error. - KES-SMART', 'SMS sent successfully', 'sent', 'absent', 'iSms-98VS60', NULL, '2025-11-09 20:39:23'),
-(41, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa was marked absent today (November 10, 2025) for English, English1111, Physical Education and Social Studies as they did not check in by 4:30 PM. Section: St. Alpha (Grade 7). Please contact the school if this is an error. - KES-SMART', 'SMS sent successfully', 'sent', 'absent', 'iSms-QChxdk', NULL, '2025-11-09 20:43:29'),
-(42, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to asdada class at 9:04 AM on November 10, 2025. Section: St. Alpha. - KES-SMART', 'SMS sent successfully', 'sent', 'attendance', 'iSms-Xq53tu', NULL, '2025-11-10 01:04:01'),
-(43, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has left asdada class early at 9:04 AM on November 10, 2025. Section: St. Alpha. - KES-SMART', 'SMS sent successfully', 'sent', 'checkout', 'iSms-1HiXHT', NULL, '2025-11-10 01:04:52'),
-(44, '09677726912', 'TEST: Your child has arrived at Test Subject class at 9:16 AM on November 10, 2025. Section: Test Section. - KES-SMART', 'SMS sent successfully', 'sent', 'test', 'iSms-lqm3Iw', NULL, '2025-11-10 01:16:45'),
-(45, '09677726912', 'TEST: Your child has arrived at Test Subject class at 9:20 AM on November 10, 2025. Section: Test Section. - KES-SMART', 'SMS sent successfully', 'sent', 'test', 'iSms-02R7GX', NULL, '2025-11-10 01:20:01'),
-(46, '09677726912', 'TEST: Your child has arrived at Test Subject class at 12:35 PM on November 10, 2025. Section: Test Section. - KES-SMART', 'SMS sent successfully', 'sent', 'test', 'iSms-Pm76rw', NULL, '2025-11-10 04:35:38'),
-(47, '09677726912', 'TEST: Your child has arrived at Test Subject class at 12:36 PM on November 10, 2025. Section: Test Section. - KES-SMART', 'SMS sent successfully', 'sent', 'test', 'iSms-Kdn7oL', NULL, '2025-11-10 04:36:03'),
-(48, '09677726912', 'TEST: Your child has arrived at Test Subject class at 12:36 PM on November 10, 2025. Section: Test Section. - KES-SMART', 'SMS sent successfully', 'sent', 'test', 'iSms-3V3nzo', NULL, '2025-11-10 04:36:07'),
-(49, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has left asdada class early at 12:39 PM on November 10, 2025. Section: St. Alpha. - KES-SMART', 'SMS sent successfully', 'sent', 'checkout', 'iSms-Wd8szG', NULL, '2025-11-10 04:39:23'),
-(50, '09677726912', 'TEST: Your child has arrived at Test Subject class at 9:15 AM on November 11, 2025. Section: Test Section. - KES-SMART', 'SMS sent successfully', 'sent', 'test', 'iSms-JNFkzm', NULL, '2025-11-11 01:15:24'),
-(51, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has arrived late to asdada class at 9:16 AM on November 11, 2025. Section: St. Alpha. - KES-SMART', 'SMS sent successfully', 'sent', 'attendance', 'iSms-OFjgJv', NULL, '2025-11-11 01:16:26'),
-(52, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has left English class early at 9:24 AM on November 11, 2025. Section: St. Alpha. - KES-SMART', 'SMS sent successfully', 'sent', 'checkout', 'iSms-xaPnGM', NULL, '2025-11-11 01:24:07'),
-(53, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has left asdada class early at 9:34 AM on November 11, 2025. Section: St. Alpha. - KES-SMART', 'SMS sent successfully', 'sent', 'checkout', 'iSms-zxAKNP', NULL, '2025-11-11 01:35:00'),
-(54, '09677726912', 'Hi! Your child Jan Russel Peñafielaaa has left asdada class early at 9:38 AM on November 11, 2025. Section: St. Alpha. - KES-SMART', 'SMS sent successfully', 'sent', 'checkout', 'iSms-RXpiSO', NULL, '2025-11-11 01:38:30');
+(84, '09677726912', 'Hi! Your child test@student has arrived late to asdada class at 12:50 PM on November 12, 2025. - KES-SMART', 'SMS sent successfully', 'sent', 'attendance', 'iSms-KCBgbr', NULL, '2025-11-12 04:50:33');
 
 -- --------------------------------------------------------
 
@@ -359,7 +323,7 @@ CREATE TABLE `system_settings` (
 
 INSERT INTO `system_settings` (`id`, `setting_name`, `setting_value`, `description`, `updated_at`) VALUES
 (1, 'school_name', 'KES School', 'Name of the school', '2025-07-17 09:04:17'),
-(2, 'school_address', 'School Address Here', 'School address', '2025-07-17 09:04:17'),
+(2, 'school_address', 'Tacurong City', 'School address', '2025-07-17 09:04:17'),
 (3, 'attendance_time_start', '07:00', 'School start time', '2025-07-17 09:04:17'),
 (4, 'attendance_time_end', '16:00', 'School end time', '2025-11-07 03:36:44'),
 (5, 'late_threshold', '15', 'Minutes after start time to mark as late', '2025-07-17 09:04:17'),
@@ -368,6 +332,32 @@ INSERT INTO `system_settings` (`id`, `setting_name`, `setting_value`, `descripti
 (8, 'auto_mark_absent', '1', 'Automatically mark students absent if not scanned by end of day', '2025-08-28 12:01:08'),
 (9, 'attendance_grace_period', '30', 'Grace period in minutes after class start for late marking', '2025-08-28 12:01:08'),
 (10, 'qr_scan_cooldown', '5', 'Cooldown period in minutes between scans for same student-subject', '2025-08-28 12:01:08');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `teacher_absent_logs`
+--
+
+CREATE TABLE `teacher_absent_logs` (
+  `id` int(11) NOT NULL,
+  `teacher_id` int(11) NOT NULL,
+  `teacher_name` varchar(255) NOT NULL,
+  `notification_date` date NOT NULL,
+  `subject_ids` text DEFAULT NULL,
+  `subject_names` text DEFAULT NULL,
+  `students_notified` int(11) DEFAULT 0,
+  `sms_sent` int(11) DEFAULT 0,
+  `sms_failed` int(11) DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `teacher_absent_logs`
+--
+
+INSERT INTO `teacher_absent_logs` (`id`, `teacher_id`, `teacher_name`, `notification_date`, `subject_ids`, `subject_names`, `students_notified`, `sms_sent`, `sms_failed`, `created_at`) VALUES
+(1, 2, 'test@teacher', '2025-11-12', NULL, NULL, 2, 2, 0, '2025-11-12 03:18:12');
 
 -- --------------------------------------------------------
 
@@ -416,10 +406,10 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `username`, `full_name`, `email`, `phone`, `role`, `lrn`, `section_id`, `parent_id`, `profile_image`, `profile_image_path`, `qr_code`, `status`, `created_at`, `updated_at`) VALUES
-(1, 'admin', 'System Administrator', 'admin@kes-smart.com', NULL, 'admin', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:04:17', '2025-11-11 02:52:36'),
-(2, 'teacher', 'test@teacher', 'test@teacher@gmail.com', '09677726912', 'teacher', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:10:24', '2025-11-11 05:36:44'),
-(3, 'student', 'test@student', 'test@student@gmail.com', '09677726912', 'student', '217614409312', 1, NULL, 'student_3_1762762339.jpg', 'uploads/student_photos/thumbnails/student_3_1762762339.jpg', 'S0VTLVNNQVJULVNUVURFTlQtc3R1ZGVudC0yMDI1', 'active', '2025-07-17 09:10:59', '2025-11-11 05:37:04'),
-(4, 'parent', 'test@parent', 'test@parent@gmail.com', '09677726912', 'parent', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:11:21', '2025-11-11 05:37:34');
+(1, 'admin', 'System Administrator', 'cnoel1570@gmail.com', NULL, 'admin', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:04:17', '2025-11-22 17:20:03'),
+(2, 'teacher', 'test@teacher', 'swaynedaanoy@gmail.com', '09659751021', 'teacher', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:10:24', '2025-11-22 17:21:00'),
+(3, 'student', 'test@student', 'cnoel1570@gmail.com', '09531983833', 'student', '217614409312', 1, NULL, 'student_3_1762762339.jpg', 'uploads/student_photos/thumbnails/student_3_1762762339.jpg', 'S0VTLVNNQVJULVNUVURFTlQtc3R1ZGVudC0yMDI1', 'active', '2025-07-17 09:10:59', '2025-11-22 17:23:12'),
+(4, 'parent', 'test@parent', 'krysteljoyligo0@gmail.com', '09676402632', 'parent', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:11:21', '2025-11-22 17:22:59');
 
 -- --------------------------------------------------------
 
@@ -520,6 +510,14 @@ ALTER TABLE `system_settings`
   ADD UNIQUE KEY `setting_name` (`setting_name`);
 
 --
+-- Indexes for table `teacher_absent_logs`
+--
+ALTER TABLE `teacher_absent_logs`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_teacher_date` (`teacher_id`,`notification_date`),
+  ADD KEY `idx_notification_date` (`notification_date`);
+
+--
 -- Indexes for table `teacher_qr_sessions`
 --
 ALTER TABLE `teacher_qr_sessions`
@@ -548,7 +546,7 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `attendance`
 --
 ALTER TABLE `attendance`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=60;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=97;
 
 --
 -- AUTO_INCREMENT for table `attendance_sessions`
@@ -560,7 +558,7 @@ ALTER TABLE `attendance_sessions`
 -- AUTO_INCREMENT for table `qr_scans`
 --
 ALTER TABLE `qr_scans`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=17;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=27;
 
 --
 -- AUTO_INCREMENT for table `sections`
@@ -578,13 +576,13 @@ ALTER TABLE `sms_config`
 -- AUTO_INCREMENT for table `sms_logs`
 --
 ALTER TABLE `sms_logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=55;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=85;
 
 --
 -- AUTO_INCREMENT for table `student_parents`
 --
 ALTER TABLE `student_parents`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `student_subjects`
@@ -603,6 +601,12 @@ ALTER TABLE `subjects`
 --
 ALTER TABLE `system_settings`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=807;
+
+--
+-- AUTO_INCREMENT for table `teacher_absent_logs`
+--
+ALTER TABLE `teacher_absent_logs`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `teacher_qr_sessions`
@@ -626,7 +630,7 @@ ALTER TABLE `users`
 ALTER TABLE `attendance`
   ADD CONSTRAINT `attendance_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`),
   ADD CONSTRAINT `attendance_ibfk_2` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`),
-  ADD CONSTRAINT `attendance_ibfk_3` FOREIGN KEY (`section_id`) REFERENCES `sections` (`id`),
+  ADD CONSTRAINT `attendance_ibfk_3` FOREIGN KEY (`section_id`) REFERENCES `sections` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   ADD CONSTRAINT `attendance_ibfk_4` FOREIGN KEY (`subject_id`) REFERENCES `subjects` (`id`);
 
 --
@@ -670,6 +674,12 @@ ALTER TABLE `student_subjects`
 ALTER TABLE `subjects`
   ADD CONSTRAINT `subjects_ibfk_1` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`),
   ADD CONSTRAINT `subjects_ibfk_2` FOREIGN KEY (`section_id`) REFERENCES `sections` (`id`);
+
+--
+-- Constraints for table `teacher_absent_logs`
+--
+ALTER TABLE `teacher_absent_logs`
+  ADD CONSTRAINT `teacher_absent_logs_ibfk_1` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `teacher_qr_sessions`

@@ -120,7 +120,7 @@ INSERT INTO sms_config (provider_name, api_url, api_key, sender_name, status) VA
 -- Insert default system settings
 INSERT INTO system_settings (setting_name, setting_value, description) VALUES 
 ('school_name', 'KES School', 'Name of the school'),
-('school_address', 'School Address Here', 'School address'),
+('school_address', 'Tacurong City', 'School address'),
 ('attendance_time_start', '07:00', 'School start time'),
 ('attendance_time_end', '17:00', 'School end time'),
 ('late_threshold', '15', 'Minutes after start time to mark as late'),

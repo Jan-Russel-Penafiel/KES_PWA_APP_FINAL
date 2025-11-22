@@ -207,7 +207,7 @@ if (file_exists('settings.json')) {
 
 $default_settings = [
     'school_name' => 'KES - Kalaw Elementary School',
-    'school_address' => '123 Education Street, Kalaw City',
+    'school_address' => 'Tacurong City',
     'school_contact' => '+1234567890',
     'school_email' => 'info@kes.edu',
     'timezone' => 'Asia/Manila',

@@ -173,7 +173,7 @@ CREATE TABLE `system_settings` (
 
 INSERT INTO `system_settings` (`id`, `setting_name`, `setting_value`, `description`, `updated_at`) VALUES
 (1, 'school_name', 'KES School', 'Name of the school', '2025-07-17 09:04:17'),
-(2, 'school_address', 'School Address Here', 'School address', '2025-07-17 09:04:17'),
+(2, 'school_address', 'Tacurong City', 'School address', '2025-07-17 09:04:17'),
 (3, 'attendance_time_start', '07:00', 'School start time', '2025-07-17 09:04:17'),
 (4, 'attendance_time_end', '17:00', 'School end time', '2025-07-17 09:04:17'),
 (5, 'late_threshold', '15', 'Minutes after start time to mark as late', '2025-07-17 09:04:17'),
