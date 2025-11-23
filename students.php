@@ -105,26 +105,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $_SESSION['error'] = 'Failed to update student: ' . $e->getMessage();
             }
             
-        } elseif ($action == 'link_parent' && ($user_role == 'admin' || $user_role == 'teacher')) {
-            $student_id = intval($_POST['student_id']);
-            $parent_id = intval($_POST['parent_id']);
-            $relationship = sanitize_input($_POST['relationship']);
-            $is_primary = isset($_POST['is_primary']) ? 1 : 0;
-            
-            try {
-                // If this is set as primary, remove primary status from other parents
-                if ($is_primary) {
-                    $stmt = $pdo->prepare("UPDATE student_parents SET is_primary = 0 WHERE student_id = ?");
-                    $stmt->execute([$student_id]);
-                }
-                
-                $stmt = $pdo->prepare("INSERT INTO student_parents (student_id, parent_id, relationship, is_primary) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE relationship = ?, is_primary = ?");
-                $stmt->execute([$student_id, $parent_id, $relationship, $is_primary, $relationship, $is_primary]);
-                
-                $_SESSION['success'] = 'Parent linked successfully!';
-            } catch(PDOException $e) {
-                $_SESSION['error'] = 'Failed to link parent.';
-            }
         }
     }
     
@@ -352,13 +332,6 @@ try {
         $sections = [];
     }
     
-    // Get parents for linking
-    if ($user_role == 'admin' || $user_role == 'teacher') {
-        $parents = $pdo->query("SELECT * FROM users WHERE role = 'parent' AND status = 'active' ORDER BY full_name")->fetchAll(PDO::FETCH_ASSOC);
-    } else {
-        $parents = [];
-    }
-    
     // Get subjects for enrollment (with section info for filtering)
     if ($user_role == 'admin' || $user_role == 'teacher') {
         if ($user_role == 'admin') {
@@ -377,7 +350,6 @@ try {
 } catch(PDOException $e) {
     $students = [];
     $sections = [];
-    $parents = [];
     $subjects = [];
 }
 ?>
@@ -493,9 +465,6 @@ try {
                                         <?php if ($user_role == 'admin' || $user_role == 'teacher'): ?>
                                             <li><a class="dropdown-item d-flex align-items-center py-2" href="#" onclick="editStudent(<?php echo htmlspecialchars(json_encode($student)); ?>)">
                                                 <i class="fas fa-edit me-2 text-info"></i>Edit
-                                            </a></li>
-                                            <li><a class="dropdown-item d-flex align-items-center py-2" href="#" onclick="linkParent(<?php echo $student['id']; ?>, '<?php echo addslashes($student['full_name']); ?>')">
-                                                <i class="fas fa-link me-2 text-warning"></i>Link Parent
                                             </a></li>
                                         <?php endif; ?>
                                     </ul>
@@ -767,66 +736,6 @@ try {
             </div>
         </div>
     </div>
-
-    <!-- Link Parent Modal -->
-    <div class="modal fade" id="linkParentModal" tabindex="-1" aria-labelledby="linkParentModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header bg-info text-white">
-                    <h5 class="modal-title" id="linkParentModalLabel">
-                        <i class="fas fa-link me-2"></i>Link Parent
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <form method="POST" action="">
-                    <div class="modal-body">
-                        <input type="hidden" name="action" value="link_parent">
-                        <input type="hidden" name="student_id" id="link_student_id">
-                        
-                        <div class="mb-3">
-                            <label class="form-label">Student</label>
-                            <p class="form-control-plaintext fw-bold" id="link_student_name"></p>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="parent_id" class="form-label">Parent *</label>
-                            <select class="form-select form-select-lg select2" id="parent_id" name="parent_id" required>
-                                <option value="">Select Parent</option>
-                                <?php foreach ($parents as $parent): ?>
-                                    <option value="<?php echo $parent['id']; ?>">
-                                        <?php echo $parent['full_name']; ?> (<?php echo $parent['username']; ?>)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="relationship" class="form-label">Relationship *</label>
-                            <select class="form-select form-select-lg" id="relationship" name="relationship" required>
-                                <option value="">Select Relationship</option>
-                                <option value="father">Father</option>
-                                <option value="mother">Mother</option>
-                                <option value="guardian">Guardian</option>
-                            </select>
-                        </div>
-                        
-                        <div class="mb-3 form-check form-switch">
-                            <input type="checkbox" class="form-check-input" id="is_primary" name="is_primary" style="height: 1.5rem; width: 3rem;">
-                            <label class="form-check-label ms-2 mt-1" for="is_primary">
-                                Primary contact (will receive SMS notifications)
-                            </label>
-                        </div>
-                    </div>
-                    <div class="modal-footer d-flex justify-content-between">
-                        <button type="button" class="btn btn-lg btn-secondary flex-fill me-2" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-lg btn-primary flex-fill">
-                            <i class="fas fa-link me-2"></i>Link Parent
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
 <?php endif; ?>
 
 <!-- Add custom scripts to prevent jQuery loading twice -->
@@ -1037,14 +946,6 @@ function selectAllSubjects(selectAll) {
     checkboxes.forEach(function(checkbox) {
         checkbox.checked = selectAll;
     });
-}
-
-// Link parent function
-function linkParent(studentId, studentName) {
-    document.getElementById('link_student_id').value = studentId;
-    document.getElementById('link_student_name').textContent = studentName;
-    
-    new bootstrap.Modal(document.getElementById('linkParentModal')).show();
 }
 
 // Auto-generate username from full name
