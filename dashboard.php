@@ -417,7 +417,7 @@ try {
                     </div>
                 </div>
                 <div class="card-footer bg-transparent border-0 py-2">
-                    <a href="users.php?role=teacher" class="text-white text-decoration-none small stretched-link">
+                    <a href="teachers.php" class="text-white text-decoration-none small stretched-link">
                         View Details <i class="fas fa-arrow-right ms-1"></i>
                     </a>
                 </div>
@@ -438,7 +438,7 @@ try {
                     </div>
                 </div>
                 <div class="card-footer bg-transparent border-0 py-2">
-                    <a href="users.php?role=parent" class="text-white text-decoration-none small stretched-link">
+                    <a href="parents.php" class="text-white text-decoration-none small stretched-link">
                         View Details <i class="fas fa-arrow-right ms-1"></i>
                     </a>
                 </div>
