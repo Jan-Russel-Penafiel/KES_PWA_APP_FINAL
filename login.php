@@ -213,12 +213,6 @@ include 'header.php';
     </div>
 </div>
 
-<!-- Current Date and Time Display -->
-<div class="position-fixed bottom-0 end-0 p-2 text-muted small" style="z-index: 100;">
-    <i class="fas fa-clock me-1"></i>
-    <span id="current-datetime"></span>
-</div>
-
 <style>
 /* Additional login page styles */
 .form-control:focus, .form-select:focus {
@@ -252,10 +246,6 @@ include 'header.php';
     .btn {
         padding-top: 0.75rem;
         padding-bottom: 0.75rem;
-    }
-    
-    #current-datetime {
-        display: none; /* Hide on very small screens */
     }
 }
 
@@ -720,17 +710,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Auto-focus username field
     document.getElementById('username').focus();
-    
-    // Display current date and time
-    const datetimeElement = document.getElementById('current-datetime');
-    if (datetimeElement) {
-        const updateDateTime = () => {
-            const now = new Date();
-            datetimeElement.textContent = now.toLocaleString();
-        };
-        updateDateTime();
-        setInterval(updateDateTime, 1000);
-    }
     
     // Add animation to form elements
     const card = document.querySelector('.card');
