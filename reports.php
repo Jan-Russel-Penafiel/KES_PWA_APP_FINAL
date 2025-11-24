@@ -1251,7 +1251,7 @@ function outputPDF($data, $filename, $type) {
         $pdf = new TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
         
         // Set document information
-        $pdf->SetCreator('KES Smart Attendance System');
+        $pdf->SetCreator('TAC-QR Attendance System');
         $pdf->SetAuthor('KES');
         $pdf->SetTitle(ucwords(str_replace('_', ' ', $type)));
         $pdf->SetSubject('Report Generated on ' . date('Y-m-d H:i:s'));
@@ -1545,7 +1545,7 @@ function generatePDFContent($data, $filename, $type) {
                     
                     // Header with student name
                     $html .= '<div style="background-color: #3498db; color: white; padding: 15px; margin-bottom: 20px;">';
-                    $html .= '<h1 style="margin: 0; font-size: 24px;">KES-SMART</h1>';
+                    $html .= '<h1 style="margin: 0; font-size: 24px;">TAC-QR</h1>';
                     $html .= '<h2 style="margin: 5px 0 0 0; font-size: 20px;">' . htmlspecialchars($data['full_name']) . '</h2>';
                     $html .= '</div>';
                     
@@ -1595,7 +1595,7 @@ function generatePDFContent($data, $filename, $type) {
                     // Footer with generation info
                     $html .= '<div style="margin-top: 30px; padding: 15px; background-color: #e9ecef; font-size: 12px; color: #6c757d; text-align: center;">';
                     $html .= '<p style="margin: 0;">Generated on: ' . date('F j, Y \a\t g:i A') . '</p>';
-                    $html .= '<p style="margin: 5px 0 0 0;">KES-SMART Attendance System</p>';
+                    $html .= '<p style="margin: 5px 0 0 0;">TAC-QR Attendance System</p>';
                     $html .= '</div>';
                     
                     $html .= '</div>';
@@ -1603,7 +1603,7 @@ function generatePDFContent($data, $filename, $type) {
                     // Multiple students
                     $html .= '<div style="text-align: center; margin-bottom: 30px; padding: 20px; background-color: #3498db; color: white;">';
                     $html .= '<h1 style="margin: 0 0 10px 0; font-size: 28px;">Student QR Codes</h1>';
-                    $html .= '<p style="margin: 0; font-size: 16px;">KES-SMART Attendance System</p>';
+                    $html .= '<p style="margin: 0; font-size: 16px;">TAC-QR Attendance System</p>';
                     $html .= '</div>';
                     
                     $student_count = 0;
@@ -2013,9 +2013,6 @@ function generatePDFContent($data, $filename, $type) {
                         <option value="qr-codes">QR Codes</option>
                         <option value="attendance-section">Attendance Per Section</option>
                         <option value="attendance-student">Attendance Per Student</option>
-                        <?php if ($user_role == 'admin'): ?>
-                        <option value="sms">SMS Logs</option>
-                        <?php endif; ?>
                     </select>
                 </div>
                 
@@ -2042,11 +2039,6 @@ function generatePDFContent($data, $filename, $type) {
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="attendance-student-tab" data-bs-toggle="tab" data-bs-target="#attendance-student" type="button" role="tab" aria-controls="attendance-student" aria-selected="false">Attendance Per Student</button>
                     </li>
-                    <?php if ($user_role == 'admin'): ?>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="sms-tab" data-bs-toggle="tab" data-bs-target="#sms" type="button" role="tab" aria-controls="sms" aria-selected="false">SMS Logs</button>
-                    </li>
-                    <?php endif; ?>
                 </ul>
                 
                 <!-- Tab content -->
@@ -2495,69 +2487,7 @@ function generatePDFContent($data, $filename, $type) {
                             ?>
                         </div>
                     </div>
-                    
-                    <!-- SMS Logs Cards (Admin Only) -->
-                    <?php if ($user_role == 'admin'): ?>
-                    <div class="tab-pane fade" id="sms" role="tabpanel" aria-labelledby="sms-tab">
-                        <div class="mb-3 d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0"><i class="fas fa-sms me-2"></i>SMS Logs</h5>
-                            <button class="btn btn-sm btn-outline-secondary print-tab-content" data-target="sms">
-                                <i class="fas fa-print me-1"></i>Print All
-                            </button>
-                        </div>
-                        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-                            <?php
-                            try {
-                                $query = "SELECT id, phone_number, message, notification_type, status, sent_at, response 
-                                        FROM sms_logs 
-                                        ORDER BY sent_at DESC LIMIT 50";
-                                $stmt = $pdo->query($query);
-                                $sms_logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                                
-                                foreach ($sms_logs as $log) {
-                                    $status_color = $log['status'] == 'sent' ? 'success' : 
-                                                ($log['status'] == 'failed' ? 'danger' : 'warning');
-                                    
-                                    echo '<div class="col">';
-                                    echo '<div class="card h-100 border-' . $status_color . ' shadow-sm">';
-                                    
-                                    echo '<div class="card-header bg-' . $status_color . ' bg-opacity-10 d-flex justify-content-between align-items-center">';
-                                    echo '<span class="badge bg-' . $status_color . '">' . ucfirst($log['status']) . '</span>';
-                                    echo '<span class="small">' . date('M d, Y h:i A', strtotime($log['sent_at'])) . '</span>';
-                                    echo '</div>';
-                                    
-                                    echo '<div class="card-body">';
-                                    echo '<div class="mb-3">';
-                                    echo '<div class="d-flex align-items-center mb-2">';
-                                    echo '<i class="fas fa-sms fa-lg text-' . $status_color . ' me-2"></i>';
-                                    echo '<h6 class="mb-0">' . ucfirst($log['notification_type']) . ' Message</h6>';
-                                    echo '</div>';
-                                    echo '<p class="small text-muted mb-0">To: ' . htmlspecialchars($log['phone_number']) . '</p>';
-                                    echo '</div>';
-                                    
-                                    echo '<div class="bg-light p-2 rounded mb-3">';
-                                    echo '<p class="small mb-0">' . htmlspecialchars($log['message']) . '</p>';
-                                    echo '</div>';
-                                    
-                                    if (!empty($log['response'])) {
-                                        echo '<div class="small">';
-                                        echo '<strong>Response:</strong>';
-                                        echo '<p class="text-muted mb-0 small">' . (strlen($log['response']) > 100 ? substr(htmlspecialchars($log['response']), 0, 100) . '...' : htmlspecialchars($log['response'])) . '</p>';
-                                        echo '</div>';
-                                    }
-                                    
-                                    echo '</div>'; // End card-body
-                                    
-                                    echo '</div>'; // End card
-                                    echo '</div>'; // End col
-                                }
-                            } catch(PDOException $e) {
-                                echo '<div class="col-12 text-danger">Error loading SMS logs: ' . htmlspecialchars($e->getMessage()) . '</div>';
-                            }
-                            ?>
-                        </div>
-                    </div>
-                    <?php endif; ?>
+
                     
                     <!-- Students Per Section Tab -->
                     <div class="tab-pane fade" id="students-section" role="tabpanel" aria-labelledby="students-section-tab">
@@ -2958,7 +2888,7 @@ function generatePDFContent($data, $filename, $type) {
                                 const printWindow = window.open('', '_blank');
                                 const studentInfo = `
                                     <div style="text-align: center; padding: 20px; font-family: Arial, sans-serif;">
-                                        <h1 style="color: #007bff; margin-bottom: 10px;">KES-SMART</h1>
+                                        <h1 style="color: #007bff; margin-bottom: 10px;">TAC-QR</h1>
                                         <h2 style="margin-bottom: 20px;">${studentName}</h2>
                                         <p style="margin-bottom: 5px;"><strong>Student ID:</strong> ${studentUsername}</p>
                                         ${studentLRN ? `<p style="margin-bottom: 5px;"><strong>LRN:</strong> ${studentLRN}</p>` : ''}
@@ -3051,7 +2981,7 @@ function generatePDFContent($data, $filename, $type) {
                                 
                                 const studentInfo = `
                                     <div style="text-align: center; padding: 20px; font-family: Arial, sans-serif; page-break-after: always;">
-                                        <h1 style="color: #007bff; margin-bottom: 10px;">KES-SMART</h1>
+                                        <h1 style="color: #007bff; margin-bottom: 10px;">TAC-QR</h1>
                                         <h2 style="margin-bottom: 20px;">${studentName}</h2>
                                         <p style="margin-bottom: 5px;"><strong>Student ID:</strong> ${studentUsername}</p>
                                         ${studentLRN ? `<p style="margin-bottom: 5px;"><strong>LRN:</strong> ${studentLRN}</p>` : ''}
@@ -4026,9 +3956,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 case 'attendance-student':
                     html += generateAttendanceStudentTable(tabContent);
                     break;
-                case 'sms':
-                    html += generateSMSTable(tabContent);
-                    break;
                 default:
                     html += '<div class="alert alert-warning">No table format available for this tab.</div>';
             }
@@ -4087,9 +4014,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 break;
             case 'attendance-student':
                 csvContent = generateAttendanceStudentCSV(tabContent);
-                break;
-            case 'sms':
-                csvContent = generateSMSCSV(tabContent);
                 break;
             default:
                 csvContent = 'No data available for export';
@@ -4251,22 +4175,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return csv;
     }
     
-    function generateSMSCSV(tabContent) {
-        let csv = 'Date,Message,Phone Number,Status,Type\n';
-        
-        const smsCards = tabContent.querySelectorAll('.col .card');
-        smsCards.forEach(function(card) {
-            const date = card.querySelector('.card-header .small')?.textContent?.trim() || '';
-            const message = card.querySelector('.card-text')?.textContent?.trim() || '';
-            const phone = card.querySelector('.fas.fa-phone')?.parentElement?.textContent?.replace('📱', '')?.trim() || '';
-            const status = card.querySelector('.badge')?.textContent?.trim() || '';
-            const type = card.querySelector('.card-title')?.textContent?.trim() || '';
-            
-            csv += `"${date}","${message}","${phone}","${status}","${type}"\n`;
-        });
-        
-        return csv;
-    }
+
     
     // Function to generate PDF from tab content
     function generateTabPDF(targetId, tabContent) {
