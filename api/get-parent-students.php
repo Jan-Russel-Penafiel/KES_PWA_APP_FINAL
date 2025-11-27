@@ -24,8 +24,7 @@ try {
                sp.relationship, 
                s.id as student_id, 
                s.full_name, 
-               s.username, 
-               s.email
+               s.username
         FROM student_parents sp
         JOIN users s ON sp.student_id = s.id
         WHERE sp.parent_id = ? AND s.status = 'active'

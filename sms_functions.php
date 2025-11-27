@@ -138,13 +138,15 @@ function sendSMSNotificationToParent($student_id, $message, $notification_type =
             );
         }
 
-        // Get student's parent phone number
+        // Get student's parent phone number - try primary first, then any parent
         $stmt = $pdo->prepare("
             SELECT u.phone, u.full_name as parent_name, s.full_name as student_name
             FROM users u 
             JOIN student_parents sp ON u.id = sp.parent_id 
             JOIN users s ON sp.student_id = s.id
-            WHERE sp.student_id = ? AND sp.is_primary = 1 AND u.phone IS NOT NULL
+            WHERE sp.student_id = ? AND u.phone IS NOT NULL AND u.phone != ''
+            ORDER BY sp.is_primary DESC, sp.id ASC
+            LIMIT 1
         ");
         $stmt->execute([$student_id]);
         $parent = $stmt->fetch(PDO::FETCH_ASSOC);

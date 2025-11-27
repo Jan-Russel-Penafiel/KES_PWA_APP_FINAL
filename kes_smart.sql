@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Nov 27, 2025 at 03:47 AM
+-- Generation Time: Nov 27, 2025 at 05:02 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -43,13 +43,6 @@ CREATE TABLE `attendance` (
   `scan_location` varchar(255) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `attendance`
---
-
-INSERT INTO `attendance` (`id`, `student_id`, `teacher_id`, `section_id`, `subject_id`, `attendance_date`, `time_in`, `time_out`, `status`, `remarks`, `qr_scanned`, `attendance_source`, `scan_location`, `created_at`) VALUES
-(96, 3, 2, NULL, 16, '2025-11-12', '12:50:32', NULL, 'late', 'Main Gate', 1, 'qr_scan', NULL, '2025-11-12 04:50:32');
 
 -- --------------------------------------------------------
 
@@ -216,6 +209,14 @@ CREATE TABLE `sms_logs` (
   `sent_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `sms_logs`
+--
+
+INSERT INTO `sms_logs` (`id`, `phone_number`, `message`, `response`, `status`, `notification_type`, `reference_id`, `scheduled_at`, `sent_at`) VALUES
+(85, '09676402632', 'NOTIFICATION: Your child\'s teacher, test@teacher, is absent today (2025-11-27). Please check with the school for alternative arrangements. - KES SMART', 'SMS sent successfully', 'sent', 'teacher_absent', 'iSms-u9JInr', NULL, '2025-11-27 04:01:00'),
+(86, '09676402632', 'NOTIFICATION: Your child\'s teacher, test@teacher, is absent today (2025-11-27). Please check with the school for alternative arrangements. - KES SMART', 'SMS sent successfully', 'sent', 'teacher_absent', 'iSms-wEYCqI', NULL, '2025-11-27 04:01:01');
+
 -- --------------------------------------------------------
 
 --
@@ -236,7 +237,7 @@ CREATE TABLE `student_parents` (
 --
 
 INSERT INTO `student_parents` (`id`, `student_id`, `parent_id`, `relationship`, `is_primary`, `created_at`) VALUES
-(4, 3, 4, 'mother', 0, '2025-11-23 02:20:29');
+(4, 3, 4, 'mother', 1, '2025-11-23 02:20:29');
 
 -- --------------------------------------------------------
 
@@ -350,7 +351,7 @@ CREATE TABLE `teacher_absent_logs` (
 --
 
 INSERT INTO `teacher_absent_logs` (`id`, `teacher_id`, `teacher_name`, `notification_date`, `subject_ids`, `subject_names`, `students_notified`, `sms_sent`, `sms_failed`, `created_at`) VALUES
-(1, 2, 'test@teacher', '2025-11-12', NULL, NULL, 2, 2, 0, '2025-11-12 03:18:12');
+(4, 2, 'test@teacher', '2025-11-27', NULL, NULL, 2, 2, 0, '2025-11-27 04:01:01');
 
 -- --------------------------------------------------------
 
@@ -399,8 +400,8 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `username`, `full_name`, `password`, `phone`, `role`, `lrn`, `section_id`, `parent_id`, `profile_image`, `profile_image_path`, `qr_code`, `status`, `created_at`, `updated_at`) VALUES
-(1, 'admin', 'System Administrator', 'admin', NULL, 'admin', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:04:17', '2025-11-27 02:44:17'),
-(2, 'teacher', 'test@teacher', 'teacher', '09659751021', 'teacher', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:10:24', '2025-11-27 02:44:41'),
+(1, 'admin', 'System Administrator', 'admin', NULL, 'admin', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:04:17', '2025-11-27 04:00:20'),
+(2, 'teacher', 'test@teacher', 'teacher', '09659751021', 'teacher', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:10:24', '2025-11-27 04:00:43'),
 (3, 'student', 'test@student', 'student', '09531983833', 'student', '217614409312', 1, NULL, 'student_3_1762762339.jpg', 'uploads/student_photos/thumbnails/student_3_1762762339.jpg', 'S0VTLVNNQVJULVNUVURFTlQtc3R1ZGVudC0yMDI1', 'active', '2025-07-17 09:10:59', '2025-11-27 02:44:48'),
 (4, 'parent', 'test@parent', 'parent', '09676402632', 'parent', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:11:21', '2025-11-27 02:44:54'),
 (6, 'Krystal', 'ligo', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '09676402632', 'student', NULL, 1, NULL, NULL, NULL, 'S0VTLVNNQVJULVNUVURFTlQtS3J5c3RhbC0yMDI1', 'active', '2025-11-26 16:02:50', '2025-11-27 01:53:27'),
@@ -571,7 +572,7 @@ ALTER TABLE `sms_config`
 -- AUTO_INCREMENT for table `sms_logs`
 --
 ALTER TABLE `sms_logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=85;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=87;
 
 --
 -- AUTO_INCREMENT for table `student_parents`
@@ -601,7 +602,7 @@ ALTER TABLE `system_settings`
 -- AUTO_INCREMENT for table `teacher_absent_logs`
 --
 ALTER TABLE `teacher_absent_logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `teacher_qr_sessions`

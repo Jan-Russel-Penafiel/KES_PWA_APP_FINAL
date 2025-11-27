@@ -82,11 +82,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     redirect('parents.php');
                 }
                 
-                // Add the relationship
-                $stmt = $pdo->prepare("INSERT INTO student_parents (student_id, parent_id, relationship, is_primary) VALUES (?, ?, ?, 0)");
-                $stmt->execute([$student_id, $parent_id, $relationship]);
+                // Check if this student already has a primary parent
+                $primary_check = $pdo->prepare("SELECT COUNT(*) FROM student_parents WHERE student_id = ? AND is_primary = 1");
+                $primary_check->execute([$student_id]);
+                $has_primary = $primary_check->fetchColumn() > 0;
                 
-                $_SESSION['success'] = 'Student linked to parent successfully!';
+                // Set as primary if this is the first parent for this student
+                $is_primary = $has_primary ? 0 : 1;
+                
+                // Add the relationship
+                $stmt = $pdo->prepare("INSERT INTO student_parents (student_id, parent_id, relationship, is_primary) VALUES (?, ?, ?, ?)");
+                $stmt->execute([$student_id, $parent_id, $relationship, $is_primary]);
+                
+                $_SESSION['success'] = 'Student linked to parent successfully!' . ($is_primary ? ' (Set as primary parent for SMS notifications)' : '');
             } catch(PDOException $e) {
                 $_SESSION['error'] = 'Failed to link student: ' . $e->getMessage();
             }
@@ -142,9 +150,9 @@ $where_conditions = ["role = 'parent'"];
 $search_params = [];
 
 if (!empty($search)) {
-    $where_conditions[] = "(full_name LIKE ? OR username LIKE ? OR email LIKE ? OR phone LIKE ?)";
+    $where_conditions[] = "(full_name LIKE ? OR username LIKE ? OR phone LIKE ?)";
     $search_term = "%$search%";
-    $search_params = array_merge($search_params, [$search_term, $search_term, $search_term, $search_term]);
+    $search_params = array_merge($search_params, [$search_term, $search_term, $search_term]);
 }
 
 if (!empty($status_filter)) {
@@ -289,7 +297,7 @@ include 'header.php';
                     <label for="search" class="form-label">Search</label>
                     <input type="text" class="form-control" id="search" name="search" 
                            value="<?php echo htmlspecialchars($search); ?>" 
-                           placeholder="Search by name, username, email, or phone">
+                           placeholder="Search by name, username, or phone">
                 </div>
                 
                 <div class="col-12 col-md-6 col-lg-3">
@@ -625,10 +633,7 @@ include 'header.php';
                             </select>
                         </div>
                         
-                        <div class="col-12 col-md-6">
-                            <label for="edit_email" class="form-label">Email Address</label>
-                            <input type="email" class="form-control" id="edit_email" name="email">
-                        </div>
+
                         
                         <div class="col-12 col-md-6">
                             <label for="edit_phone" class="form-label">Phone Number</label>
@@ -758,7 +763,7 @@ function editParent(parent) {
     document.getElementById('edit_parent_id').value = parent.id;
     document.getElementById('edit_username').value = parent.username;
     document.getElementById('edit_full_name').value = parent.full_name;
-    document.getElementById('edit_email').value = parent.email || '';
+
     document.getElementById('edit_phone').value = parent.phone || '';
     document.getElementById('edit_status').value = parent.status;
     
