@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Nov 22, 2025 at 06:23 PM
+-- Generation Time: Nov 27, 2025 at 03:47 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -216,13 +216,6 @@ CREATE TABLE `sms_logs` (
   `sent_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `sms_logs`
---
-
-INSERT INTO `sms_logs` (`id`, `phone_number`, `message`, `response`, `status`, `notification_type`, `reference_id`, `scheduled_at`, `sent_at`) VALUES
-(84, '09677726912', 'Hi! Your child test@student has arrived late to asdada class at 12:50 PM on November 12, 2025. - KES-SMART', 'SMS sent successfully', 'sent', 'attendance', 'iSms-KCBgbr', NULL, '2025-11-12 04:50:33');
-
 -- --------------------------------------------------------
 
 --
@@ -243,7 +236,7 @@ CREATE TABLE `student_parents` (
 --
 
 INSERT INTO `student_parents` (`id`, `student_id`, `parent_id`, `relationship`, `is_primary`, `created_at`) VALUES
-(1, 3, 4, 'mother', 1, '2025-07-17 09:11:37');
+(4, 3, 4, 'mother', 0, '2025-11-23 02:20:29');
 
 -- --------------------------------------------------------
 
@@ -323,7 +316,7 @@ CREATE TABLE `system_settings` (
 
 INSERT INTO `system_settings` (`id`, `setting_name`, `setting_value`, `description`, `updated_at`) VALUES
 (1, 'school_name', 'KES School', 'Name of the school', '2025-07-17 09:04:17'),
-(2, 'school_address', 'Tacurong City', 'School address', '2025-07-17 09:04:17'),
+(2, 'school_address', 'School Address Here', 'School address', '2025-07-17 09:04:17'),
 (3, 'attendance_time_start', '07:00', 'School start time', '2025-07-17 09:04:17'),
 (4, 'attendance_time_end', '16:00', 'School end time', '2025-11-07 03:36:44'),
 (5, 'late_threshold', '15', 'Minutes after start time to mark as late', '2025-07-17 09:04:17'),
@@ -387,7 +380,7 @@ CREATE TABLE `users` (
   `id` int(11) NOT NULL,
   `username` varchar(50) NOT NULL,
   `full_name` varchar(100) NOT NULL,
-  `email` varchar(100) DEFAULT NULL,
+  `password` varchar(255) NOT NULL DEFAULT '',
   `phone` varchar(20) DEFAULT NULL,
   `role` enum('admin','teacher','student','parent') NOT NULL,
   `lrn` varchar(12) DEFAULT NULL COMMENT 'Learner Reference Number for students only',
@@ -405,11 +398,13 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `username`, `full_name`, `email`, `phone`, `role`, `lrn`, `section_id`, `parent_id`, `profile_image`, `profile_image_path`, `qr_code`, `status`, `created_at`, `updated_at`) VALUES
-(1, 'admin', 'System Administrator', 'cnoel1570@gmail.com', NULL, 'admin', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:04:17', '2025-11-22 17:20:03'),
-(2, 'teacher', 'test@teacher', 'swaynedaanoy@gmail.com', '09659751021', 'teacher', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:10:24', '2025-11-22 17:21:00'),
-(3, 'student', 'test@student', 'cnoel1570@gmail.com', '09531983833', 'student', '217614409312', 1, NULL, 'student_3_1762762339.jpg', 'uploads/student_photos/thumbnails/student_3_1762762339.jpg', 'S0VTLVNNQVJULVNUVURFTlQtc3R1ZGVudC0yMDI1', 'active', '2025-07-17 09:10:59', '2025-11-22 17:23:12'),
-(4, 'parent', 'test@parent', 'krysteljoyligo0@gmail.com', '09676402632', 'parent', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:11:21', '2025-11-22 17:22:59');
+INSERT INTO `users` (`id`, `username`, `full_name`, `password`, `phone`, `role`, `lrn`, `section_id`, `parent_id`, `profile_image`, `profile_image_path`, `qr_code`, `status`, `created_at`, `updated_at`) VALUES
+(1, 'admin', 'System Administrator', 'admin', NULL, 'admin', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:04:17', '2025-11-27 02:44:17'),
+(2, 'teacher', 'test@teacher', 'teacher', '09659751021', 'teacher', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:10:24', '2025-11-27 02:44:41'),
+(3, 'student', 'test@student', 'student', '09531983833', 'student', '217614409312', 1, NULL, 'student_3_1762762339.jpg', 'uploads/student_photos/thumbnails/student_3_1762762339.jpg', 'S0VTLVNNQVJULVNUVURFTlQtc3R1ZGVudC0yMDI1', 'active', '2025-07-17 09:10:59', '2025-11-27 02:44:48'),
+(4, 'parent', 'test@parent', 'parent', '09676402632', 'parent', NULL, NULL, NULL, NULL, NULL, NULL, 'active', '2025-07-17 09:11:21', '2025-11-27 02:44:54'),
+(6, 'Krystal', 'ligo', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '09676402632', 'student', NULL, 1, NULL, NULL, NULL, 'S0VTLVNNQVJULVNUVURFTlQtS3J5c3RhbC0yMDI1', 'active', '2025-11-26 16:02:50', '2025-11-27 01:53:27'),
+(7, 'russel', 'russel', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '09677726912', 'student', '123456789098', 1, NULL, NULL, NULL, 'VEFDLVFSLVNUVURFTlQtNy0yMDI1', 'active', '2025-11-27 01:12:39', '2025-11-27 01:53:27');
 
 -- --------------------------------------------------------
 
@@ -582,7 +577,7 @@ ALTER TABLE `sms_logs`
 -- AUTO_INCREMENT for table `student_parents`
 --
 ALTER TABLE `student_parents`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `student_subjects`
@@ -618,7 +613,7 @@ ALTER TABLE `teacher_qr_sessions`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- Constraints for dumped tables

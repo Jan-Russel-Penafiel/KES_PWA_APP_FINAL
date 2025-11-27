@@ -151,9 +151,9 @@ function checkPageAccess($page_name) {
     
     // Define page access rules
     $page_access = [
-        'admin' => ['dashboard.php', 'qr-scanner.php', 'students.php',  'teachers.php', 'parents.php','reports.php', 'users.php', 'sections.php', 'sms-config.php', 'profile.php', 'settings.php', 'attendance.php'],
+        'admin' => ['dashboard.php', 'students.php',  'teachers.php', 'parents.php','reports.php', 'users.php', 'sections.php', 'sms-config.php', 'profile.php', 'settings.php'],
         'teacher' => ['dashboard.php', 'qr-scanner.php', 'attendance.php', 'qr-code.php', 'students.php', 'sections.php', 'reports.php', 'profile.php'],
-        'student' => ['dashboard.php', 'attendance.php', 'profile.php'],
+        'student' => ['dashboard.php', 'profile.php'],
         'parent' => ['dashboard.php', 'attendance.php', 'profile.php']
     ];
     
@@ -173,7 +173,6 @@ function getCurrentUser($pdo) {
             'username' => $_SESSION['username'] ?? '',
             'full_name' => $_SESSION['full_name'] ?? 'Offline User',
             'role' => $_SESSION['role'] ?? '',
-            'email' => '',
             'phone' => '',
             'status' => 'active',
             'offline_mode' => true,
@@ -195,7 +194,6 @@ function getCurrentUser($pdo) {
                 'username' => $_SESSION['username'] ?? '',
                 'full_name' => $_SESSION['full_name'] ?? 'User',
                 'role' => $_SESSION['role'] ?? '',
-                'email' => '',
                 'phone' => '',
                 'status' => 'active',
                 'section_id' => $_SESSION['section_id'] ?? null,
@@ -211,9 +209,8 @@ function getCurrentUser($pdo) {
         return [
             'id' => $_SESSION['user_id'],
             'username' => $_SESSION['username'] ?? '',
-            'full_name' => $_SESSION['full_name'] ?? 'User',
+            'full_name' => $_SESSION['full_name'] ?? 'Unknown User',
             'role' => $_SESSION['role'] ?? '',
-            'email' => '',
             'phone' => '',
             'status' => 'active',
             'section_id' => $_SESSION['section_id'] ?? null,
@@ -229,7 +226,7 @@ function hasRole($role) {
 
 // QR Code generation helper
 function generateStudentQR($student_id) {
-    return base64_encode("KES-SMART-STUDENT-" . $student_id . "-" . date('Y'));
+    return base64_encode("TAC-QR-STUDENT-" . $student_id . "-" . date('Y'));
 }
 
 // Include SMS functions

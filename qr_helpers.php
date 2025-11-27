@@ -13,7 +13,7 @@
  */
 function generateTeacherQR($teacher_id, $section_id, $subject_id) {
     $timestamp = time();
-    $qr_string = "KES-SMART-TEACHER-{$teacher_id}-{$section_id}-{$subject_id}-{$timestamp}";
+    $qr_string = "TAC-QR-TEACHER-{$teacher_id}-{$section_id}-{$subject_id}-{$timestamp}";
     return base64_encode($qr_string);
 }
 
@@ -26,6 +26,27 @@ function validateTeacherQR($qr_data) {
     try {
         $decoded = base64_decode($qr_data);
         
+        // Support new TAC-QR format with timestamp
+        if (preg_match('/^TAC-QR-TEACHER-(\d+)-(\d+)-(\d+)-(\d+)$/', $decoded, $matches)) {
+            return [
+                'teacher_id' => intval($matches[1]),
+                'section_id' => intval($matches[2]),
+                'subject_id' => intval($matches[3]),
+                'timestamp' => intval($matches[4])
+            ];
+        }
+        
+        // Support new TAC-QR format without timestamp
+        if (preg_match('/^TAC-QR-TEACHER-(\d+)-(\d+)-(\d+)$/', $decoded, $matches)) {
+            return [
+                'teacher_id' => intval($matches[1]),
+                'section_id' => intval($matches[2]),
+                'subject_id' => intval($matches[3]),
+                'timestamp' => time()
+            ];
+        }
+        
+        // Support legacy KES-SMART format with timestamp
         if (preg_match('/^KES-SMART-TEACHER-(\d+)-(\d+)-(\d+)-(\d+)$/', $decoded, $matches)) {
             return [
                 'teacher_id' => intval($matches[1]),
@@ -35,7 +56,7 @@ function validateTeacherQR($qr_data) {
             ];
         }
         
-        // Support older format without timestamp
+        // Support legacy KES-SMART format without timestamp
         if (preg_match('/^KES-SMART-TEACHER-(\d+)-(\d+)-(\d+)$/', $decoded, $matches)) {
             return [
                 'teacher_id' => intval($matches[1]),
@@ -60,6 +81,15 @@ function validateStudentQR($qr_data) {
     try {
         $decoded = base64_decode($qr_data);
         
+        // Support new TAC-QR format
+        if (preg_match('/^TAC-QR-STUDENT-(\d+)-(\d+)$/', $decoded, $matches)) {
+            return [
+                'student_id' => intval($matches[1]),
+                'year' => intval($matches[2])
+            ];
+        }
+        
+        // Support legacy KES-SMART format for backward compatibility
         if (preg_match('/^KES-SMART-STUDENT-(\d+)-(\d+)$/', $decoded, $matches)) {
             return [
                 'student_id' => intval($matches[1]),

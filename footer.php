@@ -17,8 +17,8 @@
                     </a>
                 </div>
                 
-                <?php if ($user_role == 'teacher' || $user_role == 'admin'): ?>
-                    <!-- QR Scanner - Only for teachers and admins -->
+                <?php if ($user_role == 'teacher'): ?>
+                    <!-- QR Scanner - Only for teachers -->
                     <div class="nav-item">
                         <a href="qr-scanner.php" class="nav-link <?php echo $current_page == 'qr-scanner.php' ? 'active' : ''; ?>">
                             <i class="fas fa-qrcode"></i>
@@ -26,9 +26,8 @@
                         </a>
                     </div>
                     
-                  
 
-                    <!-- Reports for teachers and admins -->
+                    <!-- Reports for teachers only -->
                     <div class="nav-item">
                         <a href="reports.php" class="nav-link <?php echo $current_page == 'reports.php' ? 'active' : ''; ?>">
                             <i class="fas fa-chart-bar"></i>
@@ -37,7 +36,7 @@
                     </div>
                 <?php endif; ?>
                 
-                <?php if ($user_role == 'student' || $user_role == 'parent' || $user_role == 'teacher' || $user_role == 'admin'): ?>
+                <?php if ($user_role == 'parent' || $user_role == 'teacher'): ?>
                     <!-- Attendance -->
                     <div class="nav-item">
                         <a href="attendance.php" class="nav-link <?php echo $current_page == 'attendance.php' ? 'active' : ''; ?>">
@@ -82,11 +81,13 @@
                     <i class="fas fa-tachometer-alt"></i>
                     <span>Dashboard</span>
                 </a>
+                <?php if ($user_role == 'parent' || $user_role == 'teacher'): ?>
                 <a href="attendance.php" class="nav-link <?php echo ($current_page == 'attendance.php') ? 'active' : ''; ?>">
                     <i class="fas fa-clipboard-check"></i>
                     <span>Attendance</span>
                 </a>
-                <?php if ($user_role == 'teacher' || $user_role == 'admin'): ?>
+                <?php endif; ?>
+                <?php if ($user_role == 'teacher'): ?>
 
                 <a href="qr-scanner.php" class="nav-link <?php echo ($current_page == 'qr-scanner.php') ? 'active' : ''; ?>">
                     <i class="fas fa-qrcode"></i>

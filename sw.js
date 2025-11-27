@@ -1,10 +1,10 @@
-const CACHE_NAME = 'kes-smart-v1.0.7';
+const CACHE_NAME = 'tac-qr-v1.0.7';
 const VERSION = '1.0.7'; // Used for auto-updates - notifications disabled
-const STATIC_CACHE = 'kes-smart-static-v1';
-const DYNAMIC_CACHE = 'kes-smart-dynamic-v1';
-const API_CACHE = 'kes-smart-api-v1';
-const OFFLINE_FALLBACKS = 'kes-smart-offline-v1';
-const AUTH_CACHE = 'kes-smart-auth-v1';
+const STATIC_CACHE = 'tac-qr-static-v1';
+const DYNAMIC_CACHE = 'tac-qr-dynamic-v1';
+const API_CACHE = 'tac-qr-api-v1';
+const OFFLINE_FALLBACKS = 'tac-qr-offline-v1';
+const AUTH_CACHE = 'tac-qr-auth-v1';
 
 // Assets to cache immediately on service worker install
 const urlsToCache = [
@@ -634,7 +634,7 @@ function syncFormData() {
 // Function to get data from IndexedDB
 function getDataFromIndexedDB(storeName) {
   return new Promise((resolve, reject) => {
-    const dbRequest = indexedDB.open('kes-smart-offline-data', 3);
+    const dbRequest = indexedDB.open('tac-qr-offline-data', 3);
     
     dbRequest.onerror = (event) => {
       reject('Could not open IndexedDB');
@@ -666,7 +666,7 @@ function getDataFromIndexedDB(storeName) {
 // Function to clear data from IndexedDB
 function clearDataFromIndexedDB(storeName) {
   return new Promise((resolve, reject) => {
-    const dbRequest = indexedDB.open('kes-smart-offline-data', 3);
+    const dbRequest = indexedDB.open('tac-qr-offline-data', 3);
     
     dbRequest.onerror = (event) => {
       reject('Could not open IndexedDB');
@@ -698,7 +698,7 @@ function clearDataFromIndexedDB(storeName) {
 // Function to remove specific items from IndexedDB
 function removeItemsFromIndexedDB(storeName, ids) {
   return new Promise((resolve, reject) => {
-    const dbRequest = indexedDB.open('kes-smart-offline-data', 3);
+    const dbRequest = indexedDB.open('tac-qr-offline-data', 3);
     
     dbRequest.onerror = (event) => {
       reject('Could not open IndexedDB');
@@ -915,7 +915,7 @@ async function performAutomaticCacheCleanup() {
 async function cleanOldIndexedDBRecords() {
   return new Promise((resolve) => {
     try {
-      const request = indexedDB.open('kes-smart-offline-data', 1);
+      const request = indexedDB.open('tac-qr-offline-data', 1);
       
       request.onsuccess = async (event) => {
         const db = event.target.result;

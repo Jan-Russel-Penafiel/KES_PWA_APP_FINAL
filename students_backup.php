@@ -56,9 +56,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     }
                 }
                 
+                // Hash the password
+                $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+                
                 // Insert student first to get the ID
                 $stmt = $pdo->prepare("INSERT INTO users (username, full_name, password, phone, lrn, role, section_id) VALUES (?, ?, ?, ?, ?, 'student', ?)");
-                $stmt->execute([$username, $full_name, $password, $phone, $lrn ?: null, $section_id]);
+                $stmt->execute([$username, $full_name, $hashed_password, $phone, $lrn ?: null, $section_id]);
                 
                 // Get the inserted student ID
                 $student_id = $pdo->lastInsertId();
@@ -108,9 +111,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         redirect('students.php');
                     }
                     
-                    // Update with password
+                    // Hash the password and update
+                    $hashed_password = password_hash($password, PASSWORD_DEFAULT);
                     $stmt = $pdo->prepare("UPDATE users SET full_name = ?, password = ?, phone = ?, lrn = ?, section_id = ? WHERE id = ? AND role = 'student'");
-                    $stmt->execute([$full_name, $password, $phone, $lrn ?: null, $section_id, $student_id]);
+                    $stmt->execute([$full_name, $hashed_password, $phone, $lrn ?: null, $section_id, $student_id]);
                 } else {
                     // Update without changing password
                     $stmt = $pdo->prepare("UPDATE users SET full_name = ?, phone = ?, lrn = ?, section_id = ? WHERE id = ? AND role = 'student'");
@@ -524,10 +528,10 @@ try {
                                 </div>
                             <?php endif; ?>
                             
-                            <?php if ($student['phone']): ?>
+                            <?php if ($student['email']): ?>
                                 <div class="d-flex align-items-center mb-2">
-                                    <i class="fas fa-phone me-2 text-info flex-shrink-0"></i>
-                                    <span class="text-truncate"><?php echo $student['phone']; ?></span>
+                                    <i class="fas fa-envelope me-2 text-info flex-shrink-0"></i>
+                                    <span class="text-truncate"><?php echo $student['email']; ?></span>
                                 </div>
                             <?php endif; ?>
                             
@@ -647,8 +651,8 @@ try {
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="mb-3">
-                                    <label for="password" class="form-label">Password</label>
-                                    <div class="input-group"><input type="password" class="form-control" id="password" name="password" required><button class="btn btn-outline-secondary" type="button" id="toggleAddPassword"><i class="fas fa-eye" id="toggleAddIcon"></i></button></div><div class="form-text">Minimum 6 characters required</div>
+                                    <label for="email" class="form-label">Email</label>
+                                    <input type="email" class="form-control" id="email" name="email">
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -701,8 +705,8 @@ try {
                         </div>
                         
                         <div class="mb-3">
-                            <label for="edit_password" class="form-label">Password</label>
-                            <div class="input-group"><input type="password" class="form-control form-control-lg" id="edit_password" name="password" placeholder="Leave blank to keep current password"><button class="btn btn-outline-secondary" type="button" id="toggleEditPassword"><i class="fas fa-eye" id="toggleEditIcon"></i></button></div><div class="form-text">Leave empty to keep current password. Minimum 6 characters if changing.</div>
+                            <label for="edit_email" class="form-label">Email</label>
+                            <input type="email" class="form-control form-control-lg" id="edit_email" name="email">
                         </div>
                         
                         <div class="mb-3">
@@ -1006,33 +1010,6 @@ document.getElementById('edit_lrn')?.addEventListener('input', function() {
     }
 });
 
-// Password visibility toggles
-document.getElementById('toggleAddPassword')?.addEventListener('click', function() {
-    const passwordField = document.getElementById('password');
-    const toggleIcon = document.getElementById('toggleAddIcon');
-    
-    if (passwordField.type === 'password') {
-        passwordField.type = 'text';
-        toggleIcon.className = 'fas fa-eye-slash';
-    } else {
-        passwordField.type = 'password';
-        toggleIcon.className = 'fas fa-eye';
-    }
-});
-
-document.getElementById('toggleEditPassword')?.addEventListener('click', function() {
-    const passwordField = document.getElementById('edit_password');
-    const toggleIcon = document.getElementById('toggleEditIcon');
-    
-    if (passwordField.type === 'password') {
-        passwordField.type = 'text';
-        toggleIcon.className = 'fas fa-eye-slash';
-    } else {
-        passwordField.type = 'password';
-        toggleIcon.className = 'fas fa-eye';
-    }
-});
-
 // Initialize Select2 when modals are shown
 document.addEventListener('shown.bs.modal', function(event) {
     if (typeof jQuery !== 'undefined' && typeof jQuery.fn.select2 !== 'undefined') {
@@ -1091,7 +1068,3 @@ document.addEventListener('shown.bs.modal', function(event) {
     }
 }
 </style>
-
-
-
-

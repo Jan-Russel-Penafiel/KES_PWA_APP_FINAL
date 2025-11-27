@@ -238,11 +238,12 @@ echo '<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/selec
     }
 </style>';
 
-// Get available sections and students based on user role
+// Get available sections, students, and subjects based on user role
 try {
     if ($user_role == 'admin') {
         $sections = $pdo->query("SELECT id, section_name, grade_level FROM sections WHERE status = 'active' ORDER BY section_name")->fetchAll(PDO::FETCH_ASSOC);
         $students = $pdo->query("SELECT id, full_name, username FROM users WHERE role = 'student' AND status = 'active' ORDER BY full_name")->fetchAll(PDO::FETCH_ASSOC);
+        $subjects = $pdo->query("SELECT id, subject_name, subject_code FROM subjects WHERE status = 'active' ORDER BY subject_name")->fetchAll(PDO::FETCH_ASSOC);
     } elseif ($user_role == 'teacher') {
         $sections_stmt = $pdo->prepare("SELECT id, section_name, grade_level FROM sections WHERE teacher_id = ? AND status = 'active' ORDER BY section_name");
         $sections_stmt->execute([$current_user['id']]);
@@ -251,18 +252,25 @@ try {
         $students_stmt = $pdo->prepare("SELECT id, full_name, username FROM users WHERE role = 'student' AND status = 'active' AND section_id IN (SELECT id FROM sections WHERE teacher_id = ?) ORDER BY full_name");
         $students_stmt->execute([$current_user['id']]);
         $students = $students_stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        $subjects_stmt = $pdo->prepare("SELECT id, subject_name, subject_code FROM subjects WHERE teacher_id = ? AND status = 'active' ORDER BY subject_name");
+        $subjects_stmt->execute([$current_user['id']]);
+        $subjects = $subjects_stmt->fetchAll(PDO::FETCH_ASSOC);
     } elseif ($user_role == 'parent') {
         $sections = [];
         $students_stmt = $pdo->prepare("SELECT u.id, u.full_name, u.username FROM users u JOIN student_parents sp ON u.id = sp.student_id WHERE sp.parent_id = ? ORDER BY u.full_name");
         $students_stmt->execute([$current_user['id']]);
         $students = $students_stmt->fetchAll(PDO::FETCH_ASSOC);
+        $subjects = [];
     } else {
         $sections = [];
         $students = [$current_user];
+        $subjects = [];
     }
 } catch(PDOException $e) {
     $sections = [];
     $students = [];
+    $subjects = [];
 }
 
 function generateReport($type, $format) {
@@ -413,7 +421,7 @@ function generateReport($type, $format) {
                 // For each section, get the students
                 foreach ($sections as &$section) {
                     $students_query = "
-                        SELECT id, full_name, username, lrn, email, phone
+                        SELECT id, full_name, username, lrn, phone
                         FROM users 
                         WHERE section_id = ? AND role = 'student' AND status = 'active'
                         ORDER BY full_name
@@ -438,7 +446,7 @@ function generateReport($type, $format) {
                 
                 // Get students in this section
                 $students_query = "
-                    SELECT id, full_name, username, lrn, email, phone, profile_image, qr_code
+                    SELECT id, full_name, username, lrn, phone, profile_image, qr_code
                     FROM users 
                     WHERE section_id = ? AND role = 'student' AND status = 'active'
                     ORDER BY full_name
@@ -659,6 +667,98 @@ function generateReport($type, $format) {
                 ];
             }
             break;
+            
+        case 'attendance_per_subject':
+            $filename = 'attendance_per_subject_' . date('Y-m-d');
+            $subject_id = $_GET['subject_id'] ?? '';
+            $section_id = $_GET['section_id'] ?? '';
+            $date_from = $_GET['date_from'] ?? date('Y-m-01');
+            $date_to = $_GET['date_to'] ?? date('Y-m-t');
+            
+            if (!$subject_id) {
+                // Summary for all subjects
+                $query = "
+                    SELECT s.id, s.subject_name, s.subject_code, sec.section_name, sec.grade_level,
+                           u.full_name as teacher_name,
+                           COUNT(a.id) as total_records,
+                           SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END) as present_count,
+                           SUM(CASE WHEN a.status = 'absent' THEN 1 ELSE 0 END) as absent_count,
+                           SUM(CASE WHEN a.status = 'late' THEN 1 ELSE 0 END) as late_count,
+                           SUM(CASE WHEN a.status = 'out' THEN 1 ELSE 0 END) as out_count
+                    FROM subjects s
+                    LEFT JOIN sections sec ON s.section_id = sec.id
+                    LEFT JOIN users u ON s.teacher_id = u.id
+                    LEFT JOIN attendance a ON s.id = a.subject_id AND a.attendance_date BETWEEN ? AND ?
+                    WHERE s.status = 'active'
+                ";
+                $params = [$date_from, $date_to];
+                
+                if ($section_id) {
+                    $query .= " AND s.section_id = ?";
+                    $params[] = $section_id;
+                }
+                
+                if ($user_role == 'teacher') {
+                    $query .= " AND s.teacher_id = ?";
+                    $params[] = $current_user['id'];
+                }
+                
+                $query .= " GROUP BY s.id ORDER BY sec.grade_level, sec.section_name, s.subject_name";
+                
+                $stmt = $pdo->prepare($query);
+                $stmt->execute($params);
+                $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } else {
+                // Detailed attendance for a specific subject
+                $subject_query = "
+                    SELECT s.*, sec.section_name, sec.grade_level, u.full_name as teacher_name
+                    FROM subjects s
+                    LEFT JOIN sections sec ON s.section_id = sec.id
+                    LEFT JOIN users u ON s.teacher_id = u.id
+                    WHERE s.id = ?
+                ";
+                $subject_stmt = $pdo->prepare($subject_query);
+                $subject_stmt->execute([$subject_id]);
+                $subject = $subject_stmt->fetch(PDO::FETCH_ASSOC);
+                
+                // Get attendance records for this subject
+                $attendance_query = "
+                    SELECT a.*, st.full_name as student_name, st.username, sec.section_name
+                    FROM attendance a
+                    JOIN users st ON a.student_id = st.id
+                    JOIN sections sec ON a.section_id = sec.id
+                    WHERE a.subject_id = ? AND a.attendance_date BETWEEN ? AND ?
+                    ORDER BY a.attendance_date DESC, st.full_name
+                ";
+                $attendance_stmt = $pdo->prepare($attendance_query);
+                $attendance_stmt->execute([$subject_id, $date_from, $date_to]);
+                $attendance = $attendance_stmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                // Get summary by student
+                $summary_query = "
+                    SELECT st.id, st.full_name, st.username,
+                           COUNT(a.id) as total_records,
+                           SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END) as present_count,
+                           SUM(CASE WHEN a.status = 'absent' THEN 1 ELSE 0 END) as absent_count,
+                           SUM(CASE WHEN a.status = 'late' THEN 1 ELSE 0 END) as late_count,
+                           SUM(CASE WHEN a.status = 'out' THEN 1 ELSE 0 END) as out_count
+                    FROM users st
+                    LEFT JOIN attendance a ON st.id = a.student_id AND a.subject_id = ? AND a.attendance_date BETWEEN ? AND ?
+                    WHERE st.role = 'student' AND st.status = 'active'
+                    GROUP BY st.id
+                    ORDER BY st.full_name
+                ";
+                $summary_stmt = $pdo->prepare($summary_query);
+                $summary_stmt->execute([$subject_id, $date_from, $date_to]);
+                $summary = $summary_stmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                $data = [
+                    'subject' => $subject,
+                    'attendance' => $attendance,
+                    'summary' => $summary
+                ];
+            }
+            break;
     }
     
     if ($format == 'csv') {
@@ -766,7 +866,6 @@ function outputHTML($data, $filename, $type) {
                 echo "<th>LRN</th>";
                 echo "<th>Section</th>";
                 echo "<th>Grade Level</th>";
-                echo "<th>Email</th>";
                 echo "<th>Phone</th>";
                 echo "</tr>";
                 
@@ -778,7 +877,7 @@ function outputHTML($data, $filename, $type) {
                     echo "<td>" . htmlspecialchars($row['lrn'] ?? '') . "</td>";
                     echo "<td>" . htmlspecialchars($row['section_name'] ?? '') . "</td>";
                     echo "<td>" . htmlspecialchars($row['grade_level'] ?? '') . "</td>";
-                    echo "<td>" . htmlspecialchars($row['email'] ?? '') . "</td>";
+
                     echo "<td>" . htmlspecialchars($row['phone'] ?? '') . "</td>";
                     echo "</tr>";
                 }
@@ -799,7 +898,7 @@ function outputHTML($data, $filename, $type) {
                     echo "<div class='student-info'>";
                     echo "<div><span class='student-label'>Username:</span> " . htmlspecialchars($data['username']) . "</div>";
                     echo "<div><span class='student-label'>LRN:</span> " . htmlspecialchars($data['lrn'] ?? 'Not set') . "</div>";
-                    echo "<div><span class='student-label'>Email:</span> " . htmlspecialchars($data['email'] ?? 'Not set') . "</div>";
+
                     echo "<div><span class='student-label'>Phone:</span> " . htmlspecialchars($data['phone'] ?? 'Not set') . "</div>";
                     echo "<div><span class='student-label'>Section:</span> " . htmlspecialchars($data['section_name'] ?? 'Not assigned') . "</div>";
                     echo "<div><span class='student-label'>Grade Level:</span> " . htmlspecialchars($data['grade_level'] ?? 'Not assigned') . "</div>";
@@ -825,7 +924,7 @@ function outputHTML($data, $filename, $type) {
                         echo "<div class='student-info'>";
                         echo "<div><span class='student-label'>Username:</span> " . htmlspecialchars($student['username']) . "</div>";
                         echo "<div><span class='student-label'>LRN:</span> " . htmlspecialchars($student['lrn'] ?? 'Not set') . "</div>";
-                        echo "<div><span class='student-label'>Email:</span> " . htmlspecialchars($student['email'] ?? 'Not set') . "</div>";
+
                         echo "<div><span class='student-label'>Phone:</span> " . htmlspecialchars($student['phone'] ?? 'Not set') . "</div>";
                         echo "<div><span class='student-label'>Section:</span> " . htmlspecialchars($student['section_name'] ?? 'Not assigned') . "</div>";
                         echo "<div><span class='student-label'>Grade Level:</span> " . htmlspecialchars($student['grade_level'] ?? 'Not assigned') . "</div>";
@@ -903,7 +1002,6 @@ function outputHTML($data, $filename, $type) {
                         echo "<th>Name</th>";
                         echo "<th>Username</th>";
                         echo "<th>LRN</th>";
-                        echo "<th>Email</th>";
                         echo "<th>Phone</th>";
                         echo "</tr>";
                         
@@ -913,7 +1011,6 @@ function outputHTML($data, $filename, $type) {
                             echo "<td>" . htmlspecialchars($student['full_name']) . "</td>";
                             echo "<td>" . htmlspecialchars($student['username']) . "</td>";
                             echo "<td>" . htmlspecialchars($student['lrn'] ?? '') . "</td>";
-                            echo "<td>" . htmlspecialchars($student['email'] ?? '') . "</td>";
                             echo "<td>" . htmlspecialchars($student['phone'] ?? '') . "</td>";
                             echo "</tr>";
                         }
@@ -938,7 +1035,6 @@ function outputHTML($data, $filename, $type) {
                             echo "<th>Name</th>";
                             echo "<th>Username</th>";
                             echo "<th>LRN</th>";
-                            echo "<th>Email</th>";
                             echo "<th>Phone</th>";
                             echo "</tr>";
                             
@@ -948,7 +1044,6 @@ function outputHTML($data, $filename, $type) {
                                 echo "<td>" . htmlspecialchars($student['full_name']) . "</td>";
                                 echo "<td>" . htmlspecialchars($student['username']) . "</td>";
                                 echo "<td>" . htmlspecialchars($student['lrn'] ?? '') . "</td>";
-                                echo "<td>" . htmlspecialchars($student['email'] ?? '') . "</td>";
                                 echo "<td>" . htmlspecialchars($student['phone'] ?? '') . "</td>";
                                 echo "</tr>";
                             }
@@ -1235,6 +1330,126 @@ function outputHTML($data, $filename, $type) {
             }
             break;
             
+        case 'attendance_per_subject':
+            if (!empty($data)) {
+                // Check if it's a single subject or multiple subjects
+                if (isset($data['subject'])) {
+                    // Single subject view
+                    $subject = $data['subject'];
+                    $attendance = $data['attendance'];
+                    $summary = $data['summary'];
+                    
+                    echo "<div class='student-card'>";
+                    echo "<h2>" . htmlspecialchars($subject['subject_name']) . "</h2>";
+                    
+                    echo "<div class='student-info'>";
+                    echo "<div><span class='student-label'>Subject Code:</span> " . htmlspecialchars($subject['subject_code'] ?? 'Not set') . "</div>";
+                    echo "<div><span class='student-label'>Section:</span> " . htmlspecialchars($subject['section_name'] ?? 'Not assigned') . "</div>";
+                    echo "<div><span class='student-label'>Grade Level:</span> " . htmlspecialchars($subject['grade_level'] ?? 'Not assigned') . "</div>";
+                    echo "<div><span class='student-label'>Teacher:</span> " . htmlspecialchars($subject['teacher_name'] ?? 'Not assigned') . "</div>";
+                    echo "</div>";
+                    
+                    // Attendance summary by student
+                    echo "<div class='summary-box'>";
+                    echo "<h3>Student Attendance Summary</h3>";
+                    echo "<table>";
+                    echo "<tr>";
+                    echo "<th>Student</th>";
+                    echo "<th>Total Records</th>";
+                    echo "<th>Present</th>";
+                    echo "<th>Absent</th>";
+                    echo "<th>Late</th>";
+                    echo "<th>Out</th>";
+                    echo "<th>Attendance Rate</th>";
+                    echo "</tr>";
+                    
+                    foreach ($summary as $student) {
+                        $attendance_rate = $student['total_records'] > 0 ? 
+                            round(($student['present_count'] / $student['total_records']) * 100, 1) : 0;
+                        
+                        echo "<tr>";
+                        echo "<td>" . htmlspecialchars($student['full_name']) . "</td>";
+                        echo "<td>" . htmlspecialchars($student['total_records']) . "</td>";
+                        echo "<td class='status-present'>" . htmlspecialchars($student['present_count']) . "</td>";
+                        echo "<td class='status-absent'>" . htmlspecialchars($student['absent_count']) . "</td>";
+                        echo "<td class='status-late'>" . htmlspecialchars($student['late_count']) . "</td>";
+                        echo "<td class='status-info'>" . htmlspecialchars($student['out_count']) . "</td>";
+                        echo "<td>" . $attendance_rate . "%</td>";
+                        echo "</tr>";
+                    }
+                    echo "</table>";
+                    echo "</div>";
+                    
+                    // Detailed attendance records
+                    if (!empty($attendance)) {
+                        echo "<div class='section'>";
+                        echo "<h3>Detailed Attendance Records</h3>";
+                        echo "<table>";
+                        echo "<tr>";
+                        echo "<th>Date</th>";
+                        echo "<th>Student</th>";
+                        echo "<th>Status</th>";
+                        echo "<th>Time In</th>";
+                        echo "<th>Time Out</th>";
+                        echo "<th>Notes</th>";
+                        echo "</tr>";
+                        
+                        foreach ($attendance as $record) {
+                            echo "<tr>";
+                            echo "<td>" . htmlspecialchars($record['attendance_date']) . "</td>";
+                            echo "<td>" . htmlspecialchars($record['student_name']) . "</td>";
+                            echo "<td class='status-" . $record['status'] . "'>" . ucfirst(htmlspecialchars($record['status'])) . "</td>";
+                            echo "<td>" . htmlspecialchars($record['time_in'] ?? '') . "</td>";
+                            echo "<td>" . htmlspecialchars($record['time_out'] ?? '') . "</td>";
+                            echo "<td>" . htmlspecialchars($record['notes'] ?? '') . "</td>";
+                            echo "</tr>";
+                        }
+                        echo "</table>";
+                        echo "</div>";
+                    }
+                    
+                    echo "</div>";
+                } else {
+                    // Multiple subjects summary
+                    echo "<h2>Attendance Per Subject Summary</h2>";
+                    echo "<table>";
+                    echo "<tr>";
+                    echo "<th>Subject</th>";
+                    echo "<th>Code</th>";
+                    echo "<th>Section</th>";
+                    echo "<th>Teacher</th>";
+                    echo "<th>Total Records</th>";
+                    echo "<th>Present</th>";
+                    echo "<th>Absent</th>";
+                    echo "<th>Late</th>";
+                    echo "<th>Out</th>";
+                    echo "<th>Attendance Rate</th>";
+                    echo "</tr>";
+                    
+                    foreach ($data as $subject) {
+                        $attendance_rate = $subject['total_records'] > 0 ? 
+                            round(($subject['present_count'] / $subject['total_records']) * 100, 1) : 0;
+                            
+                        echo "<tr>";
+                        echo "<td>" . htmlspecialchars($subject['subject_name']) . "</td>";
+                        echo "<td>" . htmlspecialchars($subject['subject_code'] ?? '') . "</td>";
+                        echo "<td>" . htmlspecialchars($subject['section_name'] ?? 'Not assigned') . "</td>";
+                        echo "<td>" . htmlspecialchars($subject['teacher_name'] ?? 'Not assigned') . "</td>";
+                        echo "<td>" . htmlspecialchars($subject['total_records']) . "</td>";
+                        echo "<td class='status-present'>" . htmlspecialchars($subject['present_count']) . "</td>";
+                        echo "<td class='status-absent'>" . htmlspecialchars($subject['absent_count']) . "</td>";
+                        echo "<td class='status-late'>" . htmlspecialchars($subject['late_count']) . "</td>";
+                        echo "<td class='status-info'>" . htmlspecialchars($subject['out_count']) . "</td>";
+                        echo "<td>" . $attendance_rate . "%</td>";
+                        echo "</tr>";
+                    }
+                    echo "</table>";
+                }
+            } else {
+                echo "<p>No subject attendance data found.</p>";
+            }
+            break;
+            
         default:
             echo "<p>No data found or unsupported report type.</p>";
     }
@@ -1332,7 +1547,6 @@ function generatePDFContent($data, $filename, $type) {
                 $html .= '<th style="font-weight: bold; text-align: center;">ID</th>';
                 $html .= '<th style="font-weight: bold; text-align: center;">Name</th>';
                 $html .= '<th style="font-weight: bold; text-align: center;">Username</th>';
-                $html .= '<th style="font-weight: bold; text-align: center;">Email</th>';
                 $html .= '<th style="font-weight: bold; text-align: center;">Section</th>';
                 $html .= '<th style="font-weight: bold; text-align: center;">Grade Level</th>';
                 $html .= '<th style="font-weight: bold; text-align: center;">Status</th>';
@@ -1345,7 +1559,6 @@ function generatePDFContent($data, $filename, $type) {
                     $html .= '<td style="text-align: center;">' . htmlspecialchars($row['id']) . '</td>';
                     $html .= '<td>' . htmlspecialchars($row['full_name']) . '</td>';
                     $html .= '<td>' . htmlspecialchars($row['username']) . '</td>';
-                    $html .= '<td>' . htmlspecialchars($row['email'] ?? 'N/A') . '</td>';
                     $html .= '<td>' . htmlspecialchars($row['section_name'] ?? 'N/A') . '</td>';
                     $html .= '<td style="text-align: center;">' . htmlspecialchars($row['grade_level'] ?? 'N/A') . '</td>';
                     $html .= '<td style="text-align: center;"><strong>' . htmlspecialchars($row['status']) . '</strong></td>';
@@ -1375,7 +1588,6 @@ function generatePDFContent($data, $filename, $type) {
                     $html .= '<table style="width: 100%; margin-top: 15px;">';
                     $html .= '<tr><td style="width: 30%; font-weight: bold;">Name:</td><td>' . htmlspecialchars($data['full_name']) . '</td></tr>';
                     $html .= '<tr><td style="width: 30%; font-weight: bold;">Username:</td><td>' . htmlspecialchars($data['username']) . '</td></tr>';
-                    $html .= '<tr><td style="width: 30%; font-weight: bold;">Email:</td><td>' . htmlspecialchars($data['email'] ?? 'N/A') . '</td></tr>';
                     $html .= '<tr><td style="width: 30%; font-weight: bold;">Section:</td><td>' . htmlspecialchars($data['section_name'] ?? 'N/A') . '</td></tr>';
                     $html .= '<tr><td style="width: 30%; font-weight: bold;">Grade Level:</td><td>' . htmlspecialchars($data['grade_level'] ?? 'N/A') . '</td></tr>';
                     $html .= '<tr><td style="width: 30%; font-weight: bold;">Status:</td><td><strong>' . htmlspecialchars($data['status']) . '</strong></td></tr>';
@@ -1393,7 +1605,6 @@ function generatePDFContent($data, $filename, $type) {
                     $html .= '<th style="font-weight: bold; text-align: center;">ID</th>';
                     $html .= '<th style="font-weight: bold; text-align: center;">Name</th>';
                     $html .= '<th style="font-weight: bold; text-align: center;">Username</th>';
-                    $html .= '<th style="font-weight: bold; text-align: center;">Email</th>';
                     $html .= '<th style="font-weight: bold; text-align: center;">Section</th>';
                     $html .= '<th style="font-weight: bold; text-align: center;">Grade Level</th>';
                     $html .= '<th style="font-weight: bold; text-align: center;">Status</th>';
@@ -1407,7 +1618,6 @@ function generatePDFContent($data, $filename, $type) {
                         $html .= '<td style="text-align: center;">' . htmlspecialchars($student['id']) . '</td>';
                         $html .= '<td>' . htmlspecialchars($student['full_name']) . '</td>';
                         $html .= '<td>' . htmlspecialchars($student['username']) . '</td>';
-                        $html .= '<td>' . htmlspecialchars($student['email'] ?? 'N/A') . '</td>';
                         $html .= '<td>' . htmlspecialchars($student['section_name'] ?? 'N/A') . '</td>';
                         $html .= '<td style="text-align: center;">' . htmlspecialchars($student['grade_level'] ?? 'N/A') . '</td>';
                         $html .= '<td style="text-align: center;"><strong>' . htmlspecialchars($student['status']) . '</strong></td>';
@@ -1698,6 +1908,112 @@ function generatePDFContent($data, $filename, $type) {
             }
             break;
             
+        case 'attendance_per_subject':
+            if (!empty($data)) {
+                if (isset($data['subject'])) {
+                    // Single subject view
+                    $subject = $data['subject'];
+                    $attendance = $data['attendance'];
+                    $summary = $data['summary'];
+                    
+                    $html .= '<div style="text-align: center; margin-bottom: 30px; padding: 20px; background-color: #3498db; color: white;">';
+                    $html .= '<h1 style="margin: 0 0 10px 0; font-size: 28px;">Subject Attendance Report</h1>';
+                    $html .= '<h2 style="margin: 0; font-size: 22px;">' . htmlspecialchars($subject['subject_name']) . '</h2>';
+                    $html .= '</div>';
+                    
+                    // Subject information
+                    $html .= '<div style="margin-bottom: 30px; padding: 20px; background-color: #ecf0f1; border-radius: 5px;">';
+                    $html .= '<h3 style="color: #2c3e50; margin-bottom: 15px;">Subject Information</h3>';
+                    $html .= '<table style="width: 100%; font-size: 14px;">';
+                    $html .= '<tr><td style="width: 35%; font-weight: bold; padding: 8px 0;">Subject Code:</td><td style="padding: 8px 0;">' . htmlspecialchars($subject['subject_code'] ?? 'Not set') . '</td></tr>';
+                    $html .= '<tr><td style="width: 35%; font-weight: bold; padding: 8px 0;">Section:</td><td style="padding: 8px 0;">' . htmlspecialchars($subject['section_name'] ?? 'Not assigned') . '</td></tr>';
+                    $html .= '<tr><td style="width: 35%; font-weight: bold; padding: 8px 0;">Grade Level:</td><td style="padding: 8px 0;">' . htmlspecialchars($subject['grade_level'] ?? 'Not assigned') . '</td></tr>';
+                    $html .= '<tr><td style="width: 35%; font-weight: bold; padding: 8px 0;">Teacher:</td><td style="padding: 8px 0;">' . htmlspecialchars($subject['teacher_name'] ?? 'Not assigned') . '</td></tr>';
+                    $html .= '</table>';
+                    $html .= '</div>';
+                    
+                    // Student attendance summary
+                    if (!empty($summary)) {
+                        $html .= '<div style="margin-bottom: 30px;">';
+                        $html .= '<h3 style="color: #2c3e50; margin-bottom: 15px;">Student Attendance Summary</h3>';
+                        $html .= '<table border="1" cellpadding="5" cellspacing="0" style="width: 100%; border-collapse: collapse;">';
+                        $html .= '<thead>';
+                        $html .= '<tr style="background-color: #3498db; color: white;">';
+                        $html .= '<th style="font-weight: bold;">Student</th>';
+                        $html .= '<th style="font-weight: bold;">Total</th>';
+                        $html .= '<th style="font-weight: bold;">Present</th>';
+                        $html .= '<th style="font-weight: bold;">Absent</th>';
+                        $html .= '<th style="font-weight: bold;">Late</th>';
+                        $html .= '<th style="font-weight: bold;">Out</th>';
+                        $html .= '<th style="font-weight: bold;">Rate</th>';
+                        $html .= '</tr>';
+                        $html .= '</thead>';
+                        $html .= '<tbody>';
+                        
+                        foreach ($summary as $student) {
+                            $attendance_rate = $student['total_records'] > 0 ? 
+                                round(($student['present_count'] / $student['total_records']) * 100, 1) : 0;
+                            
+                            $html .= '<tr>';
+                            $html .= '<td>' . htmlspecialchars($student['full_name']) . '</td>';
+                            $html .= '<td style="text-align: center;">' . htmlspecialchars($student['total_records']) . '</td>';
+                            $html .= '<td style="text-align: center; color: #27ae60;">' . htmlspecialchars($student['present_count']) . '</td>';
+                            $html .= '<td style="text-align: center; color: #e74c3c;">' . htmlspecialchars($student['absent_count']) . '</td>';
+                            $html .= '<td style="text-align: center; color: #f39c12;">' . htmlspecialchars($student['late_count']) . '</td>';
+                            $html .= '<td style="text-align: center; color: #3498db;">' . htmlspecialchars($student['out_count']) . '</td>';
+                            $html .= '<td style="text-align: center; font-weight: bold;">' . $attendance_rate . '%</td>';
+                            $html .= '</tr>';
+                        }
+                        $html .= '</tbody>';
+                        $html .= '</table>';
+                        $html .= '</div>';
+                    }
+                } else {
+                    // Multiple subjects summary
+                    $html .= '<div style="margin-bottom: 30px;">';
+                    $html .= '<h2 style="color: #2c3e50; margin-bottom: 15px;">Attendance Per Subject Summary</h2>';
+                    $html .= '<table border="1" cellpadding="5" cellspacing="0" style="width: 100%; border-collapse: collapse;">';
+                    $html .= '<thead>';
+                    $html .= '<tr style="background-color: #3498db; color: white;">';
+                    $html .= '<th style="font-weight: bold;">Subject</th>';
+                    $html .= '<th style="font-weight: bold;">Code</th>';
+                    $html .= '<th style="font-weight: bold;">Section</th>';
+                    $html .= '<th style="font-weight: bold;">Teacher</th>';
+                    $html .= '<th style="font-weight: bold;">Total</th>';
+                    $html .= '<th style="font-weight: bold;">Present</th>';
+                    $html .= '<th style="font-weight: bold;">Absent</th>';
+                    $html .= '<th style="font-weight: bold;">Late</th>';
+                    $html .= '<th style="font-weight: bold;">Out</th>';
+                    $html .= '<th style="font-weight: bold;">Rate</th>';
+                    $html .= '</tr>';
+                    $html .= '</thead>';
+                    $html .= '<tbody>';
+                    
+                    foreach ($data as $subject) {
+                        $attendance_rate = $subject['total_records'] > 0 ? 
+                            round(($subject['present_count'] / $subject['total_records']) * 100, 1) : 0;
+                            
+                        $html .= '<tr>';
+                        $html .= '<td>' . htmlspecialchars($subject['subject_name']) . '</td>';
+                        $html .= '<td>' . htmlspecialchars($subject['subject_code'] ?? '') . '</td>';
+                        $html .= '<td>' . htmlspecialchars($subject['section_name'] ?? 'Not assigned') . '</td>';
+                        $html .= '<td>' . htmlspecialchars($subject['teacher_name'] ?? 'Not assigned') . '</td>';
+                        $html .= '<td style="text-align: center;">' . htmlspecialchars($subject['total_records']) . '</td>';
+                        $html .= '<td style="text-align: center; color: #27ae60;">' . htmlspecialchars($subject['present_count']) . '</td>';
+                        $html .= '<td style="text-align: center; color: #e74c3c;">' . htmlspecialchars($subject['absent_count']) . '</td>';
+                        $html .= '<td style="text-align: center; color: #f39c12;">' . htmlspecialchars($subject['late_count']) . '</td>';
+                        $html .= '<td style="text-align: center; color: #3498db;">' . htmlspecialchars($subject['out_count']) . '</td>';
+                        $html .= '<td style="text-align: center; font-weight: bold;">' . $attendance_rate . '%</td>';
+                        $html .= '</tr>';
+                    }
+                    $html .= '</table>';
+                    $html .= '</div>';
+                }
+            } else {
+                $html .= '<p style="text-align: center; color: #e74c3c;">No subject attendance data found.</p>';
+            }
+            break;
+            
         default:
             $html .= '<p style="text-align: center; color: #e74c3c;">PDF generation not implemented for this report type yet.</p>';
     }
@@ -1783,6 +2099,9 @@ function generatePDFContent($data, $filename, $type) {
                                     </button>
                                     <button class="btn btn-outline-success btn-sm" onclick="showReportModal('attendance_per_student')">
                                         <i class="fas fa-user-graduate me-2"></i>Attendance Per Student
+                                    </button>
+                                    <button class="btn btn-outline-success btn-sm" onclick="showReportModal('attendance_per_subject')">
+                                        <i class="fas fa-book me-2"></i>Attendance Per Subject
                                     </button>
                                     <?php if ($user_role == 'admin' || $user_role == 'teacher'): ?>
                                         <button class="btn btn-outline-success btn-sm" onclick="showReportModal('section_attendance')">
@@ -2013,6 +2332,7 @@ function generatePDFContent($data, $filename, $type) {
                         <option value="qr-codes">QR Codes</option>
                         <option value="attendance-section">Attendance Per Section</option>
                         <option value="attendance-student">Attendance Per Student</option>
+                        <option value="attendance-subject">Attendance Per Subject</option>
                     </select>
                 </div>
                 
@@ -2038,6 +2358,9 @@ function generatePDFContent($data, $filename, $type) {
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="attendance-student-tab" data-bs-toggle="tab" data-bs-target="#attendance-student" type="button" role="tab" aria-controls="attendance-student" aria-selected="false">Attendance Per Student</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="attendance-subject-tab" data-bs-toggle="tab" data-bs-target="#attendance-subject" type="button" role="tab" aria-controls="attendance-subject" aria-selected="false">Attendance Per Subject</button>
                     </li>
                 </ul>
                 
@@ -2066,7 +2389,7 @@ function generatePDFContent($data, $filename, $type) {
                                             <label for="userSearchInput" class="form-label small mb-1">Search</label>
                                             <div class="input-group input-group-sm">
                                                 <span class="input-group-text"><i class="fas fa-search"></i></span>
-                                                <input type="text" class="form-control form-control-sm" id="userSearchInput" placeholder="Name, username, email...">
+                                                <input type="text" class="form-control form-control-sm" id="userSearchInput" placeholder="Name, username...">
                                             </div>
                                         </div>
                                         <div class="col-6 col-md-4">
@@ -2095,7 +2418,7 @@ function generatePDFContent($data, $filename, $type) {
                         <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
                             <?php
                             try {
-                                $query = "SELECT u.id, u.full_name, u.username, u.role, u.email, u.phone, s.section_name, u.status, u.profile_image 
+                                $query = "SELECT u.id, u.full_name, u.username, u.role, u.phone, s.section_name, u.status, u.profile_image 
                                         FROM users u 
                                         LEFT JOIN sections s ON u.section_id = s.id";
                                 
@@ -2154,12 +2477,7 @@ function generatePDFContent($data, $filename, $type) {
                                     echo '</div>'; // End text-center
                                     
                                     echo '<ul class="list-group list-group-flush">';
-                                    if (!empty($user['email'])) {
-                                        echo '<li class="list-group-item px-0 py-2 d-flex align-items-center">';
-                                        echo '<i class="fas fa-envelope text-muted me-2"></i>';
-                                        echo '<span class="small text-truncate">' . htmlspecialchars($user['email']) . '</span>';
-                                        echo '</li>';
-                                    }
+
                                     
                                     if (!empty($user['phone'])) {
                                         echo '<li class="list-group-item px-0 py-2 d-flex align-items-center">';
@@ -2573,7 +2891,7 @@ function generatePDFContent($data, $filename, $type) {
                                 
                                 // Get students in this section
                                 $students_query = "
-                                    SELECT id, full_name, username, lrn, email, phone, profile_image
+                                    SELECT id, full_name, username, lrn, phone, profile_image
                                     FROM users 
                                     WHERE section_id = ? AND role = 'student' AND status = 'active'
                                     ORDER BY full_name
@@ -2617,12 +2935,7 @@ function generatePDFContent($data, $filename, $type) {
                                             echo '</li>';
                                         }
                                         
-                                        if (!empty($student['email'])) {
-                                            echo '<li class="list-group-item px-0 py-2 d-flex align-items-center">';
-                                            echo '<i class="fas fa-envelope text-muted me-2"></i>';
-                                            echo '<span class="small text-truncate">' . htmlspecialchars($student['email']) . '</span>';
-                                            echo '</li>';
-                                        }
+
                                         
                                         if (!empty($student['phone'])) {
                                             echo '<li class="list-group-item px-0 py-2 d-flex align-items-center">';
@@ -2705,7 +3018,7 @@ function generatePDFContent($data, $filename, $type) {
                             try {
                                 // Get students with QR codes
                                 $query = "
-                                    SELECT u.id, u.full_name, u.username, u.lrn, u.qr_code, u.email, u.phone, s.section_name, s.grade_level
+                                    SELECT u.id, u.full_name, u.username, u.lrn, u.qr_code, u.phone, s.section_name, s.grade_level
                                     FROM users u
                                     LEFT JOIN sections s ON u.section_id = s.id
                                     WHERE u.role = 'student' AND u.status = 'active'
@@ -3498,6 +3811,236 @@ function generatePDFContent($data, $filename, $type) {
                         }
                         ?>
                     </div>
+                    
+                    <!-- Attendance Per Subject Tab -->
+                    <div class="tab-pane fade" id="attendance-subject" role="tabpanel" aria-labelledby="attendance-subject-tab">
+                        <div class="mb-3 d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="fas fa-book me-2"></i>Attendance Per Subject Records</h5>
+                            <button class="btn btn-sm btn-outline-secondary print-tab-content" data-target="attendance-subject">
+                                <i class="fas fa-print me-1"></i>Print All
+                            </button>
+                        </div>
+                        
+                        <!-- Search and filter controls -->
+                        <div class="card mb-3">
+                            <div class="card-header p-2 d-md-none">
+                                <button class="btn btn-sm btn-outline-primary w-100" type="button" data-bs-toggle="collapse" data-bs-target="#subjectFiltersCollapse">
+                                    <i class="fas fa-filter me-1"></i>Search & Filters
+                                </button>
+                            </div>
+                            <div class="collapse d-md-block" id="subjectFiltersCollapse">
+                                <div class="card-body p-2 p-md-3">
+                                    <div class="row g-2">
+                                        <div class="col-12 col-md-4">
+                                            <label for="subjectSearchInput" class="form-label small mb-1">Search</label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                                <input type="text" class="form-control form-control-sm" id="subjectSearchInput" placeholder="Subject name, code...">
+                                            </div>
+                                        </div>
+                                        <div class="col-6 col-md-4">
+                                            <label for="subjectSectionFilter" class="form-label small mb-1">Section</label>
+                                            <select class="form-select form-select-sm select2" id="subjectSectionFilter">
+                                                <option value="">All Sections</option>
+                                                <?php foreach ($sections as $section): ?>
+                                                    <option value="<?php echo $section['id']; ?>"><?php echo htmlspecialchars($section['section_name']); ?> - <?php echo htmlspecialchars($section['grade_level']); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-4">
+                                            <label for="subjectAttendanceFilter" class="form-label small mb-1">Attendance Rate</label>
+                                            <select class="form-select form-select-sm select2" id="subjectAttendanceFilter">
+                                                <option value="">All Rates</option>
+                                                <option value="excellent">90%+ (Excellent)</option>
+                                                <option value="good">75-89% (Good)</option>
+                                                <option value="fair">60-74% (Fair)</option>
+                                                <option value="poor">Below 60% (Poor)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <?php
+                        try {
+                            // Get subject attendance data for the last 30 days
+                            $date_from = date('Y-m-d', strtotime('-30 days'));
+                            $date_to = date('Y-m-d');
+                            
+                            $query = "
+                                SELECT s.id, s.subject_name, s.subject_code, sec.section_name, sec.grade_level,
+                                       u.full_name as teacher_name,
+                                       COUNT(a.id) as total_records,
+                                       SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END) as present_count,
+                                       SUM(CASE WHEN a.status = 'absent' THEN 1 ELSE 0 END) as absent_count,
+                                       SUM(CASE WHEN a.status = 'late' THEN 1 ELSE 0 END) as late_count,
+                                       SUM(CASE WHEN a.status = 'out' THEN 1 ELSE 0 END) as out_count
+                                FROM subjects s
+                                LEFT JOIN sections sec ON s.section_id = sec.id
+                                LEFT JOIN users u ON s.teacher_id = u.id
+                                LEFT JOIN attendance a ON s.id = a.subject_id AND a.attendance_date BETWEEN ? AND ?
+                                WHERE s.status = 'active'
+                            ";
+                            $params = [$date_from, $date_to];
+                            
+                            if ($user_role == 'teacher') {
+                                $query .= " AND s.teacher_id = ?";
+                                $params[] = $current_user['id'];
+                            }
+                            
+                            $query .= " GROUP BY s.id ORDER BY sec.grade_level, sec.section_name, s.subject_name";
+                            
+                            $stmt = $pdo->prepare($query);
+                            $stmt->execute($params);
+                            $subjects = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                            
+                            echo '<div class="mb-3 d-flex justify-content-between align-items-center">';
+                            echo '<h5 class="mb-0">Subject Attendance Summary (Last 30 Days)</h5>';
+                            echo '<span class="badge bg-secondary">' . date('M d, Y', strtotime($date_from)) . ' - ' . date('M d, Y', strtotime($date_to)) . '</span>';
+                            echo '</div>';
+                            
+                            echo '<div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">';
+                            
+                            foreach ($subjects as $subject) {
+                                // Calculate attendance percentage
+                                $total_days = $subject['total_records'] > 0 ? $subject['total_records'] : 1;
+                                $present_percentage = round(($subject['present_count'] / $total_days) * 100);
+                                
+                                // Determine status color based on percentage
+                                if ($present_percentage >= 90) {
+                                    $status_color = 'success';
+                                } elseif ($present_percentage >= 75) {
+                                    $status_color = 'warning';
+                                } else {
+                                    $status_color = 'danger';
+                                }
+                                
+                                echo '<div class="col">';
+                                echo '<div class="card h-100 border-' . $status_color . ' shadow-sm">';
+                                
+                                echo '<div class="card-header bg-' . $status_color . ' bg-opacity-10 d-flex justify-content-between align-items-center">';
+                                echo '<span class="fw-bold">' . htmlspecialchars($subject['subject_name']) . '</span>';
+                                echo '<span class="badge bg-' . $status_color . '">' . $present_percentage . '%</span>';
+                                echo '</div>';
+                                
+                                echo '<div class="card-body">';
+                                
+                                // Subject info
+                                echo '<div class="d-flex align-items-center mb-3">';
+                                
+                                // Subject icon
+                                echo '<div class="me-3">';
+                                echo '<div class="bg-primary bg-opacity-25 rounded-circle d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">';
+                                echo '<i class="fas fa-book fa-lg text-primary"></i>';
+                                echo '</div>';
+                                echo '</div>';
+                                
+                                echo '<div>';
+                                echo '<p class="text-muted small mb-0">' . htmlspecialchars($subject['subject_code'] ?? 'No Code') . '</p>';
+                                echo '<p class="small mb-0">' . htmlspecialchars($subject['section_name'] ?? 'No Section') . ' - ' . htmlspecialchars($subject['grade_level'] ?? 'No Grade') . '</p>';
+                                echo '<p class="small mb-0 text-info">👨‍🏫 ' . htmlspecialchars($subject['teacher_name'] ?? 'No Teacher') . '</p>';
+                                echo '</div>';
+                                
+                                echo '</div>';
+                                
+                                // Attendance stats
+                                echo '<div class="mb-3">';
+                                echo '<div class="progress" style="height: 10px;">';
+                                echo '<div class="progress-bar bg-success" role="progressbar" style="width: ' . ($subject['present_count'] / $total_days * 100) . '%"></div>';
+                                echo '<div class="progress-bar bg-warning" role="progressbar" style="width: ' . ($subject['late_count'] / $total_days * 100) . '%"></div>';
+                                echo '<div class="progress-bar bg-danger" role="progressbar" style="width: ' . ($subject['absent_count'] / $total_days * 100) . '%"></div>';
+                                echo '<div class="progress-bar bg-info" role="progressbar" style="width: ' . ($subject['out_count'] / $total_days * 100) . '%"></div>';
+                                echo '</div>';
+                                echo '</div>';
+                                
+                                echo '<div class="row text-center g-2 mb-3">';
+                                
+                                echo '<div class="col-3">';
+                                echo '<div class="border rounded p-2">';
+                                echo '<h5 class="text-success mb-0">' . $subject['present_count'] . '</h5>';
+                                echo '<small class="text-muted">Present</small>';
+                                echo '</div>';
+                                echo '</div>';
+                                
+                                echo '<div class="col-3">';
+                                echo '<div class="border rounded p-2">';
+                                echo '<h5 class="text-danger mb-0">' . $subject['absent_count'] . '</h5>';
+                                echo '<small class="text-muted">Absent</small>';
+                                echo '</div>';
+                                echo '</div>';
+                                
+                                echo '<div class="col-3">';
+                                echo '<div class="border rounded p-2">';
+                                echo '<h5 class="text-warning mb-0">' . $subject['late_count'] . '</h5>';
+                                echo '<small class="text-muted">Late</small>';
+                                echo '</div>';
+                                echo '</div>';
+                                
+                                echo '<div class="col-3">';
+                                echo '<div class="border rounded p-2">';
+                                echo '<h5 class="text-info mb-0">' . $subject['out_count'] . '</h5>';
+                                echo '<small class="text-muted">Out</small>';
+                                echo '</div>';
+                                echo '</div>';
+                                
+                                echo '</div>';
+                                
+                                // Get recent attendance for this subject
+                                $recent_query = "
+                                    SELECT a.attendance_date, a.status, COUNT(CASE WHEN a.status = 'present' THEN 1 END) as present,
+                                           COUNT(CASE WHEN a.status = 'absent' THEN 1 END) as absent,
+                                           COUNT(CASE WHEN a.status = 'late' THEN 1 END) as late,
+                                           COUNT(*) as total_students
+                                    FROM attendance a
+                                    WHERE a.subject_id = ? AND a.attendance_date BETWEEN ? AND ?
+                                    GROUP BY a.attendance_date, a.status
+                                    ORDER BY a.attendance_date DESC
+                                    LIMIT 5
+                                ";
+                                $recent_stmt = $pdo->prepare($recent_query);
+                                $recent_stmt->execute([$subject['id'], $date_from, $date_to]);
+                                $recent_records = $recent_stmt->fetchAll(PDO::FETCH_ASSOC);
+                                
+                                if (!empty($recent_records)) {
+                                    echo '<div class="small">';
+                                    echo '<p class="fw-bold mb-2">Recent Activity:</p>';
+                                    
+                                    $displayed_dates = [];
+                                    foreach ($recent_records as $record) {
+                                        $date_key = $record['attendance_date'];
+                                        if (!in_array($date_key, $displayed_dates)) {
+                                            $displayed_dates[] = $date_key;
+                                            
+                                            echo '<div class="d-flex justify-content-between align-items-center mb-1">';
+                                            echo '<span>' . date('M d, Y', strtotime($record['attendance_date'])) . '</span>';
+                                            echo '<span class="small text-muted">' . $record['total_students'] . ' records</span>';
+                                            echo '</div>';
+                                        }
+                                        
+                                        if (count($displayed_dates) >= 5) break;
+                                    }
+                                    
+                                    echo '</div>';
+                                } else {
+                                    echo '<div class="alert alert-info small">No recent attendance records.</div>';
+                                }
+                                
+                                echo '</div>';
+                                echo '</div>';
+                                echo '</div>';
+                            }
+                            
+                            echo '</div>';
+                            
+                            if (empty($subjects)) {
+                                echo '<div class="alert alert-info">No subject attendance data found.</div>';
+                            }
+                        } catch(PDOException $e) {
+                            echo '<div class="alert alert-danger">Error loading subject attendance data: ' . htmlspecialchars($e->getMessage()) . '</div>';
+                        }
+                        ?>
+                    </div>
                 </div>
             </div>
         </div>
@@ -3561,6 +4104,23 @@ function generatePDFContent($data, $filename, $type) {
                                 <?php endforeach; ?>
                             </select>
                         </div>
+                    </div>
+                    
+                    <!-- Subject selection -->
+                    <div class="mb-3" id="subjectSelection" style="display: none;">
+                        <label for="subjectId" class="form-label">Subject <small class="text-muted">(Optional)</small></label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-book"></i></span>
+                            <select class="form-select select2" id="subjectId" name="subject_id">
+                                <option value="">All Subjects</option>
+                                <?php foreach ($subjects as $subject): ?>
+                                    <option value="<?php echo $subject['id']; ?>">
+                                        <?php echo $subject['subject_name']; ?><?php echo !empty($subject['subject_code']) ? ' (' . $subject['subject_code'] . ')' : ''; ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="form-text">Leave empty to generate report for all subjects</div>
                     </div>
                     
                     <!-- Date range -->
@@ -3660,11 +4220,13 @@ function showReportModal(type) {
     // Show/hide form fields based on report type
     const studentSelection = document.getElementById('studentSelection');
     const sectionSelection = document.getElementById('sectionSelection');
+    const subjectSelection = document.getElementById('subjectSelection');
     const dateSelection = document.getElementById('dateSelection');
     
     // Reset visibility
     studentSelection.style.display = 'none';
     sectionSelection.style.display = 'none';
+    subjectSelection.style.display = 'none';
     dateSelection.style.display = 'none';
     
     switch(type) {
@@ -3695,6 +4257,11 @@ function showReportModal(type) {
             break;
         case 'attendance_per_student':
             studentSelection.style.display = 'block';
+            dateSelection.style.display = 'block';
+            break;
+        case 'attendance_per_subject':
+            subjectSelection.style.display = 'block';
+            sectionSelection.style.display = 'block';
             dateSelection.style.display = 'block';
             break;
     }
@@ -3956,6 +4523,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 case 'attendance-student':
                     html += generateAttendanceStudentTable(tabContent);
                     break;
+                case 'attendance-subject':
+                    html += generateAttendanceSubjectTable(tabContent);
+                    break;
                 default:
                     html += '<div class="alert alert-warning">No table format available for this tab.</div>';
             }
@@ -4015,6 +4585,9 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'attendance-student':
                 csvContent = generateAttendanceStudentCSV(tabContent);
                 break;
+            case 'attendance-subject':
+                csvContent = generateAttendanceSubjectCSV(tabContent);
+                break;
             default:
                 csvContent = 'No data available for export';
         }
@@ -4033,13 +4606,13 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // CSV generation functions for each tab type
     function generateUsersCSV(tabContent) {
-        let csv = 'ID,Name,Username,Email,Role,Status,Section,Phone\n';
+        let csv = 'ID,Name,Username,Role,Status,Section,Phone\n';
         
         const userCards = tabContent.querySelectorAll('.col .card');
         userCards.forEach(function(card) {
             const name = card.querySelector('.card-title')?.textContent?.trim() || '';
             const username = card.querySelector('.text-muted.small')?.textContent?.trim() || '';
-            const email = card.querySelector('.fas.fa-envelope')?.parentElement?.textContent?.replace('📧', '')?.trim() || '';
+
             const badges = card.querySelectorAll('.badge');
             const role = badges[0]?.textContent?.trim() || '';
             const status = badges[1]?.textContent?.trim() || '';
@@ -4047,7 +4620,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const phone = card.querySelector('.fas.fa-phone')?.parentElement?.textContent?.replace('📱', '')?.trim() || '';
             const id = card.querySelector('.card-header .badge')?.textContent?.replace('ID: ', '')?.trim() || '';
             
-            csv += `"${id}","${name}","${username}","${email}","${role}","${status}","${section}","${phone}"\n`;
+            csv += `"${id}","${name}","${username}","${role}","${status}","${section}","${phone}"\n`;
         });
         
         return csv;
@@ -4175,6 +4748,95 @@ document.addEventListener('DOMContentLoaded', function() {
         return csv;
     }
     
+    function generateAttendanceSubjectCSV(tabContent) {
+        let csv = 'Subject Name,Subject Code,Section,Grade Level,Teacher,Total Records,Present,Absent,Late,Out,Attendance Rate\n';
+        
+        const subjectCards = tabContent.querySelectorAll('.col .card');
+        subjectCards.forEach(function(card) {
+            const subjectName = card.querySelector('.fw-bold')?.textContent?.trim() || '';
+            const subjectCode = card.querySelector('.text-muted.small')?.textContent?.trim() || '';
+            const sectionInfo = card.querySelector('.small.mb-0')?.textContent?.trim() || '';
+            const teacherInfo = card.querySelector('.text-info')?.textContent?.trim().replace('👨‍🏫 ', '') || '';
+            
+            // Extract section and grade from the section info
+            const [section, grade] = sectionInfo.split(' - ');
+            
+            // Extract attendance counts from the card content  
+            const present = card.querySelector('.text-success h5')?.textContent?.trim() || '0';
+            const absent = card.querySelector('.text-danger h5')?.textContent?.trim() || '0';
+            const late = card.querySelector('.text-warning h5')?.textContent?.trim() || '0';
+            const out = card.querySelector('.text-info h5')?.textContent?.trim() || '0';
+            const totalRecords = parseInt(present) + parseInt(absent) + parseInt(late) + parseInt(out);
+            
+            // Extract attendance rate from badge
+            const attendanceRate = card.querySelector('.badge')?.textContent?.trim() || '0%';
+            
+            csv += `"${subjectName}","${subjectCode}","${section || ''}","${grade || ''}","${teacherInfo}","${totalRecords}","${present}","${absent}","${late}","${out}","${attendanceRate}"\n`;
+        });
+        
+        return csv;
+    }
+    
+    function generateAttendanceSubjectTable(tabContent) {
+        let html = '<table class="table table-striped table-hover">';
+        html += '<thead class="table-dark">';
+        html += '<tr>';
+        html += '<th>Subject Name</th>';
+        html += '<th>Subject Code</th>';
+        html += '<th>Section</th>';
+        html += '<th>Grade Level</th>';
+        html += '<th>Teacher</th>';
+        html += '<th>Present</th>';
+        html += '<th>Absent</th>';
+        html += '<th>Late</th>';
+        html += '<th>Out</th>';
+        html += '<th>Total Records</th>';
+        html += '<th>Attendance Rate</th>';
+        html += '</tr>';
+        html += '</thead>';
+        html += '<tbody>';
+        
+        const subjectCards = tabContent.querySelectorAll('.col .card');
+        subjectCards.forEach(function(card) {
+            const subjectName = card.querySelector('.fw-bold')?.textContent?.trim() || '';
+            const subjectCode = card.querySelector('.text-muted.small')?.textContent?.trim() || '';
+            const sectionInfo = card.querySelector('.small.mb-0')?.textContent?.trim() || '';
+            const teacherInfo = card.querySelector('.text-info')?.textContent?.trim().replace('👨‍🏫 ', '') || '';
+            
+            // Extract section and grade from the section info
+            const [section, grade] = sectionInfo.split(' - ');
+            
+            // Extract attendance counts from the card content
+            const present = card.querySelector('.text-success h5')?.textContent?.trim() || '0';
+            const absent = card.querySelector('.text-danger h5')?.textContent?.trim() || '0';
+            const late = card.querySelector('.text-warning h5')?.textContent?.trim() || '0';
+            const out = card.querySelector('.text-info h5')?.textContent?.trim() || '0';
+            const totalRecords = parseInt(present) + parseInt(absent) + parseInt(late) + parseInt(out);
+            
+            // Extract attendance rate from badge
+            const attendanceRate = card.querySelector('.badge')?.textContent?.trim() || '0%';
+            
+            html += '<tr>';
+            html += `<td>${subjectName}</td>`;
+            html += `<td>${subjectCode}</td>`;
+            html += `<td>${section || 'N/A'}</td>`;
+            html += `<td>${grade || 'N/A'}</td>`;
+            html += `<td>${teacherInfo || 'N/A'}</td>`;
+            html += `<td><span class="badge bg-success">${present}</span></td>`;
+            html += `<td><span class="badge bg-danger">${absent}</span></td>`;
+            html += `<td><span class="badge bg-warning">${late}</span></td>`;
+            html += `<td><span class="badge bg-info">${out}</span></td>`;
+            html += `<td>${totalRecords}</td>`;
+            html += `<td><span class="badge bg-primary">${attendanceRate}</span></td>`;
+            html += '</tr>';
+        });
+        
+        html += '</tbody>';
+        html += '</table>';
+        
+        return html;
+    }
+    
 
     
     // Function to generate PDF from tab content
@@ -4210,6 +4872,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 break;
             case 'attendance-student':
                 reportType = 'attendance_per_student';
+                // Add default date range
+                queryParams.append('date_from', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
+                queryParams.append('date_to', new Date().toISOString().split('T')[0]);
+                break;
+            case 'attendance-subject':
+                reportType = 'attendance_per_subject';
                 // Add default date range
                 queryParams.append('date_from', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
                 queryParams.append('date_to', new Date().toISOString().split('T')[0]);
@@ -4270,14 +4938,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 const card = $(this).find('.card');
                 const userName = card.find('.card-title').text().toLowerCase();
                 const userUsername = card.find('.text-muted.small').text().toLowerCase();
-                const userEmail = card.find('.fas.fa-envelope').parent().text().toLowerCase();
                 const userRole = card.find('.badge').first().text().toLowerCase();
                 const userStatus = card.find('.badge').last().text().toLowerCase();
                 
                 const matchesSearch = !searchTerm || 
                     userName.includes(searchTerm) || 
-                    userUsername.includes(searchTerm) || 
-                    userEmail.includes(searchTerm);
+                    userUsername.includes(searchTerm);
                     
                 const matchesRole = !roleFilter || userRole.includes(roleFilter);
                 const matchesStatus = !statusFilter || userStatus.includes(statusFilter);
@@ -4536,6 +5202,63 @@ document.addEventListener('DOMContentLoaded', function() {
                 const matchesStatus = !statusFilter || mostCommonStatus === statusFilter;
                 
                 $(this).toggle(matchesSearch && matchesSection && matchesRate && matchesStatus);
+            });
+        });
+        
+        // Attendance Per Subject tab search and filter functionality
+        $('#subjectSearchInput, #subjectSectionFilter, #subjectAttendanceFilter').on('input change', function() {
+            const searchTerm = $('#subjectSearchInput').val().toLowerCase();
+            const sectionFilter = $('#subjectSectionFilter').val();
+            const attendanceFilter = $('#subjectAttendanceFilter').val();
+            
+            $('#attendance-subject .col').each(function() {
+                const card = $(this).find('.card');
+                const subjectName = card.find('.fw-bold').text().toLowerCase();
+                const subjectCode = card.find('.text-muted.small').first().text().toLowerCase();
+                const sectionText = card.find('.small.mb-0').text().toLowerCase();
+                const sectionId = $('#subjectSectionFilter option').filter(function() {
+                    return $(this).text().toLowerCase() === sectionText;
+                }).val() || '';
+                
+                // Extract attendance percentage from badge
+                let attendanceRate = 0;
+                const badgeText = card.find('.badge').text();
+                const percentMatch = badgeText.match(/(\d+)%/);
+                if (percentMatch) {
+                    attendanceRate = parseInt(percentMatch[1]);
+                }
+                
+                // Check search filter
+                const matchesSearch = !searchTerm || 
+                    subjectName.includes(searchTerm) || 
+                    subjectCode.includes(searchTerm) ||
+                    sectionText.includes(searchTerm);
+                
+                // Check section filter
+                const matchesSection = !sectionFilter || 
+                    sectionId === sectionFilter || 
+                    sectionText.includes($('#subjectSectionFilter option:selected').text().toLowerCase());
+                
+                // Check attendance rate filter
+                let matchesRate = true;
+                if (attendanceFilter) {
+                    switch(attendanceFilter) {
+                        case 'excellent':
+                            matchesRate = attendanceRate >= 90;
+                            break;
+                        case 'good':
+                            matchesRate = attendanceRate >= 75 && attendanceRate < 90;
+                            break;
+                        case 'fair':
+                            matchesRate = attendanceRate >= 60 && attendanceRate < 75;
+                            break;
+                        case 'poor':
+                            matchesRate = attendanceRate < 60;
+                            break;
+                    }
+                }
+                
+                $(this).toggle(matchesSearch && matchesSection && matchesRate);
             });
         });
     });

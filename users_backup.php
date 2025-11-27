@@ -14,23 +14,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if ($action == 'add_user') {
             $username = sanitize_input($_POST['username']);
             $full_name = sanitize_input($_POST['full_name']);
-            $password = $_POST['password'] ?? '';
+            $email = sanitize_input($_POST['email']);
             $phone = sanitize_input($_POST['phone']);
             $role = sanitize_input($_POST['role']);
             $section_id = !empty($_POST['section_id']) ? intval($_POST['section_id']) : null;
-            
-            // Validate password
-            if (empty($password)) {
-                $_SESSION['error'] = 'Password is required.';
-                redirect('users.php');
-            }
-            
-            if (strlen($password) < 6) {
-                $_SESSION['error'] = 'Password must be at least 6 characters long.';
-                redirect('users.php');
-            }
-            
-
             
             try {
                 // Check if username exists
@@ -44,8 +31,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         $qr_code = generateStudentQR($username);
                     }
                     
-                    $stmt = $pdo->prepare("INSERT INTO users (username, full_name, password, phone, role, section_id, qr_code) VALUES (?, ?, ?, ?, ?, ?, ?)");
-                    $stmt->execute([$username, $full_name, $password, $phone, $role, $section_id, $qr_code]);
+                    $stmt = $pdo->prepare("INSERT INTO users (username, full_name, email, phone, role, section_id, qr_code) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                    $stmt->execute([$username, $full_name, $email, $phone, $role, $section_id, $qr_code]);
                     
                     $_SESSION['success'] = 'User added successfully!';
                 }
@@ -56,26 +43,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         } elseif ($action == 'update_user') {
             $user_id = intval($_POST['user_id']);
             $full_name = sanitize_input($_POST['full_name']);
-            $password = $_POST['password'] ?? '';
+            $email = sanitize_input($_POST['email']);
             $phone = sanitize_input($_POST['phone']);
             $role = sanitize_input($_POST['role']);
             $section_id = !empty($_POST['section_id']) ? intval($_POST['section_id']) : null;
             $status = sanitize_input($_POST['status']);
             
             try {
-                if (!empty($password)) {
-                    // Update with new password
-                    if (strlen($password) < 6) {
-                        $_SESSION['error'] = 'Password must be at least 6 characters long.';
-                        redirect('users.php');
-                    }
-                    $stmt = $pdo->prepare("UPDATE users SET full_name = ?, password = ?, phone = ?, role = ?, section_id = ?, status = ? WHERE id = ?");
-                    $stmt->execute([$full_name, $password, $phone, $role, $section_id, $status, $user_id]);
-                } else {
-                    // Update without changing password
-                    $stmt = $pdo->prepare("UPDATE users SET full_name = ?, phone = ?, role = ?, section_id = ?, status = ? WHERE id = ?");
-                    $stmt->execute([$full_name, $phone, $role, $section_id, $status, $user_id]);
-                }
+                $stmt = $pdo->prepare("UPDATE users SET full_name = ?, email = ?, phone = ?, role = ?, section_id = ?, status = ? WHERE id = ?");
+                $stmt->execute([$full_name, $email, $phone, $role, $section_id, $status, $user_id]);
                 
                 $_SESSION['success'] = 'User updated successfully!';
             } catch(PDOException $e) {
@@ -386,10 +362,10 @@ try {
                                 </div>
                                 
                                 <div class="user-info small">
-                                    <?php if ($user["phone"]): ?>
+                                    <?php if ($user['email']): ?>
                                         <div class="d-flex align-items-center mb-2">
-                                            <i class="fas fa-phone me-2 text-info"></i>
-                                            <span class="text-truncate"><?php echo $user["phone"]; ?></span>
+                                            <i class="fas fa-envelope me-2 text-info"></i>
+                                            <span class="text-truncate"><?php echo $user['email']; ?></span>
                                         </div>
                                     <?php endif; ?>
                                     
@@ -460,14 +436,8 @@ try {
                     </div>
                     
                     <div class="mb-3">
-                        <label for="password" class="form-label">Password *</label>
-                        <div class="input-group">
-                            <input type="password" class="form-control" id="password" name="password" required>
-                            <button class="btn btn-outline-secondary" type="button" id="toggleAddPassword">
-                                <i class="fas fa-eye" id="toggleAddIcon"></i>
-                            </button>
-                        </div>
-                        <div class="form-text">Minimum 6 characters required</div>
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email">
                     </div>
                     
                     <div class="mb-3">
@@ -662,7 +632,7 @@ function editUser(user) {
     document.getElementById('edit_user_id').value = user.id;
     document.getElementById('edit_username').textContent = user.username;
     document.getElementById('edit_full_name').value = user.full_name;
-    document.getElementById('edit_phone').value = user.phone || '';
+    document.getElementById('edit_email').value = user.email || '';
     document.getElementById('edit_phone').value = user.phone || '';
     document.getElementById('edit_role').value = user.role;
     document.getElementById('edit_section_id').value = user.section_id || '';
@@ -798,4 +768,3 @@ document.addEventListener('DOMContentLoaded', function() {
     transform: scale(0.98);
 }
 </style>
-

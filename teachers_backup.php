@@ -15,7 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if ($action == 'add_teacher' && $user_role == 'admin') {
             $username = sanitize_input($_POST['username']);
             $full_name = sanitize_input($_POST['full_name']);
-            $password = $_POST['password'];
+            $email = sanitize_input($_POST['email']);
             $phone = sanitize_input($_POST['phone']);
             
             try {
@@ -27,10 +27,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     redirect('teachers.php');
                 }
                 
-                // Validate password
-                if (strlen($password) < 6) {
-                    $_SESSION['error'] = 'Password must be at least 6 characters long.';
-                    redirect('teachers.php');
+                // Check if email exists (if provided)
+                if (!empty($email)) {
+                    $check_email_stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+                    $check_email_stmt->execute([$email]);
+                    if ($check_email_stmt->fetch()) {
+                        $_SESSION['error'] = 'Email already exists.';
+                        redirect('teachers.php');
+                    }
+                    
+                    // Validate email format
+                    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                        $_SESSION['error'] = 'Please enter a valid email address.';
+                        redirect('teachers.php');
+                    }
                 }
                 
                 // Validate phone format (if provided)
@@ -39,8 +49,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     redirect('teachers.php');
                 }
                 
-                $stmt = $pdo->prepare("INSERT INTO users (username, full_name, password, phone, role, status) VALUES (?, ?, ?, ?, 'teacher', 'active')");
-                $stmt->execute([$username, $full_name, $password, $phone ?: null]);
+                $stmt = $pdo->prepare("INSERT INTO users (username, full_name, email, phone, role, status) VALUES (?, ?, ?, ?, 'teacher', 'active')");
+                $stmt->execute([$username, $full_name, $email ?: null, $phone ?: null]);
                 
                 $_SESSION['success'] = 'Teacher added successfully!';
             } catch(PDOException $e) {
@@ -50,18 +60,35 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         } elseif ($action == 'update_teacher' && $user_role == 'admin') {
             $teacher_id = intval($_POST['teacher_id']);
             $full_name = sanitize_input($_POST['full_name']);
+            $email = sanitize_input($_POST['email']);
             $phone = sanitize_input($_POST['phone']);
             $status = sanitize_input($_POST['status']);
             
             try {
+                // Check if email exists for other users (if provided)
+                if (!empty($email)) {
+                    $check_email_stmt = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
+                    $check_email_stmt->execute([$email, $teacher_id]);
+                    if ($check_email_stmt->fetch()) {
+                        $_SESSION['error'] = 'Email already exists for another user.';
+                        redirect('teachers.php');
+                    }
+                    
+                    // Validate email format
+                    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                        $_SESSION['error'] = 'Please enter a valid email address.';
+                        redirect('teachers.php');
+                    }
+                }
+                
                 // Validate phone format (if provided)
                 if (!empty($phone) && !preg_match('/^(09|\+639)\d{9}$/', $phone)) {
                     $_SESSION['error'] = 'Please enter a valid Philippine phone number (09XXXXXXXXX or +639XXXXXXXXX).';
                     redirect('teachers.php');
                 }
                 
-                $stmt = $pdo->prepare("UPDATE users SET full_name = ?, phone = ?, status = ? WHERE id = ? AND role = 'teacher'");
-                $stmt->execute([$full_name, $phone ?: null, $status, $teacher_id]);
+                $stmt = $pdo->prepare("UPDATE users SET full_name = ?, email = ?, phone = ?, status = ? WHERE id = ? AND role = 'teacher'");
+                $stmt->execute([$full_name, $email ?: null, $phone ?: null, $status, $teacher_id]);
                 
                 $_SESSION['success'] = 'Teacher updated successfully!';
             } catch(PDOException $e) {
@@ -359,13 +386,21 @@ include 'header.php';
                                         <i class="fas fa-address-book me-2"></i>Contact Details
                                     </h6>
                                     <div class="contact-info">
+                                        <?php if ($teacher['email']): ?>
+                                            <div class="mb-1 d-flex align-items-center">
+                                                <i class="fas fa-envelope me-2 text-primary" style="width: 16px;"></i>
+                                                <small class="text-truncate" title="<?php echo htmlspecialchars($teacher['email']); ?>">
+                                                    <?php echo htmlspecialchars($teacher['email']); ?>
+                                                </small>
+                                            </div>
+                                        <?php endif; ?>
                                         <?php if ($teacher['phone']): ?>
                                             <div class="mb-1 d-flex align-items-center">
                                                 <i class="fas fa-phone me-2 text-success" style="width: 16px;"></i>
                                                 <small><?php echo htmlspecialchars($teacher['phone']); ?></small>
                                             </div>
                                         <?php endif; ?>
-                                        <?php if (!$teacher['phone']): ?>
+                                        <?php if (!$teacher['email'] && !$teacher['phone']): ?>
                                             <small class="text-muted fst-italic">
                                                 <i class="fas fa-info-circle me-1"></i>No contact information available
                                             </small>
@@ -454,11 +489,11 @@ include 'header.php';
                                             <i class="fas fa-calendar-check"></i>
                                         </a>
                                     <?php endif; ?>
-                                    <?php if ($teacher["phone"]): ?>
-                                        <a href="tel:<?php echo htmlspecialchars($teacher["phone"]); ?>" 
+                                    <?php if ($teacher['email']): ?>
+                                        <a href="mailto:<?php echo htmlspecialchars($teacher['email']); ?>" 
                                            class="btn btn-link btn-sm p-1 text-decoration-none" 
-                                           data-bs-toggle="tooltip" title="Call">
-                                            <i class="fas fa-phone"></i>
+                                           data-bs-toggle="tooltip" title="Send Email">
+                                            <i class="fas fa-envelope"></i>
                                         </a>
                                     <?php endif; ?>
                                     <?php if ($teacher['phone']): ?>
@@ -548,16 +583,10 @@ include 'header.php';
                         </div>
                         
                         <div class="col-12 col-md-6">
-                            <label for="add_password" class="form-label">Password</label>
-                            <div class="input-group">
-                                <input type="password" class="form-control" id="add_password" name="password" 
-                                       placeholder="Enter password" minlength="6" required>
-                                <button class="btn btn-outline-secondary" type="button" 
-                                        onclick="togglePasswordVisibility('add_password', this)">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                            </div>
-                            <div class="form-text">Minimum 6 characters required</div>
+                            <label for="add_email" class="form-label">Email Address</label>
+                            <input type="email" class="form-control" id="add_email" name="email" 
+                                   placeholder="Enter email address">
+                            <div class="form-text">Optional but recommended</div>
                         </div>
                         
                         <div class="col-12 col-md-6">
@@ -1028,4 +1057,3 @@ setInterval(function() {
 </style>
 
 <?php include 'footer.php'; ?>
-

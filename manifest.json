@@ -1,7 +1,7 @@
 {
-  "name": "KES-SMART: Student Monitoring Application",
-  "short_name": "KES-SMART",
-  "description": "KES Student Monitoring Application with Real-time QR and SMS Notifications",
+  "name": "TAC-QR: Student Monitoring Application",
+  "short_name": "TAC-QR",
+  "description": "TAC Student Monitoring Application with Real-time QR and SMS Notifications",
   "start_url": "https://aphid-major-dolphin.ngrok-free.app/smart/",
   "display": "standalone",
   "theme_color": "#007bff",

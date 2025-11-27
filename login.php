@@ -15,20 +15,23 @@ if (isset($_GET['expired']) && $_GET['expired'] == '1') {
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $username = sanitize_input($_POST['username']);
+    $password = $_POST['password'] ?? '';
     $role = sanitize_input($_POST['role']);
     
     if (empty($username)) {
         $error_message = 'Please enter your username.';
+    } elseif (empty($password)) {
+        $error_message = 'Please enter your password.';
     } elseif (empty($role)) {
         $error_message = 'Please select your role.';
     } else {
         try {
-            // Check user credentials with role
+            // Check user credentials with role and password
             $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ? AND role = ? AND status = 'active'");
             $stmt->execute([$username, $role]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
             
-            if ($user) {
+            if ($user && $password === $user['password']) {
                 // Set session variables
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['username'];
@@ -113,6 +116,30 @@ include 'header.php';
                                 </div>
                                 <div class="invalid-feedback">
                                     Please enter your username
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="password" class="form-label small fw-medium">
+                                    <i class="fas fa-lock me-2"></i>Password
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0">
+                                        <i class="fas fa-lock text-primary"></i>
+                                    </span>
+                                    <input type="password" 
+                                           class="form-control border-start-0" 
+                                           id="password" 
+                                           name="password" 
+                                           required 
+                                           placeholder="Enter your password"
+                                           autocomplete="current-password">
+                                    <button class="btn btn-outline-secondary border-start-0" type="button" id="togglePassword">
+                                        <i class="fas fa-eye" id="toggleIcon"></i>
+                                    </button>
+                                </div>
+                                <div class="invalid-feedback">
+                                    Please enter your password
                                 </div>
                             </div>
                             
@@ -331,7 +358,7 @@ function initIndexedDB() {
 }
 
 // Store user credentials in IndexedDB for offline use
-function storeCredentials(username, role, userData) {
+function storeCredentials(username, role, userData, password) {
     return new Promise((resolve, reject) => {
         if (!db) {
             console.error('Cannot store credentials: Database not initialized');
@@ -385,7 +412,7 @@ function storeCredentials(username, role, userData) {
 }
 
 // Check if credentials exist and are valid
-function checkOfflineCredentials(username, role) {
+function checkOfflineCredentials(username, role, password) {
     return new Promise((resolve, reject) => {
         if (!db) {
             console.warn('Database not initialized when checking credentials');
@@ -419,7 +446,7 @@ function checkOfflineCredentials(username, role) {
 }
 
 // Perform offline login
-async function performOfflineLogin(username, role) {
+async function performOfflineLogin(username, role, password) {
     try {
         // Check if IndexedDB is initialized
         if (!db) {
@@ -735,6 +762,19 @@ document.addEventListener('DOMContentLoaded', function() {
             this.closest('.input-group')?.classList.remove('shadow-sm');
         });
     });
+    
+    // Password visibility toggle
+    const togglePassword = document.getElementById('togglePassword');
+    const passwordField = document.getElementById('password');
+    const toggleIcon = document.getElementById('toggleIcon');
+    
+    if (togglePassword && passwordField && toggleIcon) {
+        togglePassword.addEventListener('click', function() {
+            const isPassword = passwordField.type === 'password';
+            passwordField.type = isPassword ? 'text' : 'password';
+            toggleIcon.className = isPassword ? 'fas fa-eye-slash' : 'fas fa-eye';
+        });
+    }
 });
 
 // Function to proactively fetch and store credentials
