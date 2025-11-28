@@ -106,11 +106,7 @@ $preferences = $_SESSION['user_preferences'] ?? [
                         <h3 class="fw-bold mb-1 text-truncate"><?php echo htmlspecialchars($current_user['full_name']); ?></h3>
                         <p class="text-muted mb-2">@<?php echo htmlspecialchars($current_user['username']); ?></p>
                         <div class="d-flex flex-wrap gap-2">
-                            <?php if ($current_user['email']): ?>
-                                <span class="badge bg-light text-dark">
-                                    <i class="fas fa-envelope me-1"></i><?php echo htmlspecialchars($current_user['email']); ?>
-                                </span>
-                            <?php endif; ?>
+                            
                             <?php if ($current_user['phone']): ?>
                                 <span class="badge bg-light text-dark">
                                     <i class="fas fa-phone me-1"></i><?php echo htmlspecialchars($current_user['phone']); ?>
