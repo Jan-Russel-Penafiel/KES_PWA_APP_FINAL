@@ -34,8 +34,8 @@ try {
 }
 
 // Site Configuration
-$site_name = "KES-SMART";
-$site_description = "KES Student Monitoring Application with Real-time QR and SMS Notifications";
+$site_name = "TAC-QR";
+$site_description = "Student Monitoring Application with Real-time QR and SMS Notifications";
 
 // Get SMS API configuration from database
 function getSMSConfig($pdo) {

@@ -579,7 +579,7 @@ try {
                         <div class="card border border-2 border-primary shadow-lg" style="background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);">
                             <!-- Card Header -->
                             <div class="card-header bg-transparent border-0 text-white text-center py-2">
-                                <h6 class="mb-0 fw-bold">KES SCHOOL</h6>
+                                <h6 class="mb-0 fw-bold">TAC SCHOOL</h6>
                                 <small class="opacity-75">STUDENT IDENTIFICATION CARD</small>
                             </div>
                             
@@ -1401,7 +1401,7 @@ function printStudentID() {
             
             <div class="id-card-print">
                 <div class="card-header-print">
-                    <h6 class="school-name">KES SCHOOL</h6>
+                    <h6 class="school-name">TAC SCHOOL</h6>
                     <p class="card-type">STUDENT IDENTIFICATION CARD</p>
                 </div>
                 
@@ -1514,7 +1514,7 @@ function printQR() {
     
     const studentInfo = `
         <div style="text-align: center; padding: 20px; font-family: Arial, sans-serif;">
-            <h1 style="color: #007bff; margin-bottom: 10px;">KES-SMART</h1>
+            <h1 style="color: #007bff; margin-bottom: 10px;">TAC-SMART</h1>
             <h2 style="margin-bottom: 20px;"><?php echo $current_user['full_name']; ?></h2>
             <p style="margin-bottom: 5px;"><strong>Student ID:</strong> <?php echo $current_user['username']; ?></p>
             <?php if ($current_user['lrn']): ?>
@@ -1563,7 +1563,7 @@ async function shareQR() {
             const file = new File([blob], '<?php echo $current_user['username']; ?>_qr_code.png', { type: 'image/png' });
             await navigator.share({
                 title: 'My QR Code - <?php echo $current_user['full_name']; ?>',
-                text: 'My KES-SMART attendance QR code',
+                text: 'My TAC-SMART attendance QR code',
                 files: [file]
             });
         } catch (error) {

@@ -77,30 +77,45 @@
     <nav class="bottom-nav d-md-none">
         <div class="container">
             <div class="d-flex justify-content-between">
+                <!-- Dashboard -->
                 <a href="dashboard.php" class="nav-link <?php echo ($current_page == 'dashboard.php') ? 'active' : ''; ?>">
-                    <i class="fas fa-tachometer-alt"></i>
-                    <span>Dashboard</span>
+                    <i class="fas fa-home"></i>
+                    <span>Home</span>
                 </a>
-                <?php if ($user_role == 'parent' || $user_role == 'teacher'): ?>
-                <a href="attendance.php" class="nav-link <?php echo ($current_page == 'attendance.php') ? 'active' : ''; ?>">
-                    <i class="fas fa-clipboard-check"></i>
-                    <span>Attendance</span>
-                </a>
-                <?php endif; ?>
+                
                 <?php if ($user_role == 'teacher'): ?>
-
-                <a href="qr-scanner.php" class="nav-link <?php echo ($current_page == 'qr-scanner.php') ? 'active' : ''; ?>">
-                    <i class="fas fa-qrcode"></i>
-                    <span>Scan</span>
-                </a>
-                <a href="students.php" class="nav-link <?php echo ($current_page == 'students.php') ? 'active' : ''; ?>">
-                    <i class="fas fa-user-graduate"></i>
-                    <span>Students</span>
-                </a>
+                    <!-- QR Scanner - Only for teachers -->
+                    <a href="qr-scanner.php" class="nav-link <?php echo ($current_page == 'qr-scanner.php') ? 'active' : ''; ?>">
+                        <i class="fas fa-qrcode"></i>
+                        <span>Scanner</span>
+                    </a>
+                    
+                    <!-- Reports for teachers only -->
+                    <a href="reports.php" class="nav-link <?php echo ($current_page == 'reports.php') ? 'active' : ''; ?>">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>Reports</span>
+                    </a>
                 <?php endif; ?>
-
+                
+                <?php if ($user_role == 'parent' || $user_role == 'teacher'): ?>
+                    <!-- Attendance -->
+                    <a href="attendance.php" class="nav-link <?php echo ($current_page == 'attendance.php') ? 'active' : ''; ?>">
+                        <i class="fas fa-calendar-check"></i>
+                        <span>Attendance</span>
+                    </a>
+                <?php endif; ?>
+                
+                <?php if ($user_role == 'admin'): ?>
+                    <!-- Teachers Management - Only for admins -->
+                    <a href="teachers.php" class="nav-link <?php echo ($current_page == 'teachers.php') ? 'active' : ''; ?>">
+                        <i class="fas fa-chalkboard-teacher"></i>
+                        <span>Teachers</span>
+                    </a>
+                <?php endif; ?>
+                
+                <!-- Profile -->
                 <a href="profile.php" class="nav-link <?php echo ($current_page == 'profile.php') ? 'active' : ''; ?>">
-                    <i class="fas fa-user-circle"></i>
+                    <i class="fas fa-user"></i>
                     <span>Profile</span>
                 </a>
             </div>
