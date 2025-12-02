@@ -38,12 +38,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $_SESSION['full_name'] = $user['full_name'];
                 $_SESSION['role'] = $user['role'];
                 $_SESSION['section_id'] = $user['section_id'];
-                $_SESSION['LAST_ACTIVITY'] = time(); // Initialize session timeout tracking
-                $_SESSION['CREATED'] = time(); // Track when session was created
-                
-                // Ensure session is written before redirect
-                session_write_close();
-                session_start(); // Restart session to ensure it's active
+                $_SESSION['LAST_ACTIVITY'] = time();
+                $_SESSION['CREATED'] = time();
                 
                 // Update last login
                 $stmt = $pdo->prepare("UPDATE users SET updated_at = NOW() WHERE id = ?");
@@ -53,11 +49,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $_SESSION['success'] = 'Welcome back, ' . $user['full_name'] . '!';
                 redirect('dashboard.php');
             } else {
-                $error_message = 'Invalid username, role combination, or account is inactive.';
+                $error_message = 'Invalid username, password, or role combination.';
             }
         } catch(PDOException $e) {
-            // Try offline login when database connection fails
-            $error_message = 'Login failed. Attempting offline login...';
+            $error_message = 'Database connection error. Please try again.';
         }
     }
 }
@@ -128,15 +123,15 @@ include 'header.php';
                                         <i class="fas fa-lock text-primary"></i>
                                     </span>
                                     <input type="password" 
-                                           class="form-control border-start-0" 
+                                           class="form-control border-start-0 border-end-0" 
                                            id="password" 
                                            name="password" 
                                            required 
                                            placeholder="Enter your password"
                                            autocomplete="current-password">
-                                    <button class="btn btn-outline-secondary border-start-0" type="button" id="togglePassword">
+                                    <span class="input-group-text bg-light border-start-0" id="togglePassword" onclick="toggleLoginPassword()" style="cursor: pointer;">
                                         <i class="fas fa-eye" id="toggleIcon"></i>
-                                    </button>
+                                    </span>
                                 </div>
                                 <div class="invalid-feedback">
                                     Please enter your password
@@ -251,8 +246,39 @@ include 'header.php';
     border-radius: 25px 0 0 25px;
 }
 
-.input-group .form-control, .input-group .form-select {
+.input-group .form-control:not(.border-start-0), .input-group .form-select {
     border-radius: 0 25px 25px 0;
+}
+
+.input-group .form-control.border-start-0 {
+    border-radius: 0;
+}
+
+.input-group .form-control.border-end-0 {
+    border-radius: 0;
+}
+
+.input-group .btn-outline-secondary {
+    border-radius: 0 25px 25px 0;
+}
+
+#togglePassword {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s ease-in-out;
+    border-radius: 0 25px 25px 0 !important;
+}
+
+#togglePassword:hover {
+    background-color: #e9ecef !important;
+}
+
+#togglePassword:active {
+    background-color: #dee2e6 !important;
+}
+
+#togglePassword i {
+    pointer-events: none;
 }
 
 .form-control, .form-select, .input-group-text {
@@ -297,6 +323,25 @@ include 'header.php';
 </style>
 
 <script>
+// Simple password toggle function
+function toggleLoginPassword() {
+    var passwordInput = document.getElementById('password');
+    var toggleIcon = document.getElementById('toggleIcon');
+    
+    if (passwordInput && toggleIcon) {
+        if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            toggleIcon.className = 'fas fa-eye-slash';
+        } else {
+            passwordInput.type = 'password';
+            toggleIcon.className = 'fas fa-eye';
+        }
+    }
+}</script>
+
+<script>
+// Separate script for other functionality to avoid conflicts
+
 // IndexedDB for offline authentication
 const DB_NAME = 'tac-qr-offline-auth';
 const DB_VERSION = 1;
@@ -613,121 +658,73 @@ document.addEventListener('DOMContentLoaded', function() {
     
     Array.from(forms).forEach(form => {
         form.addEventListener('submit', async function(event) {
-            event.preventDefault();
-            
             if (!form.checkValidity()) {
+                event.preventDefault();
                 event.stopPropagation();
-            } else {
-                // Show loading state
+                form.classList.add('was-validated');
+                return;
+            }
+            
+            const username = document.getElementById('username').value;
+            const role = document.getElementById('role').value;
+            
+            // Check if we're offline and have stored credentials
+            if (!navigator.onLine) {
+                event.preventDefault();
+                const submitBtn = form.querySelector('button[type="submit"]');
+                const originalText = submitBtn.innerHTML;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Checking offline credentials...';
+                submitBtn.disabled = true;
+                
+                performOfflineLogin(username, role).then(success => {
+                    if (!success) {
+                        const errorDiv = document.createElement('div');
+                        errorDiv.className = 'alert alert-danger py-2 small';
+                        errorDiv.innerHTML = '<i class="fas fa-exclamation-circle me-2"></i>No offline credentials found. You must login online at least once.';
+                        
+                        const existingErrors = form.querySelectorAll('.alert-danger');
+                        existingErrors.forEach(el => el.remove());
+                        
+                        form.insertBefore(errorDiv, form.firstChild);
+                        submitBtn.innerHTML = originalText;
+                        submitBtn.disabled = false;
+                    }
+                });
+                return;
+            }
+            
+            // If online, allow normal form submission
+            if (navigator.onLine) {
+                event.preventDefault();
                 const submitBtn = form.querySelector('button[type="submit"]');
                 const originalText = submitBtn.innerHTML;
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Logging in...';
                 submitBtn.disabled = true;
                 
-                const username = document.getElementById('username').value;
-                const role = document.getElementById('role').value;
-                
-                // Check if online or offline
-                if (navigator.onLine) {
-                    // If online, try regular login and store credentials for offline use
+                // Store credentials for offline use if db is available
+                if (db) {
                     fetch('api/auth.php', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                        },
-                        body: new URLSearchParams({
-                            username: username,
-                            role: role,
-                            action: 'login'
-                        })
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ username, role, action: 'login' })
                     })
                     .then(response => response.json())
                     .then(data => {
-                        if (data.success) {
-                            // Store credentials for offline use
+                        if (data.success && data.user) {
                             storeCredentials(username, role, data.user)
-                                .then(() => {
-                                    console.log('Credentials stored for offline use');
-                                    // Mark that we've successfully logged in at least once
-                                    localStorage.setItem('has_attempted_login', 'true');
-                                })
-                                .catch(error => {
-                                    console.error('Failed to store credentials:', error);
-                                });
+                                .then(() => console.log('Credentials stored for offline use'))
+                                .catch(error => console.error('Failed to store credentials:', error));
                             
-                            // Regular form submission for login
-                            form.removeEventListener('submit', arguments.callee);
-                            form.submit();
-                        } else {
-                            // Show error
-                            const errorDiv = document.createElement('div');
-                            errorDiv.className = 'alert alert-danger py-2 small';
-                            errorDiv.innerHTML = `<i class="fas fa-exclamation-circle me-2"></i>${data.message}`;
-                            
-                            // Remove any existing error messages
-                            const existingErrors = form.querySelectorAll('.alert-danger');
-                            existingErrors.forEach(el => el.remove());
-                            
-                            form.insertBefore(errorDiv, form.firstChild);
-                            
-                            // Reset button
-                            submitBtn.innerHTML = originalText;
-                            submitBtn.disabled = false;
+                            localStorage.setItem('has_attempted_login', 'true');
                         }
+                        form.submit();
                     })
                     .catch(error => {
                         console.error('Login error:', error);
-                        
-                        // Try offline login as fallback
-                        performOfflineLogin(username, role).then(success => {
-                            if (!success) {
-                                // Show offline login failure
-                                const errorDiv = document.createElement('div');
-                                errorDiv.className = 'alert alert-danger py-2 small';
-                                errorDiv.innerHTML = '<i class="fas fa-exclamation-circle me-2"></i>Offline login failed. No stored credentials found.';
-                                
-                                // Remove any existing error messages
-                                const existingErrors = form.querySelectorAll('.alert-danger');
-                                existingErrors.forEach(el => el.remove());
-                                
-                                form.insertBefore(errorDiv, form.firstChild);
-                            }
-                            
-                            // Reset button after 3 seconds if no redirect happens
-                            setTimeout(() => {
-                                submitBtn.innerHTML = originalText;
-                                submitBtn.disabled = false;
-                            }, 3000);
-                        });
+                        form.submit();
                     });
                 } else {
-                    // If offline, try login with stored credentials
-                    performOfflineLogin(username, role).then(success => {
-                        if (!success) {
-                            // Show offline login failure
-                            const errorDiv = document.createElement('div');
-                            errorDiv.className = 'alert alert-danger py-2 small';
-                            
-                            // Check if this is a first-time login or if we've logged in before
-                            const hasAttemptedLogin = localStorage.getItem('has_attempted_login');
-                            
-                            if (!hasAttemptedLogin) {
-                                errorDiv.innerHTML = '<i class="fas fa-exclamation-circle me-2"></i>Offline login failed. You need to login online at least once to use offline login.';
-                            } else {
-                                errorDiv.innerHTML = '<i class="fas fa-exclamation-circle me-2"></i>Offline login failed. No stored credentials found for this username and role.';
-                            }
-                            
-                            // Remove any existing error messages
-                            const existingErrors = form.querySelectorAll('.alert-danger');
-                            existingErrors.forEach(el => el.remove());
-                            
-                            form.insertBefore(errorDiv, form.firstChild);
-                            
-                            // Reset button
-                            submitBtn.innerHTML = originalText;
-                            submitBtn.disabled = false;
-                        }
-                    });
+                    form.submit();
                 }
             }
             
@@ -762,19 +759,6 @@ document.addEventListener('DOMContentLoaded', function() {
             this.closest('.input-group')?.classList.remove('shadow-sm');
         });
     });
-    
-    // Password visibility toggle
-    const togglePassword = document.getElementById('togglePassword');
-    const passwordField = document.getElementById('password');
-    const toggleIcon = document.getElementById('toggleIcon');
-    
-    if (togglePassword && passwordField && toggleIcon) {
-        togglePassword.addEventListener('click', function() {
-            const isPassword = passwordField.type === 'password';
-            passwordField.type = isPassword ? 'text' : 'password';
-            toggleIcon.className = isPassword ? 'fas fa-eye-slash' : 'fas fa-eye';
-        });
-    }
 });
 
 // Function to proactively fetch and store credentials

@@ -151,7 +151,7 @@ function checkPageAccess($page_name) {
     
     // Define page access rules
     $page_access = [
-        'admin' => ['dashboard.php', 'students.php',  'teachers.php', 'parents.php','reports.php', 'users.php', 'sections.php', 'sms-config.php', 'profile.php', 'settings.php'],
+        'admin' => ['dashboard.php', 'students.php', 'teachers.php', 'parents.php', 'users.php', 'sections.php', 'sms-config.php', 'profile.php', 'settings.php'],
         'teacher' => ['dashboard.php', 'qr-scanner.php', 'attendance.php', 'qr-code.php', 'students.php', 'sections.php', 'reports.php', 'profile.php'],
         'student' => ['dashboard.php', 'profile.php'],
         'parent' => ['dashboard.php', 'attendance.php', 'profile.php']

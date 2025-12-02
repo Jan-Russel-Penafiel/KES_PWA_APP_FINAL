@@ -284,86 +284,50 @@ try {
 <?php if ($user_role == 'admin'): ?>
     <!-- Admin Dashboard -->
     <div class="row g-3 mb-4">
-        <div class="col-6 col-md-6 col-lg-3">
+        <div class="col-6 col-md-3">
             <div class="card bg-primary text-white h-100 shadow-sm rounded-3">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h4 class="h5 fw-bold mb-1"><?php echo number_format($total_students); ?></h4>
-                            <p class="mb-0 small">Students</p>
-                        </div>
-                        <div class="icon-bg rounded-circle bg-white bg-opacity-25 p-2">
-                            <i class="fas fa-user-graduate text-white"></i>
-                        </div>
+                <div class="card-body p-3 text-center">
+                    <div class="icon-bg rounded-circle bg-white bg-opacity-25 p-2 mx-auto mb-2" style="width: fit-content;">
+                        <i class="fas fa-user-graduate text-white"></i>
                     </div>
-                </div>
-                <div class="card-footer bg-transparent border-0 py-2">
-                    <a href="students.php" class="text-white text-decoration-none small stretched-link">
-                        View Details <i class="fas fa-arrow-right ms-1"></i>
-                    </a>
+                    <h4 class="h5 fw-bold mb-1"><?php echo number_format($total_students); ?></h4>
+                    <p class="mb-0 small">Students</p>
                 </div>
             </div>
         </div>
         
-        <div class="col-6 col-md-6 col-lg-3">
+        <div class="col-6 col-md-3">
             <div class="card bg-success text-white h-100 shadow-sm rounded-3">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h4 class="h5 fw-bold mb-1"><?php echo number_format($total_teachers); ?></h4>
-                            <p class="mb-0 small">Teachers</p>
-                        </div>
-                        <div class="icon-bg rounded-circle bg-white bg-opacity-25 p-2">
-                            <i class="fas fa-chalkboard-teacher text-white"></i>
-                        </div>
+                <div class="card-body p-3 text-center">
+                    <div class="icon-bg rounded-circle bg-white bg-opacity-25 p-2 mx-auto mb-2" style="width: fit-content;">
+                        <i class="fas fa-chalkboard-teacher text-white"></i>
                     </div>
-                </div>
-                <div class="card-footer bg-transparent border-0 py-2">
-                    <a href="teachers.php" class="text-white text-decoration-none small stretched-link">
-                        View Details <i class="fas fa-arrow-right ms-1"></i>
-                    </a>
+                    <h4 class="h5 fw-bold mb-1"><?php echo number_format($total_teachers); ?></h4>
+                    <p class="mb-0 small">Teachers</p>
                 </div>
             </div>
         </div>
         
-        <div class="col-6 col-md-6 col-lg-3">
+        <div class="col-6 col-md-3">
             <div class="card bg-info text-white h-100 shadow-sm rounded-3">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h4 class="h5 fw-bold mb-1"><?php echo number_format($total_parents); ?></h4>
-                            <p class="mb-0 small">Parents</p>
-                        </div>
-                        <div class="icon-bg rounded-circle bg-white bg-opacity-25 p-2">
-                            <i class="fas fa-heart text-white"></i>
-                        </div>
+                <div class="card-body p-3 text-center">
+                    <div class="icon-bg rounded-circle bg-white bg-opacity-25 p-2 mx-auto mb-2" style="width: fit-content;">
+                        <i class="fas fa-heart text-white"></i>
                     </div>
-                </div>
-                <div class="card-footer bg-transparent border-0 py-2">
-                    <a href="parents.php" class="text-white text-decoration-none small stretched-link">
-                        View Details <i class="fas fa-arrow-right ms-1"></i>
-                    </a>
+                    <h4 class="h5 fw-bold mb-1"><?php echo number_format($total_parents); ?></h4>
+                    <p class="mb-0 small">Parents</p>
                 </div>
             </div>
         </div>
         
-        <div class="col-6 col-md-6 col-lg-3">
+        <div class="col-6 col-md-3">
             <div class="card bg-warning text-white h-100 shadow-sm rounded-3">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h4 class="h5 fw-bold mb-1"><?php echo number_format($total_sections); ?></h4>
-                            <p class="mb-0 small">Sections</p>
-                        </div>
-                        <div class="icon-bg rounded-circle bg-white bg-opacity-25 p-2">
-                            <i class="fas fa-school text-white"></i>
-                        </div>
+                <div class="card-body p-3 text-center">
+                    <div class="icon-bg rounded-circle bg-white bg-opacity-25 p-2 mx-auto mb-2" style="width: fit-content;">
+                        <i class="fas fa-school text-white"></i>
                     </div>
-                </div>
-                <div class="card-footer bg-transparent border-0 py-2">
-                    <a href="sections.php" class="text-white text-decoration-none small stretched-link">
-                        View Details <i class="fas fa-arrow-right ms-1"></i>
-                    </a>
+                    <h4 class="h5 fw-bold mb-1"><?php echo number_format($total_sections); ?></h4>
+                    <p class="mb-0 small">Sections</p>
                 </div>
             </div>
         </div>
@@ -413,50 +377,86 @@ try {
 <?php elseif ($user_role == 'teacher'): ?>
     <!-- Teacher Dashboard -->
     <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-6 col-lg-3">
             <div class="card bg-primary text-white h-100 shadow-sm rounded-3">
-                <div class="card-body p-3 text-center">
-                    <div class="icon-bg rounded-circle bg-white bg-opacity-25 p-2 mx-auto mb-2" style="width: fit-content;">
-                        <i class="fas fa-users text-white"></i>
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h4 class="h5 fw-bold mb-1"><?php echo number_format($total_students); ?></h4>
+                            <p class="mb-0 small">My Students</p>
+                        </div>
+                        <div class="icon-bg rounded-circle bg-white bg-opacity-25 p-2">
+                            <i class="fas fa-users text-white"></i>
+                        </div>
                     </div>
-                    <h4 class="h5 fw-bold mb-1"><?php echo number_format($total_students); ?></h4>
-                    <p class="mb-0 small">My Students</p>
+                </div>
+                <div class="card-footer bg-transparent border-0 py-2">
+                    <a href="students.php" class="text-white text-decoration-none small stretched-link">
+                        View Details <i class="fas fa-arrow-right ms-1"></i>
+                    </a>
                 </div>
             </div>
         </div>
         
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-6 col-lg-3">
             <div class="card bg-success text-white h-100 shadow-sm rounded-3">
-                <div class="card-body p-3 text-center">
-                    <div class="icon-bg rounded-circle bg-white bg-opacity-25 p-2 mx-auto mb-2" style="width: fit-content;">
-                        <i class="fas fa-school text-white"></i>
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h4 class="h5 fw-bold mb-1"><?php echo number_format($total_sections); ?></h4>
+                            <p class="mb-0 small">My Sections</p>
+                        </div>
+                        <div class="icon-bg rounded-circle bg-white bg-opacity-25 p-2">
+                            <i class="fas fa-school text-white"></i>
+                        </div>
                     </div>
-                    <h4 class="h5 fw-bold mb-1"><?php echo number_format($total_sections); ?></h4>
-                    <p class="mb-0 small">My Sections</p>
+                </div>
+                <div class="card-footer bg-transparent border-0 py-2">
+                    <a href="sections.php" class="text-white text-decoration-none small stretched-link">
+                        View Details <i class="fas fa-arrow-right ms-1"></i>
+                    </a>
                 </div>
             </div>
         </div>
         
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-6 col-lg-3">
             <div class="card bg-info text-white h-100 shadow-sm rounded-3">
-                <div class="card-body p-3 text-center">
-                    <div class="icon-bg rounded-circle bg-white bg-opacity-25 p-2 mx-auto mb-2" style="width: fit-content;">
-                        <i class="fas fa-book text-white"></i>
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h4 class="h5 fw-bold mb-1"><?php echo number_format($total_subjects); ?></h4>
+                            <p class="mb-0 small">My Subjects</p>
+                        </div>
+                        <div class="icon-bg rounded-circle bg-white bg-opacity-25 p-2">
+                            <i class="fas fa-book text-white"></i>
+                        </div>
                     </div>
-                    <h4 class="h5 fw-bold mb-1"><?php echo number_format($total_subjects); ?></h4>
-                    <p class="mb-0 small">My Subjects</p>
+                </div>
+                <div class="card-footer bg-transparent border-0 py-2">
+                    <a href="sections.php" class="text-white text-decoration-none small stretched-link">
+                        View Details <i class="fas fa-arrow-right ms-1"></i>
+                    </a>
                 </div>
             </div>
         </div>
         
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-6 col-lg-3">
             <div class="card bg-warning text-white h-100 shadow-sm rounded-3">
-                <div class="card-body p-3 text-center">
-                    <div class="icon-bg rounded-circle bg-white bg-opacity-25 p-2 mx-auto mb-2" style="width: fit-content;">
-                        <i class="fas fa-qrcode text-white"></i>
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h4 class="h5 fw-bold mb-1"><?php echo number_format($total_scans); ?></h4>
+                            <p class="mb-0 small">Today's Scans</p>
+                        </div>
+                        <div class="icon-bg rounded-circle bg-white bg-opacity-25 p-2">
+                            <i class="fas fa-qrcode text-white"></i>
+                        </div>
                     </div>
-                    <h4 class="h5 fw-bold mb-1"><?php echo number_format($total_scans); ?></h4>
-                    <p class="mb-0 small">Today's Scans</p>
+                </div>
+                <div class="card-footer bg-transparent border-0 py-2">
+                    <a href="attendance.php" class="text-white text-decoration-none small stretched-link">
+                        View Details <i class="fas fa-arrow-right ms-1"></i>
+                    </a>
                 </div>
             </div>
         </div>

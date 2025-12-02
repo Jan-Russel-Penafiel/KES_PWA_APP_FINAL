@@ -899,6 +899,22 @@ function deleteParent(parentId, parentName) {
     deleteModal.show();
 }
 
+// Password toggle functionality
+function togglePasswordVisibility(inputId, toggleButton) {
+    const passwordInput = document.getElementById(inputId);
+    const toggleIcon = toggleButton.querySelector('i');
+    
+    if (passwordInput && toggleIcon) {
+        if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            toggleIcon.className = 'fas fa-eye-slash';
+        } else {
+            passwordInput.type = 'password';
+            toggleIcon.className = 'fas fa-eye';
+        }
+    }
+}
+
 // Phone number validation
 document.addEventListener('DOMContentLoaded', function() {
     const phoneFields = ['add_phone', 'edit_phone'];
@@ -960,6 +976,28 @@ document.addEventListener('DOMContentLoaded', function() {
     .modal-lg {
         max-width: 95%;
     }
+}
+
+/* Password toggle button styles */
+button[onclick*="togglePasswordVisibility"] {
+    cursor: pointer;
+    user-select: none;
+    border-radius: 0 0.375rem 0.375rem 0 !important;
+    transition: all 0.2s ease-in-out;
+}
+
+button[onclick*="togglePasswordVisibility"]:hover {
+    background-color: #e9ecef !important;
+    border-color: #b0b7bf !important;
+}
+
+button[onclick*="togglePasswordVisibility"]:active {
+    background-color: #dee2e6 !important;
+    border-color: #9ca3af !important;
+}
+
+button[onclick*="togglePasswordVisibility"]:focus {
+    box-shadow: 0 0 0 0.25rem rgba(40, 167, 69, 0.25) !important;
 }
 
 /* Parent Card Styles */

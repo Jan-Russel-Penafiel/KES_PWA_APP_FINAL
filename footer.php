@@ -47,15 +47,29 @@
                 <?php endif; ?>
                 
                 <?php if ($user_role == 'admin'): ?>
-                    <!-- Users Management - Only for admins -->
+                    <!-- Reports - Only for admins -->
                     <div class="nav-item">
-                        <a href="teachers.php" class="nav-link <?php echo $current_page == 'teachers.php' ? 'active' : ''; ?>">
-                            <i class="fas fa-chalkboard-teacher"></i>
-                            <span>Teachers</span>
+                        <a href="reports.php" class="nav-link <?php echo $current_page == 'reports.php' ? 'active' : ''; ?>">
+                            <i class="fas fa-chart-bar"></i>
+                            <span>Reports</span>
                         </a>
                     </div>
                     
-                 
+                    <!-- Students Management - Only for admins -->
+                    <div class="nav-item">
+                        <a href="teachers.php" class="nav-link <?php echo $current_page == 'teachers.php' ? 'active' : ''; ?>">
+                            <i class="fas fa-user-graduate"></i>
+                            <span>Teachers</span>
+                        </a>
+                    </div>
+
+
+                    <div class="nav-item">
+                        <a href="parents.php" class="nav-link <?php echo $current_page == 'parents.php' ? 'active' : ''; ?>">
+                            <i class="fas fa-user-graduate"></i>
+                            <span>Parents</span>
+                        </a>
+                    </div>
                 <?php endif; ?>
                 
                 <!-- Reports -->
@@ -106,10 +120,16 @@
                 <?php endif; ?>
                 
                 <?php if ($user_role == 'admin'): ?>
-                    <!-- Teachers Management - Only for admins -->
-                    <a href="teachers.php" class="nav-link <?php echo ($current_page == 'teachers.php') ? 'active' : ''; ?>">
-                        <i class="fas fa-chalkboard-teacher"></i>
-                        <span>Teachers</span>
+                    <!-- Reports - Only for admins -->
+                    <a href="reports.php" class="nav-link <?php echo ($current_page == 'reports.php') ? 'active' : ''; ?>">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>Reports</span>
+                    </a>
+                    
+                    <!-- Students Management - Only for admins -->
+                    <a href="students.php" class="nav-link <?php echo ($current_page == 'students.php') ? 'active' : ''; ?>">
+                        <i class="fas fa-user-graduate"></i>
+                        <span>Students</span>
                     </a>
                 <?php endif; ?>
                 

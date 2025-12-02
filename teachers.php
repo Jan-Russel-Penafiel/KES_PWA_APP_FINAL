@@ -550,11 +550,18 @@ include 'header.php';
                         <div class="col-12 col-md-6">
                             <label for="add_password" class="form-label">Password</label>
                             <div class="input-group">
-                                <input type="password" class="form-control" id="add_password" name="password" 
-                                       placeholder="Enter password" minlength="6" required>
-                                <button class="btn btn-outline-secondary" type="button" 
-                                        onclick="togglePasswordVisibility('add_password', this)">
-                                    <i class="fas fa-eye"></i>
+                                <span class="input-group-text bg-light border-end-0">
+                                    <i class="fas fa-lock text-primary"></i>
+                                </span>
+                                <input type="password" 
+                                       class="form-control border-start-0 border-end-0" 
+                                       id="add_password" 
+                                       name="password" 
+                                       required 
+                                       placeholder="Enter password"
+                                       minlength="6">
+                                <button class="btn btn-outline-secondary border-start-0" type="button" id="toggleAddPassword">
+                                    <i class="fas fa-eye" id="toggleAddIcon"></i>
                                 </button>
                             </div>
                             <div class="form-text">Minimum 6 characters required</div>
@@ -749,6 +756,40 @@ document.getElementById('edit_phone').addEventListener('input', function(e) {
     }
 });
 
+// Password toggle functionality
+function togglePasswordVisibility(inputId, toggleButton) {
+    const passwordInput = document.getElementById(inputId);
+    const toggleIcon = toggleButton.querySelector('i') || document.getElementById('toggleAddIcon');
+    
+    if (passwordInput && toggleIcon) {
+        if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            toggleIcon.className = 'fas fa-eye-slash';
+        } else {
+            passwordInput.type = 'password';
+            toggleIcon.className = 'fas fa-eye';
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const toggleAddPassword = document.getElementById('toggleAddPassword');
+    const addPasswordField = document.getElementById('add_password');
+    const toggleAddIcon = document.getElementById('toggleAddIcon');
+
+    if (toggleAddPassword && addPasswordField && toggleAddIcon) {
+        // Remove any existing event listeners
+        toggleAddPassword.replaceWith(toggleAddPassword.cloneNode(true));
+        const newToggleAddPassword = document.getElementById('toggleAddPassword');
+        
+        newToggleAddPassword.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            togglePasswordVisibility('add_password', this);
+        });
+    }
+});
+
 // Initialize tooltips
 document.addEventListener('DOMContentLoaded', function() {
     var tooltips = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
@@ -809,6 +850,31 @@ setInterval(function() {
 </script>
 
 <style>
+/* Password toggle styles to match login */
+#toggleAddPassword {
+    cursor: pointer;
+    user-select: none;
+    border-radius: 0 0.375rem 0.375rem 0 !important;
+}
+
+#toggleAddPassword:hover {
+    background-color: #e9ecef !important;
+    border-color: #b0b7bf !important;
+}
+
+#toggleAddPassword:active {
+    background-color: #dee2e6 !important;
+    border-color: #9ca3af !important;
+}
+
+#toggleAddPassword:focus {
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+}
+
+.input-group .form-control.border-end-0 {
+    border-radius: 0;
+}
+
 /* Mobile-friendly styles */
 @media (max-width: 576px) {
     .card-body {
