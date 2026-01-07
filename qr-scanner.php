@@ -1,4 +1,12 @@
 <?php
+// Start output buffering to catch any errors before JSON response
+ob_start();
+
+// Suppress display errors for clean JSON output in AJAX requests
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    ini_set('display_errors', 0);
+}
+
 require_once 'config.php';
 require_once 'sms_functions.php';
 
@@ -47,6 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
         // Process attendance for the found student
         $result = processStudentAttendance($pdo, $student, $current_user, $user_role, $subject_id, $scan_location, $scan_notes, true);
         
+        // Clear any buffered output and return clean JSON
+        ob_clean();
         header('Content-Type: application/json');
         echo json_encode($result);
         exit;
@@ -56,6 +66,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
             'success' => false,
             'message' => $e->getMessage()
         ];
+        // Clear any buffered output and return clean JSON
+        ob_clean();
         header('Content-Type: application/json');
         echo json_encode($response);
         exit;
@@ -96,6 +108,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
         // Process attendance for the found student
         $result = processStudentAttendance($pdo, $student, $current_user, $user_role, $subject_id, $scan_location, $scan_notes, false);
         
+        // Clear any buffered output and return clean JSON
+        ob_clean();
         header('Content-Type: application/json');
         echo json_encode($result);
         exit;
@@ -105,6 +119,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
             'success' => false,
             'message' => $e->getMessage()
         ];
+        // Clear any buffered output and return clean JSON
+        ob_clean();
         header('Content-Type: application/json');
         echo json_encode($response);
         exit;
@@ -141,6 +157,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
         // Process attendance for the found student
         $result = processStudentAttendance($pdo, $student, $current_user, $user_role, $subject_id, $scan_location, $scan_notes, false);
         
+        // Clear any buffered output and return clean JSON
+        ob_clean();
         header('Content-Type: application/json');
         echo json_encode($result);
         exit;
@@ -150,6 +168,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
             'success' => false,
             'message' => $e->getMessage()
         ];
+        // Clear any buffered output and return clean JSON
+        ob_clean();
         header('Content-Type: application/json');
         echo json_encode($response);
         exit;
@@ -358,9 +378,9 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $su
             if ($is_checkout) {
                 // Checkout SMS - always send regardless of previous SMS
                 if ($attendance_status == 'out') {
-                    $sms_message = "Hi! Your child {$student['full_name']} has left {$subject['subject_name']} class early at {$current_time_formatted} on {$current_date}. - KES-SMART";
+                    $sms_message = "{$student['full_name']} left class early at {$current_time_formatted} on {$current_date}.";
                 } else {
-                    $sms_message = "Hi! Your child {$student['full_name']} has finished {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. - KES-SMART";
+                    $sms_message = "{$student['full_name']} finished class at {$current_time_formatted} on {$current_date}.";
                 }
                 $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'checkout');
                 
@@ -369,8 +389,8 @@ function processStudentAttendance($pdo, $student, $current_user, $user_role, $su
                 
             } elseif (!$sms_already_sent) {
                 // Check-in SMS - only if not already sent today
-                $status_text = ($attendance_status == 'late') ? 'arrived late to' : 'arrived at';
-                $sms_message = "Hi! Your child {$student['full_name']} has {$status_text} {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. - KES-SMART";
+                $status_text = ($attendance_status == 'late') ? 'arrived late at' : 'arrived at';
+                $sms_message = "{$student['full_name']} {$status_text} class at {$current_time_formatted} on {$current_date}.";
                 $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'attendance');
                 
                 // Log SMS result for debugging
