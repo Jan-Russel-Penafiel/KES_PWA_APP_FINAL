@@ -1,7 +1,17 @@
 <?php
+// Start output buffering to catch any errors before JSON output
+ob_start();
+
+// Suppress display errors for clean JSON output
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
+
 // Include required files
 require_once "../config.php";
 require_once "../sms_functions.php";
+
+// Clear any output that might have been generated
+ob_clean();
 
 header('Content-Type: application/json');
 
@@ -24,6 +34,22 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 try {
+    // Ensure teacher_absent_logs table exists
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS teacher_absent_logs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            teacher_id INT NOT NULL,
+            teacher_name VARCHAR(255) NOT NULL,
+            notification_date DATE NOT NULL,
+            students_notified INT DEFAULT 0,
+            sms_sent INT DEFAULT 0,
+            sms_failed INT DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_teacher_date (teacher_id, notification_date),
+            INDEX idx_created (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+    
     // Get current teacher information
     $teacher_id = $_SESSION['user_id'];
     $current_user = getCurrentUser($pdo);
@@ -73,8 +99,10 @@ try {
         exit;
     }
     
-    // Compose SMS message
-    $message = "NOTIFICATION: Your child's teacher, {$teacher_name}, is absent today ({$today}). Please check with the school for alternative arrangements. - KES SMART";
+    // Compose SMS message - simplified for IPROG template compatibility
+    $today_formatted = date('F j, Y');
+    // Keep message simple - IPROG is strict about template matching
+    $message = "Teacher {$teacher_name} will be absent today, {$today_formatted}.";
     
     // Send SMS to all parents
     $successful_sms = 0;
@@ -118,6 +146,7 @@ try {
     ]);
     
     // Return success response
+    ob_clean();
     echo json_encode([
         'success' => true,
         'message' => "Teacher absent notification sent successfully",
@@ -132,11 +161,24 @@ try {
         ]
     ]);
     
+} catch (PDOException $e) {
+    // Clear any buffered output
+    ob_clean();
+    error_log("Teacher Absent API Database Error: " . $e->getMessage());
+    echo json_encode([
+        'success' => false,
+        'message' => 'Database error: ' . $e->getMessage()
+    ]);
 } catch (Exception $e) {
+    // Clear any buffered output
+    ob_clean();
     error_log("Teacher Absent API Error: " . $e->getMessage());
     echo json_encode([
         'success' => false,
         'message' => 'Error sending teacher absent notification: ' . $e->getMessage()
     ]);
 }
+
+// End output buffering and flush
+ob_end_flush();
 ?>

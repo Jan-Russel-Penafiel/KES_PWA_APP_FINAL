@@ -3,6 +3,45 @@
 require_once "config.php";
 
 /**
+ * Sanitize text for SMS - remove special characters that IPROG rejects
+ * IPROG only allows basic alphanumeric, spaces, and common punctuation
+ * @param string $text Text to sanitize
+ * @return string Sanitized text
+ */
+function sanitizeSMSText($text) {
+    // Only allow: letters, numbers, spaces, periods, commas, colons, apostrophes, and hyphens
+    // Remove parentheses, @, #, $, %, etc.
+    $text = preg_replace('/[^a-zA-Z0-9\s\.\,\:\'\-]/', '', $text);
+    // Remove multiple spaces
+    $text = preg_replace('/\s+/', ' ', $text);
+    return trim($text);
+}
+
+/**
+ * Format SMS message with IPROG template compatibility
+ * Template: VMC | This is an important message from the Organization. [message] Thank you. - Respective Personnel
+ * @param string $message Original message content
+ * @return string Formatted message with prefix and footer
+ */
+function formatSMSMessage($message) {
+    $prefix = 'This is an important message from the Organization. ';
+    $footer = ' Thank you. - Respective Personnel';
+    
+    // Sanitize message to remove problematic characters (parentheses, @, etc.)
+    $message = sanitizeSMSText($message);
+    
+    // Don't add prefix if message already starts with it
+    if (strpos($message, $prefix) === 0) {
+        return sanitizeSMSText($message);
+    }
+    
+    // Remove any old KES-SMART signature if present
+    $message = preg_replace('/\s*-\s*KES[-\s]?SMART\s*$/i', '', $message);
+    
+    return $prefix . trim($message) . $footer;
+}
+
+/**
  * Send SMS using IPROG SMS API
  * @param string $phone_number Recipient phone number
  * @param string $message SMS message content
@@ -26,10 +65,16 @@ function sendSMSUsingIPROG($phone_number, $message, $api_key) {
         );
     }
 
+    // Format message with universal prefix for IPROG template compatibility
+    $formatted_message = formatSMSMessage($message);
+    
+    // Log the formatted message for debugging
+    error_log("IPROG SMS - Formatted message: " . $formatted_message);
+    
     // Prepare the request data for IPROG SMS API
     $data = array(
         'api_token' => $api_key,
-        'message' => $message,
+        'message' => $formatted_message,
         'phone_number' => $phone_number
     );
 
@@ -81,12 +126,38 @@ function sendSMSUsingIPROG($phone_number, $message, $api_key) {
 
     // Handle API response for IPROG SMS
     if ($http_code === 200 || $http_code === 201) {
-        // IPROG SMS typically returns success in different formats
-        // Check for common success indicators
+        // Check if IPROG returned an error status in the response body
+        if (isset($result['status']) && $result['status'] === 500) {
+            // API returned error in response body
+            $error_msg = isset($result['message']) ? 
+                (is_array($result['message']) ? implode(', ', $result['message']) : $result['message']) : 
+                'Unknown API error';
+            return array(
+                'success' => false,
+                'message' => 'API Error: ' . $error_msg,
+                'error_code' => 500
+            );
+        }
+        
+        // IPROG SMS returns status 200 for success
+        if (isset($result['status']) && $result['status'] === 200) {
+            return array(
+                'success' => true,
+                'message' => 'SMS sent successfully',
+                'reference_id' => $result['message_id'] ?? $result['id'] ?? $result['reference'] ?? null,
+                'delivery_status' => $result['status'] ?? 'Sent',
+                'timestamp' => $result['timestamp'] ?? date('Y-m-d g:i A')
+            );
+        }
+        
+        // Check for other common success indicators
+        $message_str = isset($result['message']) ? 
+            (is_array($result['message']) ? implode(', ', $result['message']) : $result['message']) : '';
+        
         if ((isset($result['status']) && $result['status'] === 'success') ||
             (isset($result['success']) && $result['success'] === true) ||
-            (isset($result['message']) && stripos($result['message'], 'sent') !== false) ||
-            (!isset($result['error']) && !isset($result['errors']))) {
+            (!empty($message_str) && stripos($message_str, 'sent') !== false) ||
+            (!isset($result['error']) && !isset($result['errors']) && isset($result['message_id']))) {
             return array(
                 'success' => true,
                 'message' => 'SMS sent successfully',
@@ -98,7 +169,8 @@ function sendSMSUsingIPROG($phone_number, $message, $api_key) {
     }
 
     // Handle error responses
-    $error_message = isset($result['message']) ? $result['message'] : 
+    $error_message = isset($result['message']) ? 
+                    (is_array($result['message']) ? implode(', ', $result['message']) : $result['message']) : 
                     (isset($result['error']) ? $result['error'] : 
                     (isset($result['errors']) ? (is_array($result['errors']) ? implode(', ', $result['errors']) : $result['errors']) : 'Unknown error occurred'));
     

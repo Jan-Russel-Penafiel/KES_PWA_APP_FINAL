@@ -176,15 +176,15 @@ foreach ($data['offlineData'] as $record) {
         if ($is_checkout) {
             // Checkout SMS - always send regardless of previous SMS
             if ($attendance_status == 'out') {
-                $sms_message = "Hi! Your child {$student['full_name']} has left school early at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+                $sms_message = "{$student['full_name']} left school early at {$current_time_formatted} on {$current_date}.";
             } else {
-                $sms_message = "Hi! Your child {$student['full_name']} has left school at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+                $sms_message = "{$student['full_name']} left school at {$current_time_formatted} on {$current_date}.";
             }
             $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'checkout');
         } elseif (!$sms_already_sent) {
             // Check-in SMS - only if not already sent today
             $status_text = ($attendance_status == 'late') ? 'arrived late at' : 'arrived at';
-            $sms_message = "Hi! Your child {$student['full_name']} has {$status_text} school at {$current_time_formatted} on {$current_date}. Section: {$section_name}. - KES-SMART";
+            $sms_message = "{$student['full_name']} {$status_text} school at {$current_time_formatted} on {$current_date}.";
             $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'attendance');
         }
         

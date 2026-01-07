@@ -154,7 +154,7 @@ try {
                 implode(', ', array_slice($student_absent_subjects, 0, -1)) . ' and ' . end($student_absent_subjects) :
                 $student_absent_subjects[0];
             
-            $sms_message = "Hi! Your child {$student['full_name']} was marked absent today ($current_date) for $subjects_text as they did not check in by 4:30 PM. Section: $section_text. Please contact the school if this is an error. - KES-SMART";
+            $sms_message = "{$student['full_name']} was marked absent today, $current_date.";
             
             $sms_result = sendSMSNotificationToParent($student['id'], $sms_message, 'absent');
             

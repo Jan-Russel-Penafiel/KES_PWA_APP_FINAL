@@ -244,9 +244,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             if ($is_checkout) {
                 // Checkout SMS - always send regardless of previous SMS
                 if ($attendance_status == 'out') {
-                    $sms_message = "Hi! Your child {$current_user['full_name']} has left {$subject['subject_name']} class early at {$current_time_formatted} on {$current_date}. - KES-SMART";
+                    $sms_message = "{$current_user['full_name']} left class early at {$current_time_formatted} on {$current_date}.";
                 } else {
-                    $sms_message = "Hi! Your child {$current_user['full_name']} has finished {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. - KES-SMART";
+                    $sms_message = "{$current_user['full_name']} finished class at {$current_time_formatted} on {$current_date}.";
                 }
                 $sms_result = sendSMSNotificationToParent($student_id, $sms_message, 'checkout');
                 
@@ -278,8 +278,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 }
                 
                 if (!$sms_already_sent) {
-                    $status_text = ($attendance_status == 'late') ? 'arrived late to' : 'arrived at';
-                    $sms_message = "Hi! Your child {$current_user['full_name']} has {$status_text} {$subject['subject_name']} class at {$current_time_formatted} on {$current_date}. - KES-SMART";
+                    $status_text = ($attendance_status == 'late') ? 'arrived late at' : 'arrived at';
+                    $sms_message = "{$current_user['full_name']} {$status_text} class at {$current_time_formatted} on {$current_date}.";
                     $sms_result = sendSMSNotificationToParent($student_id, $sms_message, 'attendance');
                     
                     // Log SMS result for debugging
