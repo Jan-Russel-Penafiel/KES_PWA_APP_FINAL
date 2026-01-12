@@ -4953,22 +4953,36 @@ async function executeManualTrigger() {
     const progressText = document.getElementById('manualTriggerProgressText');
     
     try {
-        // Close modal
-        modal.hide();
+        // Close modal first
+        if (modal) {
+            modal.hide();
+        }
         
-        // Disable button and show progress
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+        // Disable button and show progress (with null checks)
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+        }
         
-        // Show status
-        statusDiv.style.display = 'block';
-        statusDiv.className = 'alert alert-info py-2 mb-0';
-        statusText.textContent = 'Initiating manual auto-absent process...';
+        // Show status (with null checks)
+        if (statusDiv) {
+            statusDiv.style.display = 'block';
+            statusDiv.className = 'alert alert-info py-2 mb-0';
+        }
+        if (statusText) {
+            statusText.textContent = 'Initiating manual auto-absent process...';
+        }
         
-        // Show progress bar
-        progressDiv.style.display = 'block';
-        progressBar.style.width = '25%';
-        progressText.textContent = 'Calling auto-absent API...';
+        // Show progress bar (with null checks)
+        if (progressDiv) {
+            progressDiv.style.display = 'block';
+        }
+        if (progressBar) {
+            progressBar.style.width = '25%';
+        }
+        if (progressText) {
+            progressText.textContent = 'Calling auto-absent API...';
+        }
         
         console.log('QR Scanner: Manual auto-absent trigger initiated...');
         
@@ -4984,32 +4998,34 @@ async function executeManualTrigger() {
             })
         });
         
-        // Update progress
-        progressBar.style.width = '75%';
-        progressText.textContent = 'Processing response...';
+        // Update progress (with null checks)
+        if (progressBar) progressBar.style.width = '75%';
+        if (progressText) progressText.textContent = 'Processing response...';
         
         const data = await response.json();
         
-        // Complete progress
-        progressBar.style.width = '100%';
-        progressText.textContent = 'Complete!';
+        // Complete progress (with null checks)
+        if (progressBar) progressBar.style.width = '100%';
+        if (progressText) progressText.textContent = 'Complete!';
         
         if (data.success) {
             console.log('QR Scanner: Manual auto-absent completed:', data);
             
-            // Show success status
-            statusDiv.className = 'alert alert-success py-2 mb-0';
+            // Show success status (with null checks)
+            if (statusDiv) statusDiv.className = 'alert alert-success py-2 mb-0';
             
             if (data.data && data.data.total_students_marked > 0) {
                 const studentsCount = data.data.total_students_marked;
                 const recordsCount = data.data.total_attendance_records;
                 const smsCount = data.data.sms_sent;
                 
-                statusText.innerHTML = `
-                    <strong>✅ Success!</strong> ${studentsCount} student${studentsCount > 1 ? 's' : ''} marked absent 
-                    across ${recordsCount} subject record${recordsCount > 1 ? 's' : ''}. 
-                    ${smsCount} SMS notification${smsCount > 1 ? 's' : ''} sent.
-                `;
+                if (statusText) {
+                    statusText.innerHTML = `
+                        <strong>✅ Success!</strong> ${studentsCount} student${studentsCount > 1 ? 's' : ''} marked absent 
+                        across ${recordsCount} subject record${recordsCount > 1 ? 's' : ''}. 
+                        ${smsCount} SMS notification${smsCount > 1 ? 's' : ''} sent.
+                    `;
+                }
                 
                 // Show detailed results in console
                 console.log('Manual auto-absent results:', {
@@ -5035,36 +5051,40 @@ async function executeManualTrigger() {
                 
                 // Auto-hide status after 10 seconds
                 setTimeout(() => {
-                    statusDiv.style.display = 'none';
-                    progressDiv.style.display = 'none';
+                    if (statusDiv) statusDiv.style.display = 'none';
+                    if (progressDiv) progressDiv.style.display = 'none';
                 }, 10000);
             } else {
-                // No students to mark absent
-                statusText.innerHTML = `<strong>ℹ️ No Action Needed:</strong> ${data.message}`;
-                
-                if (data.data && data.data.already_processed) {
-                    statusText.innerHTML += ' Auto-absent has already been processed today.';
+                // No students to mark absent (with null checks)
+                if (statusText) {
+                    statusText.innerHTML = `<strong>ℹ️ No Action Needed:</strong> ${data.message}`;
+                    
+                    if (data.data && data.data.already_processed) {
+                        statusText.innerHTML += ' Auto-absent has already been processed today.';
+                    }
                 }
                 
                 console.log('QR Scanner: Manual auto-absent - no students to process');
                 
                 // Auto-hide status after 5 seconds
                 setTimeout(() => {
-                    statusDiv.style.display = 'none';
-                    progressDiv.style.display = 'none';
+                    if (statusDiv) statusDiv.style.display = 'none';
+                    if (progressDiv) progressDiv.style.display = 'none';
                 }, 5000);
             }
         } else {
-            // Handle API errors
-            statusDiv.className = 'alert alert-warning py-2 mb-0';
-            statusText.innerHTML = `<strong>⚠️ Notice:</strong> ${data.message}`;
+            // Handle API errors (with null checks)
+            if (statusDiv) statusDiv.className = 'alert alert-warning py-2 mb-0';
+            if (statusText) {
+                statusText.innerHTML = `<strong>⚠️ Notice:</strong> ${data.message}`;
+            }
             
             console.log('QR Scanner: Manual auto-absent API response:', data.message);
             
             // Don't show error toast for expected scenarios (weekend, already processed, too early)
             if (data.data && (data.data.is_weekend || data.data.already_processed)) {
                 // These are expected scenarios, not errors
-                statusText.innerHTML += ' This is normal.';
+                if (statusText) statusText.innerHTML += ' This is normal.';
             } else {
                 // Show warning for other issues
                 showToast('Auto-absent notice: ' + data.message, 'warning');
@@ -5072,32 +5092,34 @@ async function executeManualTrigger() {
             
             // Auto-hide status after 7 seconds
             setTimeout(() => {
-                statusDiv.style.display = 'none';
-                progressDiv.style.display = 'none';
+                if (statusDiv) statusDiv.style.display = 'none';
+                if (progressDiv) progressDiv.style.display = 'none';
             }, 7000);
         }
     } catch (error) {
         console.error('QR Scanner: Manual auto-absent error:', error);
         
-        // Show error status
-        statusDiv.className = 'alert alert-danger py-2 mb-0';
-        statusText.innerHTML = `<strong>❌ Error:</strong> Failed to process manual auto-absent. Please try again.`;
+        // Show error status (with null checks)
+        if (statusDiv) statusDiv.className = 'alert alert-danger py-2 mb-0';
+        if (statusText) statusText.innerHTML = `<strong>❌ Error:</strong> Failed to process manual auto-absent. Please try again.`;
         
         showToast('Failed to execute manual auto-absent', 'danger');
         
         // Auto-hide status after 7 seconds
         setTimeout(() => {
-            statusDiv.style.display = 'none';
-            progressDiv.style.display = 'none';
+            if (statusDiv) statusDiv.style.display = 'none';
+            if (progressDiv) progressDiv.style.display = 'none';
         }, 7000);
     } finally {
-        // Re-enable button
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-user-times me-2"></i><span class="d-none d-sm-inline">Mark Absent </span>Students';
+        // Re-enable button (with null checks)
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-user-times me-2"></i><span class="d-none d-sm-inline">Mark Absent </span>Students';
+        }
         
-        // Hide progress after delay
+        // Hide progress after delay (with null checks)
         setTimeout(() => {
-            progressDiv.style.display = 'none';
+            if (progressDiv) progressDiv.style.display = 'none';
         }, 3000);
     }
 }
